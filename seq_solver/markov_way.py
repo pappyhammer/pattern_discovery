@@ -32,7 +32,7 @@ class MarkovParameters(p_disc_tools_param.Parameters):
         # Tree parameters
         self.max_branches = max_branches
         self.stop_if_twin = stop_if_twin
-
+        # making some change for gitkraken test
 
 def build_mle_transition_dict(spike_nums, param, try_uniformity_method=False, debug_mode=False):
     """

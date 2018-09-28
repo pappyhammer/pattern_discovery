@@ -11,7 +11,7 @@
   </component>
   <component name="FileEditorManager">
     <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
-      <file leaf-file-name="seq_tree_v1.py" pinned="false" current-in-tab="true">
+      <file leaf-file-name="seq_tree_v1.py" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/structures/seq_tree_v1.py">
           <provider selected="true" editor-type-id="text-editor">
             <state relative-caret-position="170">
@@ -80,13 +80,14 @@
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="markov_way.py" pinned="false" current-in-tab="false">
+      <file leaf-file-name="markov_way.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/seq_solver/markov_way.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="115">
-              <caret line="5" column="39" lean-forward="false" selection-start-line="5" selection-start-column="39" selection-end-line="5" selection-end-column="39" />
+            <state relative-caret-position="266">
+              <caret line="34" column="47" lean-forward="false" selection-start-line="34" selection-start-column="47" selection-end-line="34" selection-end-column="47" />
               <folding>
-                <marker date="1537463605083" expanded="true" signature="34591:39807" ph="..." />
+                <element signature="e#0#18#0" expanded="true" />
+                <marker date="1538142946951" expanded="true" signature="34638:39854" ph="..." />
               </folding>
             </state>
           </provider>
@@ -152,7 +153,6 @@
         <option value="$PROJECT_DIR$/structures/__init__.py" />
         <option value="$PROJECT_DIR$/structures/seq_tree_v1.py" />
         <option value="$PROJECT_DIR$/tools/param.py" />
-        <option value="$PROJECT_DIR$/seq_solver/markov_way.py" />
         <option value="$PROJECT_DIR$/clustering/__init__.py" />
         <option value="$PROJECT_DIR$/tools/misc.py" />
         <option value="$PROJECT_DIR$/display/misc.py" />
@@ -162,12 +162,12 @@
         <option value="$PROJECT_DIR$/tools/loss_function.py" />
         <option value="$PROJECT_DIR$/tools/trains.py" />
         <option value="$PROJECT_DIR$/tools/sce_detection.py" />
+        <option value="$PROJECT_DIR$/seq_solver/markov_way.py" />
       </list>
     </option>
   </component>
   <component name="ProjectFrameBounds" fullScreen="true">
-    <option name="x" value="114" />
-    <option name="y" value="71" />
+    <option name="y" value="23" />
     <option name="width" value="1440" />
     <option name="height" value="877" />
   </component>
@@ -349,7 +349,7 @@
       <window_info id="Event Log" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="7" side_tool="true" content_ui="tabs" />
       <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.329602" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
       <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
-      <window_info id="Python Console" active="true" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.329602" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
+      <window_info id="Python Console" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.329602" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Structure" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.24947146" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Terminal" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Debug" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.4" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
@@ -396,7 +396,8 @@
         <state relative-caret-position="8763">
           <caret line="386" column="14" lean-forward="false" selection-start-line="386" selection-start-column="14" selection-end-line="386" selection-end-column="14" />
           <folding>
-            <marker date="1537463605083" expanded="true" signature="34591:39807" ph="..." />
+            <element signature="e#0#18#0" expanded="true" />
+            <marker date="1538142946951" expanded="true" signature="34638:39854" ph="..." />
           </folding>
         </state>
       </provider>
@@ -444,7 +445,8 @@
         <state relative-caret-position="8763">
           <caret line="386" column="14" lean-forward="false" selection-start-line="386" selection-start-column="14" selection-end-line="386" selection-end-column="14" />
           <folding>
-            <marker date="1537463605083" expanded="true" signature="34591:39807" ph="..." />
+            <element signature="e#0#18#0" expanded="true" />
+            <marker date="1538142946951" expanded="true" signature="34638:39854" ph="..." />
           </folding>
         </state>
       </provider>
@@ -483,7 +485,8 @@
         <state relative-caret-position="8763">
           <caret line="386" column="14" lean-forward="false" selection-start-line="386" selection-start-column="14" selection-end-line="386" selection-end-column="14" />
           <folding>
-            <marker date="1537463605083" expanded="true" signature="34591:39807" ph="..." />
+            <element signature="e#0#18#0" expanded="true" />
+            <marker date="1538142946951" expanded="true" signature="34638:39854" ph="..." />
           </folding>
         </state>
       </provider>
@@ -552,7 +555,8 @@
         <state relative-caret-position="414">
           <caret line="23" column="24" lean-forward="false" selection-start-line="23" selection-start-column="8" selection-end-line="23" selection-end-column="24" />
           <folding>
-            <marker date="1537463605083" expanded="true" signature="34591:39807" ph="..." />
+            <element signature="e#0#18#0" expanded="true" />
+            <marker date="1538142946951" expanded="true" signature="34638:39854" ph="..." />
           </folding>
         </state>
       </provider>
@@ -773,16 +777,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/seq_solver/markov_way.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="115">
-          <caret line="5" column="39" lean-forward="false" selection-start-line="5" selection-start-column="39" selection-end-line="5" selection-end-column="39" />
-          <folding>
-            <marker date="1537463605083" expanded="true" signature="34591:39807" ph="..." />
-          </folding>
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/clustering/fca/test_fca.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="713">
@@ -806,6 +800,17 @@
         <state relative-caret-position="170">
           <caret line="10" column="28" lean-forward="false" selection-start-line="10" selection-start-column="28" selection-end-line="10" selection-end-column="28" />
           <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/seq_solver/markov_way.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="266">
+          <caret line="34" column="47" lean-forward="false" selection-start-line="34" selection-start-column="47" selection-end-line="34" selection-end-column="47" />
+          <folding>
+            <element signature="e#0#18#0" expanded="true" />
+            <marker date="1538142946951" expanded="true" signature="34638:39854" ph="..." />
+          </folding>
         </state>
       </provider>
     </entry>
