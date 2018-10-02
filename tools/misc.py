@@ -12,6 +12,25 @@ def get_spike_rates(spike_nums):
         spike_rates[n] = np.sum(neuron) / nb_time
     return spike_rates
 
+
+def get_isi(spike_data, spike_trains_format=False):
+    """
+
+    :param spike_data:
+    :param spike_trains_format:
+    :return: a dict with as key an int representing the cell index, and as value a list of value representing the
+    interspike interval between each spike of the cell
+    """
+
+    isi_by_neuron = dict()
+    for cell, spikes in enumerate(spike_data):
+        if not spike_trains_format:
+            spikes, = np.where(spikes)
+        isi = np.diff(spikes)
+        isi_by_neuron[cell] = isi
+
+    return isi_by_neuron
+
 def check_seq_for_neurons(spike_nums, param, neurons_to_checks):
     """
 

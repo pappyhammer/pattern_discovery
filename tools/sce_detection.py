@@ -186,7 +186,7 @@ def get_sce_detection_threshold(spike_nums, window_duration, n_surrogate, perc_t
             print(f"window_duration {window_duration}")
         for i, surrogate_train_list in enumerate(surrogate_data_set):
             if debug_mode:
-                if (i % 10) == 0:
+                if (i % 5) == 0:
                     print(f"surrogate n°: {i}")
             # to make it faster, we keep the count of cells in a dict, thus not having to create a huge
             # matrix if only a sparse number of times have spikes
@@ -279,7 +279,8 @@ def get_sce_detection_threshold(spike_nums, window_duration, n_surrogate, perc_t
 
 def detect_sce_with_sliding_window(spike_nums, window_duration, perc_threshold=95,
                                    with_refractory_period=-1, non_binary=False,
-                                   activity_threshold=None):
+                                   activity_threshold=None, debug_mode=False):
+    # TODO: same method but with spike_trains
     """
     Use a sliding window to detect sce (define as peak of activity > perc_threshold percentile after
     randomisation during a time corresponding to window_duration)
@@ -302,7 +303,7 @@ def detect_sce_with_sliding_window(spike_nums, window_duration, perc_threshold=9
         spike_nums = binary_spikes
 
     if activity_threshold is None:
-        activity_threshold = get_sce_detection_threshold(spike_nums=spike_nums, n_surrogate=1000,
+        activity_threshold = get_sce_detection_threshold(spike_nums=spike_nums, n_surrogate=100,
                                                          window_duration=window_duration,
                                                          perc_threshold=perc_threshold,
                                                          non_binary=False)
@@ -314,8 +315,17 @@ def detect_sce_with_sliding_window(spike_nums, window_duration, perc_threshold=9
     sce_tuples = []
     sce_times_numbers = np.ones(n_times, dtype="int16")
     sce_times_numbers *= -1
+    if debug_mode:
+        print(f"n_times {n_times}")
     for t in np.arange(0, (n_times - window_duration)):
-        sum_value = np.sum(spike_nums[:, t:(t + window_duration)])
+        if debug_mode:
+            if t % 10**6 == 0:
+                print(f"t {t}")
+        sum_value_test = np.sum(spike_nums[:, t:(t + window_duration)])
+        sum_spikes = np.sum(spike_nums[:, t:(t + window_duration)], axis = 1)
+        # neurons with sum > 1 are active during a SCE
+        sum_value = len(np.where(sum_spikes)[0])
+        # print(f"Sum value, test {sum_value_test}, real {sum_value}")
         if sum_value > activity_threshold:
             if start_sce == -1:
                 start_sce = t
@@ -323,18 +333,18 @@ def detect_sce_with_sliding_window(spike_nums, window_duration, perc_threshold=9
             if start_sce > -1:
                 # then a new SCE is detected
                 sce_bool[start_sce:t] = True
-                sce_tuples.append((start_sce, t - 1))
+                sce_tuples.append((start_sce, (t + window_duration) - 2))
                 sce_times_numbers[start_sce:t] = len(sce_tuples) - 1
                 start_sce = -1
 
     n_sces = len(sce_tuples)
     sce_nums = np.zeros((n_cells, n_sces), dtype="int8")
-    for t, sce_tuple in enumerate(sce_tuples):
+    for sce_index, sce_tuple in enumerate(sce_tuples):
         cells_spikes = np.zeros(n_cells, dtype="int8")
         sum_spikes = np.sum(spike_nums[:, sce_tuple[0]:(sce_tuple[1] + 1)], axis=1)
         # neurons with sum > 1 are active during a SCE
-        active_spikes = np.where(sum_spikes)[0]
-        sce_nums[active_spikes, t] = 1
+        active_cells = np.where(sum_spikes)[0]
+        sce_nums[active_cells, sce_index] = 1
 
     return sce_bool, sce_tuples, sce_nums, sce_times_numbers, activity_threshold
 
