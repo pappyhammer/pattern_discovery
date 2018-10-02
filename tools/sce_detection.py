@@ -277,10 +277,13 @@ def get_sce_detection_threshold(spike_nums, window_duration, n_surrogate, perc_t
 
     return activity_threshold
 
+# TODO: same method but with spike_trains
+# TODO: for concatenation of SCE, if the same cells spike more than one, then the following should be considered
+# in the count of cells active after the first SCE
 def detect_sce_with_sliding_window(spike_nums, window_duration, perc_threshold=95,
                                    with_refractory_period=-1, non_binary=False,
                                    activity_threshold=None, debug_mode=False):
-    # TODO: same method but with spike_trains
+
     """
     Use a sliding window to detect sce (define as peak of activity > perc_threshold percentile after
     randomisation during a time corresponding to window_duration)
