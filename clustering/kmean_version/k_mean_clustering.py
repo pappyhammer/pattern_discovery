@@ -19,7 +19,7 @@ def covnorm(m_sces):
 
 
 def co_var_first_and_clusters(cells_in_sce, range_n_clusters, shuffling=False, nth_best_clusters=-1,
-                              plot_matrix=False, data_str=""):
+                              plot_matrix=False, data_str="", path_results=None):
     """
 
     :param cells_in_sce:
@@ -148,10 +148,10 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, shuffling=False, n
                 else:
                     # if best_kmeans is None:
                     #     continue
-                    print(f'n_clusters {n_clusters}, avg-avg: {np.round(np.mean(silhouette_avgs), 4)}, '
-                          f'median-avg {np.round(np.median(silhouette_avgs), 4)}, '
-                          f'median-all {np.round(np.median(silhouettes_clusters_avg), 4)}')
-                    print(f'n_clusters {n_clusters}, silhouettes_clusters_avg {silhouettes_clusters_avg}')
+                    # print(f'n_clusters {n_clusters}, avg-avg: {np.round(np.mean(silhouette_avgs), 4)}, '
+                    #       f'median-avg {np.round(np.median(silhouette_avgs), 4)}, '
+                    #       f'median-all {np.round(np.median(silhouettes_clusters_avg), 4)}')
+                    # print(f'n_clusters {n_clusters}, silhouettes_clusters_avg {silhouettes_clusters_avg}')
                     cluster_labels_for_neurons[n_clusters] = \
                         find_cluster_labels_for_neurons(cells_in_peak=cells_in_sce,
                                                         cluster_labels=best_kmeans.labels_)
@@ -159,7 +159,7 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, shuffling=False, n
                         show_co_var_first_matrix(cells_in_peak=np.copy(cells_in_sce), m_sces=m_sces,
                                                  n_clusters=n_clusters, kmeans=best_kmeans,
                                                  cluster_labels_for_neurons=cluster_labels_for_neurons[n_clusters],
-                                                 data_str=data_str)
+                                                 data_str=data_str, path_results=path_results)
         if shuffling:
             # silhouettes_shuffling contains the mean silhouettes values of all clusters produced (100*k)
             p_95 = np.percentile(silhouettes_shuffling, 99)
@@ -167,61 +167,15 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, shuffling=False, n
     # m_sces = original_m_sces
     return dict_best_clusters, cluster_labels_for_neurons
 
-def show_co_var_first_matrix_Robin(cells_in_peak, m_sces, n_clusters, kmeans, cluster_labels_for_neurons):
-    # cellsinpeak: np.shape(value): (180, 285)
-    plt.subplot(121)
-    # list of size nb_neurons, each neuron having a value from 0 to k clusters
-    cluster_labels = kmeans.labels_
-    # contains the neurons from the SCE, but ordered by cluster
-    print(f'// np.shape(m_sces) {np.shape(m_sces)}')
-    ordered_m_sces = np.zeros((np.shape(m_sces)[0], np.shape(m_sces)[1]))
-    start = 0
-    for k in np.arange(n_clusters):
-        e = np.equal(cluster_labels, k)
-        nb_k = np.sum(e)
-        ordered_m_sces[start:start + nb_k, :] = m_sces[e, :]
-        ordered_m_sces[:, start:start + nb_k] = m_sces[:, e]
-        start += nb_k
-
-    co_var = np.corrcoef(ordered_m_sces)  # cov
-    # sns.set()
-    ax = sns.heatmap(co_var, cmap="jet")  # , vmin=0, vmax=1) YlGnBu
-    # ax.invert_yaxis()
-
-    # plt.show()
-    original_cells_in_peak = cells_in_peak
-
-    cells_in_peak = np.copy(original_cells_in_peak)
-    plt.subplot(1, 2, 2)
-
-    ordered_cells_in_peak = np.zeros((np.shape(cells_in_peak)[0], np.shape(cells_in_peak)[1]))
-    ordered_n_cells_in_peak = np.zeros((np.shape(cells_in_peak)[0], np.shape(cells_in_peak)[1]))
-    start = 0
-    for k in np.arange(n_clusters):
-        e = np.equal(cluster_labels, k)
-        nb_k = np.sum(e)
-        ordered_cells_in_peak[:, start:start + nb_k] = cells_in_peak[:, e]
-        start += nb_k
-
-    start = 0
-    for k in np.arange(-1, np.max(cluster_labels_for_neurons) + 1):
-        e = np.equal(cluster_labels_for_neurons, k)
-        nb_k = np.sum(e)
-        # print(f'nb_k {nb_k}, k: {k}')
-        ordered_n_cells_in_peak[start:start + nb_k, :] = ordered_cells_in_peak[e, :]
-        start += nb_k
-
-    ax = sns.heatmap(ordered_n_cells_in_peak, cbar=False)
-    # ax.invert_yaxis()
-
-    plt.show()
-
 
 def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_labels_for_neurons,
                              data_str, path_results=None, show_fig=False):
     # cellsinpeak: np.shape(value): (180, 285)
-    fig = plt.figure(figsize=[8, 8])
-    ax1 = plt.subplot(121)
+    # fig = plt.figure(figsize=[12, 8])
+    fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, sharex=True,
+                                   gridspec_kw={'height_ratios': [1], 'width_ratios': [4, 10]},
+                                   figsize=(15, 8))
+    # ax1 = plt.subplot(121)
     plt.title(f"{data_str} {n_clusters} clusters")
     # list of size nb_neurons, each neuron having a value from 0 to k clusters
     cluster_labels = kmeans.labels_
@@ -239,14 +193,18 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
     co_var = np.corrcoef(ordered_m_sces)  # cov
     # sns.set()
     result = sns.heatmap(co_var, cmap="jet", ax=ax1)  # , vmin=0, vmax=1) YlGnBu
-
+    # ax1.xaxis.get_majorticklabels().set_rotation(90)
+    plt.setp(ax1.xaxis.get_majorticklabels(), rotation=90)
+    plt.setp(ax1.yaxis.get_majorticklabels(), rotation=0)
+    ax1.xaxis.set_tick_params(labelsize=5)
+    ax1.yaxis.set_tick_params(labelsize=5)
     # ax.invert_yaxis()
 
     # plt.show()
     original_cells_in_peak = cells_in_peak
 
     cells_in_peak = np.copy(original_cells_in_peak)
-    ax2 = plt.subplot(1, 2, 2)
+    # ax2 = plt.subplot(1, 2, 2)
 
     # first order assemblies
     ordered_cells_in_peak = np.zeros((np.shape(cells_in_peak)[0], np.shape(cells_in_peak)[1]))
@@ -269,6 +227,8 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         start += nb_k
 
     sns.heatmap(ordered_n_cells_in_peak, cbar=False, ax=ax2)
+    plt.setp(ax2.xaxis.get_majorticklabels(), rotation=90)
+    plt.setp(ax2.yaxis.get_majorticklabels(), rotation=0)
 
     # ax.invert_yaxis()
     if path_results is not None:
