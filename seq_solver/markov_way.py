@@ -60,9 +60,10 @@ def build_mle_transition_dict(spike_nums, param, try_uniformity_method=False, de
     for n, neuron in enumerate(spike_nums):
         times = np.where(neuron)[0]
         nb_times = len(times)
-        delta_t = (n_times + 1) // nb_times
-        new_spike_times = np.arange(0, nb_times, delta_t)
-        uniform_spike_nums[n, new_spike_times] = 1
+        if nb_times > 0:
+            delta_t = (n_times + 1) // nb_times
+            new_spike_times = np.arange(0, nb_times, delta_t)
+            uniform_spike_nums[n, new_spike_times] = 1
 
     # a first turn to put probabilities up from neurons B that spikes after neuron A
     for n, neuron in enumerate(spike_nums):

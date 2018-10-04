@@ -24,7 +24,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        raster_face_color='black',
                        cell_spikes_color='white',
                        seq_times_to_color_dict=None,
-                       seq_colors=None
+                       seq_colors=None, debug_mode=False
                        ):
     """
     
@@ -202,7 +202,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     ax1.set_ylabel('Cells (#)')
 
     if sliding_window_duration >= 1:
-        print("sliding_window_duration > 1")
+        # print("sliding_window_duration > 1")
         sum_spikes = np.zeros(n_times)
         if spike_train_format:
             windows_sum = np.zeros((n_cells, n_times), dtype="int16")
@@ -223,7 +223,8 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                                 windows_sum[cell, t] += 1
                                 cell_window_participation[cell, t] = True
             sum_spikes = np.sum(windows_sum, axis=0)
-            print("sliding window over")
+            if debug_mode:
+                print("sliding window over")
             # for index, t in enumerate(np.arange(int(min_time), int((np.ceil(max_time) - sliding_window_duration)))):
             #     # counting how many cell fire during that window
             #     if (index % 1000) == 0:
@@ -270,7 +271,8 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     # sp = UnivariateSpline(x_value, sum_spikes, s=240)
     # ax2.fill_between(x_value, 0, smooth_curve(sum_spikes), facecolor="black") # smooth_curve(sum_spikes)
     if show_sum_spikes_as_percentage:
-        print("using percentages")
+        if debug_mode:
+            print("using percentages")
         sum_spikes = sum_spikes / n_cells
         sum_spikes *= 100
         if activity_threshold is not None:
