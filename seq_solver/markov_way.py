@@ -729,8 +729,16 @@ def order_spike_nums_by_seq(spike_nums, param, debug_mode=True, reverse_order=Fa
 
     # temporary code to test if taking the longest sequence is good option
     best_seq = None
+    best_seq_cell = -1
+    # keep seq for each cell
+    all_best_seq = []
     best_loss_score = 1
-    for k, seq in max_seq_dict.items():
+    use_max_seq_dict_uniform = True
+    if use_max_seq_dict_uniform:
+        max_seq_dict_to_use = max_seq_dict_uniform
+    else:
+        max_seq_dict_to_use = max_seq_dict
+    for k, seq in max_seq_dict_to_use.items():
         seq = np.array(seq)
         # print(f"{k} max_seq seq {seq}")
         # seq has not negative numbers
@@ -752,17 +760,19 @@ def order_spike_nums_by_seq(spike_nums, param, debug_mode=True, reverse_order=Fa
                                                        min_duration_intra_seq=param.min_duration_intra_seq)
         if debug_mode:
             print(f'loss_score neuron {k}, len {len(seq)}: {np.round(loss_score, 4)}')
+        all_best_seq.append(np.array(new_order))
         if loss_score < best_loss_score:
             best_loss_score = loss_score
             best_seq = np.array(new_order)
+            best_seq_cell = k
 
     if debug_mode:
-        print(f'best loss_score neuron {np.round(best_loss_score, 4)}')
+        print(f'best loss_score neuron {best_seq_cell}: {np.round(best_loss_score, 4)}')
 
-    if debug_mode:
-        print("####### all sequences #######")
-        for key, value in seq_dict.items():
-            print(f"seq: {key}, rep: {len(value)}")
+    # if debug_mode:
+    #     print("####### all sequences #######")
+    #     for key, value in seq_dict.items():
+    #         print(f"seq: {key}, rep: {len(value)}")
 
     result_seq_dict = dict()
     if best_seq is not None:
@@ -817,7 +827,7 @@ def order_spike_nums_by_seq(spike_nums, param, debug_mode=True, reverse_order=Fa
         best_seq = best_seq[::-1]
 
     # if test_new_version:
-    return ordered_result_seq_dict, best_seq
+    return ordered_result_seq_dict, best_seq, all_best_seq
     # else:
     #     return list_seq_dict, best_seq
 
