@@ -235,7 +235,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
             size_cluster_i = ith_cluster_silhouette_values.shape[0]
             y_upper = y_lower + size_cluster_i
 
-            color = cm.nipy_spectral(float(i) / n_clusters)
+            color = cm.nipy_spectral(float(i+1) / n_clusters)
             ax0.fill_betweenx(np.arange(y_lower, y_upper),
                               0, ith_cluster_silhouette_values,
                               facecolor=color, edgecolor=color, alpha=0.7)
