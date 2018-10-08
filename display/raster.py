@@ -16,6 +16,10 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        span_area_colors=None,
                        cells_to_highlight=None,
                        cells_to_highlight_colors=None,
+                       color_peaks_activity=False,
+                       horizontal_lines=None,
+                       horizontal_lines_colors=None,
+                       horizontal_lines_sytle=None,
                        sliding_window_duration=1,
                        show_sum_spikes_as_percentage=False,
                        span_cells_to_highlight=True,
@@ -46,6 +50,12 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     :param span_area_colors: list of colors, same len as span_area_coords
     :param cells_to_highlight: cells index to span and with special spikes color, list of int
     :param cells_to_highlight_colors: cells colors to span, same len as cells_to_span, list of string
+    :param color_peaks_activity: if True, will span to the color of cells_to_highlight_colors each time at which a cell
+    among cells_to_highlight will spike on the actiivty peak diagram
+    :param horizontal_lines: list of float, representing the y coord at which trace horizontal lines
+    :param horizontal_lines_colors: if horizontal_lines is not None, will set the colors of each line,
+    list of string or color code
+    :param horizontal_lines_style: give the style of the lines, string
     :param raster_face_color:
     :param cell_spikes_color:
     :param spike_shape: shape of the spike, "|", "*", "o"
@@ -179,6 +189,18 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         for index, cell_to_span in enumerate(cells_to_highlight):
             ax1.axhspan(cell_to_span - 0.5, cell_to_span + 0.5, alpha=0.4, facecolor=cells_to_highlight_colors[index])
 
+    if horizontal_lines is not None:
+        line_beg_x = 0
+        line_end_x = 0
+        if spike_train_format:
+            line_beg_x = min_time - 1
+            line_end_x = max_time + 1
+        else:
+            line_beg_x = -1
+            line_end_x = len(spike_nums[0, :]) + 1
+        ax1.hlines(horizontal_lines, line_beg_x, line_end_x, color=horizontal_lines_colors, linewidth=2,
+                   linestyles=horizontal_lines_sytle)
+
     ax1.set_ylim(-1, len(spike_nums))
     if y_ticks_labels is not None:
         ax1.set_yticks(np.arange(len(spike_nums)))
@@ -302,7 +324,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                 ax2.axvspan(coord[0], coord[1], alpha=0.5, facecolor=color)
 
     # early born
-    if cells_to_highlight is not None:
+    if cells_to_highlight is not None and color_peaks_activity:
         for index, cell_to_span in enumerate(cells_to_highlight):
             ax2.vlines(np.where(spike_nums[cell_to_span, :])[0], 0, np.max(sum_spikes),
                        color=cells_to_highlight_colors[index],

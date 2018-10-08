@@ -72,13 +72,16 @@ def surrogate_clustering(m_sces, n_clusters, n_surrogate, n_trials, perc_thresho
     return percentile_results
 
 
-def co_var_first_and_clusters(cells_in_sce, range_n_clusters, shuffling=False, n_surrogate=100,
+def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_silhouettes=np.median,
+                              shuffling=False, n_surrogate=100,
                               nth_best_clusters=-1, neurons_labels=None,
                               plot_matrix=False, data_str="", path_results=None):
     """
 
     :param cells_in_sce:
     :param range_n_clusters:
+    :param fct_to_keep_best_silhouettes: function used to keep the best trial, will be applied on all the silhouette
+    scores of each trials, the max will be kept
     :param shuffling:
     :param nth_best_clusters: how many clusters to return, if -1 return them all
     :param plot_matrix:
@@ -130,7 +133,7 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, shuffling=False, n
         silhouette_avgs = np.zeros(n_trials)
         best_silhouettes_clusters_avg = None
         max_local_clusters_silhouette = 0
-        best_median_silhouettes = 0
+        best_silhouettes = 0
         silhouettes_clusters_avg = []
         for trial in np.arange(n_trials):
             # co_var = np.cov(m_sces)
@@ -156,14 +159,16 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, shuffling=False, n
                 # print(ith_cluster_silhouette_values)
                 local_clusters_silhouette[i] = avg_ith_cluster_silhouette_values
                 # ith_cluster_silhouette_values.sort()
-            med = np.median(local_clusters_silhouette)
-            if med > best_median_silhouettes:
-                best_median_silhouettes = med
+            # compute a score based on the silhouette of each cluster for this trial and compare it with the best score
+            # so far, keeping it if it's better
+            computed_score = fct_to_keep_best_silhouettes(local_clusters_silhouette)
+            if computed_score > best_silhouettes:
+                best_silhouettes = computed_score
                 best_silhouettes_clusters_avg = local_clusters_silhouette
 
-            max_local = med  # np.max(local_clusters_silhouette)  # silhouette_avg
+            max_local = computed_score  # np.max(local_clusters_silhouette)  # silhouette_avg
             # TO display, we keep the group with the cluster with the max silhouette
-            if (best_kmeans is None) or (med > max_local_clusters_silhouette):
+            if (best_kmeans is None) or (computed_score > max_local_clusters_silhouette):
                 max_local_clusters_silhouette = max_local
                 best_kmeans = kmeans
                 nth_best_list = []
@@ -171,11 +176,7 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, shuffling=False, n
                 if count_clusters == -1:
                     count_clusters = n_clusters
                 for b in np.arange(count_clusters):
-                    # print(f'local_clusters_silhouette {local_clusters_silhouette}')
                     arg = np.argmax(local_clusters_silhouette)
-                    # print(f'local_clusters_silhouette[arg] {local_clusters_silhouette[arg]}')
-                    # print(f'[cluster_labels == arg] {[cluster_labels == arg]}, '
-                    #       f'cluster_labels {cluster_labels}')
                     # TODO: put neurons list instead of SCEs
                     nth_best_list.append(np.arange(len(m_sces))[cluster_labels == arg])
                     local_clusters_silhouette[arg] = -1
