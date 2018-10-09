@@ -119,7 +119,7 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
     # nb of time to apply one given number of cluster
     n_trials = 100
     best_kmeans_by_cluster = dict()
-
+    surrogate_percentiles_by_n_cluster = dict()
     for n_clusters in range_n_clusters:
         print(f"n_clusters {n_clusters}")
         surrogate_percentiles = []
@@ -190,6 +190,7 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
         cluster_labels_for_neurons[n_clusters] = \
             find_cluster_labels_for_neurons(cells_in_peak=cells_in_sce,
                                             cluster_labels=best_kmeans.labels_)
+        surrogate_percentiles_by_n_cluster[n_clusters] = surrogate_percentiles
         if plot_matrix:
             show_co_var_first_matrix(cells_in_peak=np.copy(cells_in_sce), m_sces=m_sces,
                                      n_clusters=n_clusters, kmeans=best_kmeans,
@@ -198,7 +199,8 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
                                      show_silhouettes=True, neurons_labels=neurons_labels,
                                      surrogate_silhouette_avg=surrogate_percentiles)
   
-    return dict_best_clusters, best_kmeans_by_cluster, m_sces, cluster_labels_for_neurons, surrogate_percentiles
+    return dict_best_clusters, best_kmeans_by_cluster, m_sces, cluster_labels_for_neurons, \
+           surrogate_percentiles_by_n_cluster
 
 
 # TODO: do shuffling before the real cluster
