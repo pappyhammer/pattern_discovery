@@ -341,7 +341,7 @@ def detect_sce_with_sliding_window(spike_nums, window_duration, perc_threshold=9
                 start_sce = -1
 
     n_sces = len(sce_tuples)
-    sce_nums = np.zeros((n_cells, n_sces), dtype="int8")
+    sce_nums = np.zeros((n_cells, n_sces), dtype="int16")
     for sce_index, sce_tuple in enumerate(sce_tuples):
         cells_spikes = np.zeros(n_cells, dtype="int8")
         sum_spikes = np.sum(spike_nums[:, sce_tuple[0]:(sce_tuple[1] + 1)], axis=1)

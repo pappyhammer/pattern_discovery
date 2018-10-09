@@ -326,6 +326,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
     ax1.set_xticklabels(np.arange(n_clusters))
     ax1.set_yticks(cluster_x_ticks_coord)
     ax1.set_yticklabels(np.arange(n_clusters))
+    ax1.set_title(f"{np.shape(m_sces)[0]} SCEs")
     # ax1.xaxis.set_tick_params(labelsize=5)
     # ax1.yaxis.set_tick_params(labelsize=5)
     ax1.invert_yaxis()
@@ -337,22 +338,39 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
     # ax2 = plt.subplot(1, 2, 2)
 
     # first order assemblies
-    ordered_cells_in_peak = np.zeros((np.shape(cells_in_peak)[0], np.shape(cells_in_peak)[1]), dtype="uint16")
+    ordered_cells_in_peak = np.zeros((np.shape(cells_in_peak)[0], np.shape(cells_in_peak)[1]), dtype="int16")
     # then order neurons
-    ordered_n_cells_in_peak = np.zeros((np.shape(cells_in_peak)[0], np.shape(cells_in_peak)[1]), dtype="uint16")
+    ordered_n_cells_in_peak = np.zeros((np.shape(cells_in_peak)[0], np.shape(cells_in_peak)[1]), dtype="int16")
     cluster_vertical_thresholds = []
     cluster_x_ticks_coord = []
     cluster_horizontal_thresholds = []
     # set the number of neurons for whom there are no spikes or less than 2 for a given cluster
     nb_neurons_without_clusters = 0
+    # if True, will put spike in each cluster in the color of the cluster, by putting the matrix value to the value of
+    # the cluster, if False, will set in a darker color the cluster that belong to a cell
+    color_each_clusters = True
     neurons_normal_order = np.arange(np.shape(cells_in_peak)[0])
-    neurons_ax_labels = np.zeros(np.shape(cells_in_peak)[0], dtype="uint16")
+    neurons_ax_labels = np.zeros(np.shape(cells_in_peak)[0], dtype="int16")
     # key is the cluster number, k, and value is an np.array of int reprenseting the indices of SCE part of this cluster
     sce_indices_for_each_clusters = dict()
     start = 0
     for k in np.arange(n_clusters):
         e = np.equal(cluster_labels, k)
         nb_k = np.sum(e)
+        if color_each_clusters:
+            for cell in np.arange(len(cells_in_peak)):
+                spikes_index = np.where(cells_in_peak[cell, e]==1)[0]
+                to_put_to_true = np.where(e)[0][spikes_index]
+                tmp_e = np.zeros(len(e), dtype="bool")
+                tmp_e[to_put_to_true] = True
+                # print(f"cell {cell}, spikes_index {spikes_index}, "
+                #       f"cells_in_peak[cell, :] {cells_in_peak[cell, :]},"
+                #       f" cells_in_peak[cell, spikes_index] {cells_in_peak[cell, spikes_index]}")
+                # K +2 to avoid zero and one, and at the end we will substract 1
+                # print(f"cell {cell}, k {k}, cells_in_peak[cell, :] {cells_in_peak[cell, :]}")
+                cells_in_peak[cell, tmp_e] = k+2
+                # print(f"cells_in_peak[cell, :] {cells_in_peak[cell, :]}")
+
         ordered_cells_in_peak[:, start:start + nb_k] = cells_in_peak[:, e]
         sce_indices_for_each_clusters[k] = np.arange(start, start + nb_k)
         start += nb_k
@@ -374,34 +392,47 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         if k == -1:
             nb_neurons_without_clusters = nb_k
         else:
-            sce_indices = np.array(sce_indices_for_each_clusters[k])
-            # print(f"sce_indices {sce_indices}, np.shape(ordered_cells_in_peak) {np.shape(ordered_cells_in_peak)}, "
-            #       f"e {e} ")
-            # we put to a value > 1 the sce where the neuron has a spike in their assigned cluster
-            # to_modify = ordered_cells_in_peak[e, :][:, mask]
-            for index in sce_indices:
-                tmp_e = np.copy(e)
-                # keeping for each sce, the cells that belong to cluster k
-                tmp_array = ordered_cells_in_peak[tmp_e, index]
-                # finding which cells don't have spikes
-                pos = np.where(tmp_array == 0)[0]
-                to_put_to_false = np.where(tmp_e)[0][pos]
-                tmp_e[to_put_to_false] = False
-                # putting to 2 all cells for whom there is a spike
-                ordered_cells_in_peak[tmp_e, index] = 2
-            # to_modify[np.where(to_modify)[0]] = 2
+            if not color_each_clusters:
+                sce_indices = np.array(sce_indices_for_each_clusters[k])
+                # print(f"sce_indices {sce_indices}, np.shape(ordered_cells_in_peak) {np.shape(ordered_cells_in_peak)}, "
+                #       f"e {e} ")
+                # we put to a value > 1 the sce where the neuron has a spike in their assigned cluster
+                # to_modify = ordered_cells_in_peak[e, :][:, mask]
+                for index in sce_indices:
+                    tmp_e = np.copy(e)
+                    # keeping for each sce, the cells that belong to cluster k
+                    tmp_array = ordered_cells_in_peak[tmp_e, index]
+                    # finding which cells don't have spikes
+                    pos = np.where(tmp_array == 0)[0]
+                    to_put_to_false = np.where(tmp_e)[0][pos]
+                    tmp_e[to_put_to_false] = False
+                    # putting to 2 all cells for whom there is a spike
+                    ordered_cells_in_peak[tmp_e, index] = 2
+                # to_modify[np.where(to_modify)[0]] = 2
         ordered_n_cells_in_peak[start:start + nb_k, :] = ordered_cells_in_peak[e, :]
         neurons_ax_labels[start:start + nb_k] = neurons_normal_order[e]
         start += nb_k
         if (k + 1) < (np.max(cluster_labels_for_neurons) + 1):
             cluster_horizontal_thresholds.append(start)
 
-    # light_blue_color = [0, 0.871, 0.219]
-    cmap = mpl.colors.ListedColormap(['black', 'cornflowerblue', 'blue'])
-    # cmap.set_over('red')
-    # cmap.set_under('blue')
+    if color_each_clusters:
+        # print(f"np.min(ordered_n_cells_in_peak) {np.min(ordered_n_cells_in_peak)}")
+        ordered_n_cells_in_peak = ordered_n_cells_in_peak - 2
+        # print(f"np.min(ordered_n_cells_in_peak) {np.min(ordered_n_cells_in_peak)}")
+        list_color = ['black']
+        bounds = [-2.5, -0.5]
+        for i in np.arange(n_clusters):
+            color = cm.nipy_spectral(float(i+1) / n_clusters)
+            list_color.append(color)
+            bounds.append(i+0.5)
+        cmap = mpl.colors.ListedColormap(list_color)
+    else:
+        # light_blue_color = [0, 0.871, 0.219]
+        cmap = mpl.colors.ListedColormap(['black', 'cornflowerblue', 'blue'])
+        # cmap.set_over('red')
+        # cmap.set_under('blue')
+        bounds = [-0.5, 0.5, 1.5, 2.5]
 
-    bounds = [-0.5, 0.5, 1.5, 2.5]
     norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
     sns.heatmap(ordered_n_cells_in_peak, cbar=False, ax=ax2, cmap=cmap, norm=norm)
     # print(f"len(neurons_ax_labels) {len(neurons_ax_labels)}")
