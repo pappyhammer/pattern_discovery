@@ -208,6 +208,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
                              data_str, path_results=None, show_fig=False, show_silhouettes=False,
                              surrogate_silhouette_avg=None, neurons_labels=None, axes_list=None, fig_to_use=None,
                              save_formats="pdf"):
+    n_cells = len(cells_in_peak)
 
     if axes_list is None:
         if show_silhouettes:
@@ -306,7 +307,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         x_end = np.shape(co_var)[0]
         if n_c < len(cluster_coord_thresholds) - 1:
             x_end = cluster_coord_thresholds[n_c + 1]
-        ax1.hlines(clusters_threshold, x_begin, x_end, color="black", linewidth=1,
+        ax1.hlines(clusters_threshold, x_begin, x_end, color="black", linewidth=2,
                    linestyles="dashed")
     for n_c, clusters_threshold in enumerate(cluster_coord_thresholds):
         # if (n_c+1) == len(cluster_coord_thresholds):
@@ -344,6 +345,9 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
     cluster_vertical_thresholds = []
     cluster_x_ticks_coord = []
     cluster_horizontal_thresholds = []
+    # key is the cluster number and value is a tuple of int
+    clusters_coords_dict = dict()
+    cells_cluster_dict = dict()
     # set the number of neurons for whom there are no spikes or less than 2 for a given cluster
     nb_neurons_without_clusters = 0
     # if True, will put spike in each cluster in the color of the cluster, by putting the matrix value to the value of
@@ -353,6 +357,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
     neurons_ax_labels = np.zeros(np.shape(cells_in_peak)[0], dtype="int16")
     # key is the cluster number, k, and value is an np.array of int reprenseting the indices of SCE part of this cluster
     sce_indices_for_each_clusters = dict()
+    new_sce_labels = np.zeros(np.shape(cells_in_peak)[1], dtype="int16")
     start = 0
     for k in np.arange(n_clusters):
         e = np.equal(cluster_labels, k)
@@ -373,6 +378,9 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
 
         ordered_cells_in_peak[:, start:start + nb_k] = cells_in_peak[:, e]
         sce_indices_for_each_clusters[k] = np.arange(start, start + nb_k)
+        old_pos = np.where(e)[0]
+        for i, sce_index in enumerate(np.arange(start, start + nb_k)):
+            new_sce_labels[sce_index] = old_pos[i]
         start += nb_k
         if (k + 1) < n_clusters:
             if k == 0:
@@ -387,10 +395,13 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
 
     for k in np.arange(-1, np.max(cluster_labels_for_neurons) + 1):
         e = np.equal(cluster_labels_for_neurons, k)
-        nb_k = np.sum(e)
+        nb_cells = np.sum(e)
+        if nb_cells == 0:
+            # print(f'n_clusters {n_clusters}, k {k} nb_cells == 0')
+            continue
         # print(f'nb_k {nb_k}, k: {k}')
         if k == -1:
-            nb_neurons_without_clusters = nb_k
+            nb_neurons_without_clusters = nb_cells
         else:
             if not color_each_clusters:
                 sce_indices = np.array(sce_indices_for_each_clusters[k])
@@ -409,9 +420,12 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
                     # putting to 2 all cells for whom there is a spike
                     ordered_cells_in_peak[tmp_e, index] = 2
                 # to_modify[np.where(to_modify)[0]] = 2
-        ordered_n_cells_in_peak[start:start + nb_k, :] = ordered_cells_in_peak[e, :]
-        neurons_ax_labels[start:start + nb_k] = neurons_normal_order[e]
-        start += nb_k
+        ordered_n_cells_in_peak[start:start + nb_cells, :] = ordered_cells_in_peak[e, :]
+        neurons_ax_labels[start:start + nb_cells] = neurons_normal_order[e]
+        for cell in np.arange(start, start + nb_cells):
+            cells_cluster_dict[cell] = k
+        clusters_coords_dict[k] = (start, start + nb_cells)
+        start += nb_cells
         if (k + 1) < (np.max(cluster_labels_for_neurons) + 1):
             cluster_horizontal_thresholds.append(start)
 
@@ -441,24 +455,58 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         ordered_neurons_labels = []
         for index in neurons_ax_labels:
             ordered_neurons_labels.append(neurons_labels[index])
+        ax2.set_yticks(np.arange(len(ordered_neurons_labels)) + 0.5)
         ax2.set_yticklabels(ordered_neurons_labels)
         ax2.yaxis.set_tick_params(labelsize=8)
     else:
+        ax2.set_yticks(np.arange(len(neurons_ax_labels)))
         ax2.set_yticklabels(neurons_ax_labels.astype(int))
-    ax2.set_xticks(cluster_x_ticks_coord)
-    ax2.set_xticklabels(np.arange(n_clusters))
+
+    # creating axis at the top
+    ax_top = ax2.twiny()
+    ax2.set_frame_on(False)
+    ax_top.set_frame_on(False)
+    ax_top.set_xlim((0, np.shape(cells_in_peak)[1]))
+    ax_top.set_xticks(cluster_x_ticks_coord)
+    # clusters labels
+    ax_top.set_xticklabels(np.arange(n_clusters))
+
+    ax2.set_xticks(np.arange(np.shape(cells_in_peak)[1]) + 0.5)
+    # sce labels
+    ax2.set_xticklabels(new_sce_labels)
     ax2.hlines(cluster_horizontal_thresholds, 0, np.shape(cells_in_peak)[1], color="red", linewidth=1,
                linestyles="dashed")
     ax2.vlines(cluster_vertical_thresholds, 0, np.shape(cells_in_peak)[0], color="red", linewidth=1,
                linestyles="dashed")
+    # print(f"n_clusters {n_clusters}, cluster_vertical_thresholds {cluster_vertical_thresholds}")
+    for cluster in np.arange(n_clusters):
+        if cluster not in clusters_coords_dict:
+            # print(f"cluster {cluster} with no cells")
+            # means no cell has this cluster as main cluster
+            continue
+        y_bottom, y_top = clusters_coords_dict[cluster]
+        x_left = 0 if (cluster == 0) else cluster_vertical_thresholds[cluster-1]
+        x_right = np.shape(cells_in_peak)[1] if (cluster == (n_clusters-1)) else cluster_vertical_thresholds[cluster]
+        linewidth = 3
+        color_border = "white"
+        ax2.vlines(x_left, y_bottom, y_top, color = color_border, linewidth = linewidth)
+        ax2.vlines(x_right, y_bottom, y_top, color = color_border, linewidth=linewidth)
+        ax2.hlines(y_bottom, x_left, x_right, color = color_border, linewidth=linewidth)
+        ax2.hlines(y_top, x_left, x_right, color = color_border, linewidth=linewidth)
 
     # plt.setp(ax2.xaxis.get_majorticklabels(), rotation=90)
     plt.setp(ax2.yaxis.get_majorticklabels(), rotation=0)
+    
+    for cell in np.arange(n_cells):
+        cluster = cells_cluster_dict[cell]
+        if cluster >=0:
+            color = cm.nipy_spectral(float(cluster + 1) / n_clusters)
+            ax2.get_yticklabels()[cell].set_color(color)
 
     ax2.invert_yaxis()
-    if nb_neurons_without_clusters > 0:
-        for i in np.arange(nb_neurons_without_clusters):
-            ax2.get_yticklabels()[i].set_color("red")
+    # if nb_neurons_without_clusters > 0:
+    #     for i in np.arange(nb_neurons_without_clusters):
+    #         ax2.get_yticklabels()[i].set_color("red")
 
     if (path_results is not None) and ((axes_list is None) or (fig_to_use is not None)):
         if fig_to_use is not None:

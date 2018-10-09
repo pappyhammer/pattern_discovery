@@ -29,7 +29,8 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        cell_spikes_color='white',
                        seq_times_to_color_dict=None,
                        seq_colors=None, debug_mode=False,
-                       axes_list=None
+                       axes_list=None,
+                       SCE_times=None
                        ):
     """
     
@@ -68,6 +69,10 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     a color, should have the same keys as seq_times_to_color_dict
     :param axes_list if not None, give a list of axes that will be used, and be filled, but no figure will be created
     or saved then. Doesn't work yet is show_amplitude is True
+    :param SCE_times:  a list of tuple corresponding to the first and last index of each SCE,
+    (last index being included in the SCE). Will display the position of the SCE and their number above the activity
+    diagram. If None, the overall time will be displayed. Need to be adapted to the format spike_numw or
+    spike_train
     :return: 
     """
 
@@ -81,7 +86,8 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     n_cells = len(spike_nums)
     if axes_list is None:
         if not plot_with_amplitude:
-            fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True,
+            sharex = False if (SCE_times is None) else True
+            fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=sharex,
                                            gridspec_kw={'height_ratios': [10, 2]},
                                            figsize=(15, 8))
             fig.set_tight_layout({'rect': [0, 0, 1, 0.95], 'pad': 1.5, 'h_pad': 1.5})
@@ -219,6 +225,8 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         ax1.set_xlim(-1, len(spike_nums[0, :]) + 1)
     # ax1.margins(x=0, tight=True)
 
+    ax1.get_xaxis().set_visible(False)
+
     if title is None:
         ax1.set_title('Spikes raster plot')
     else:
@@ -342,7 +350,19 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         ax2.set_xlim(min_time - 1, max_time + 1)
     else:
         ax2.set_xlim(-1, len(spike_nums[0, :]) + 1)
-
+    if SCE_times is not None:
+        ax_top = ax2.twiny()
+        ax_top.set_frame_on(False)
+        if spike_train_format:
+            ax_top.set_xlim(min_time - 1, max_time + 1)
+        else:
+            ax_top.set_xlim(-1, len(spike_nums[0, :]) + 1)
+        xticks_pos = []
+        for times_tuple in SCE_times:
+            xticks_pos.append(times_tuple[0])
+        ax_top.set_xticks(xticks_pos)
+        ax_top.xaxis.set_ticks_position('none')
+        ax_top.set_xticklabels(np.arange(len(SCE_times)))
     # print(f"max sum_spikes {np.max(sum_spikes)}, mean  {np.mean(sum_spikes)}, median {np.median(sum_spikes)}")
     ax2.set_ylim(0, np.max(sum_spikes))
 
