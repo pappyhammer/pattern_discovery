@@ -7,7 +7,7 @@
 
 import numpy as np
 import numpy.random as rnd
-from fca import functional_clustering_algorithm
+from pattern_discovery.clustering.fca.fca import functional_clustering_algorithm
 
 
 def test_functional_clustering():
@@ -24,7 +24,7 @@ def test_functional_clustering():
     freq1 = 1.0
     period = 3.5
 
-    print "creating spikes train"
+    print("creating spikes train")
     for i in range(n_group1):
         train = np.arange(1.0 * rnd.random(), tmax, period)
         train_list.append(train)
@@ -35,6 +35,6 @@ def test_functional_clustering():
     for i in range(n_group1):
         train = np.arange(0.0 * rnd.random(), tmax, period)
         train_list.append(train)
-    print "starting clustering"
+    print("starting clustering")
     merge_history, current_cluster = functional_clustering_algorithm(train_list, 300, .10)
     return train_list, merge_history, current_cluster

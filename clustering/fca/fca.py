@@ -7,6 +7,8 @@
 
 import numpy as np
 import numpy.random as rnd
+import pattern_discovery.tools.sce_detection as sce_detection
+import pattern_discovery.tools.trains as trains_module
 
 
 def average_minimum_distance(train1, train2):
@@ -90,7 +92,7 @@ def update_distance_data_set(distance_matrix, train_list, idx_train1, surrogate_
     """
     ntrains = len(train_list)
 
-    for j in range(ntrains):
+    for j in np.arange(ntrains):
         train2 = train_list[j]
         d = average_minimum_distance(surrogate_train, train2)
         distance_matrix[idx_train1, j] = d
@@ -157,7 +159,7 @@ def cdf_distance(train_list, surrogate_data_set):
         create for each pair of train a cumulative distance function for distance based on the surrogate
         data set
         - first nsurrogate surrogate data sets are created
-        - the for each surrogate data set a distance matrix is created
+        - then for each surrogate data set a distance matrix is created
         - for each pair - entry in the matrix - a cdf if computed
     :param train_list:
     :param sigma:
@@ -169,7 +171,7 @@ def cdf_distance(train_list, surrogate_data_set):
 
     cdf_matrix = np.zeros((nsurrogate, ntrains, ntrains))
     for i in range(nsurrogate):
-        print "surrogate", i
+        print(f"surrogate {i}")
         surrogate_distance_matrix = distance_data_set(surrogate_data_set[i])
         cdf_matrix[i, :, :] = surrogate_distance_matrix
 
@@ -201,7 +203,7 @@ def update_cdf_distance(cdf_matrix, surrogate_data_set, train_list, idx_train1, 
     return cdf_matrix
 
 
-def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=False):
+def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=True):
     """
         Main clustering algorithm
     :param train_list:
@@ -209,27 +211,34 @@ def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=Fa
     :param sigma:
     :return:
     """
-    print "starting clustering"
+    print("starting clustering")
     done = False
     ntrain = len(train_list)
     current_train_list = train_list[:]
-    current_cluster = range(ntrain)
+    current_cluster = list(np.arange(ntrain))
     merge_history = []
     nstep = 0
-    surrogate_data_set = create_surrogate_dataset(train_list, nsurrogate, sigma)
+    use_rolling_method_fo_surrogate = False
+    if use_rolling_method_fo_surrogate:
+        min_time, max_time = trains_module.get_range_train_list(train_list)
+        surrogate_data_set = sce_detection.create_surrogate_dataset(train_list=train_list, nsurrogate=nsurrogate,
+                                                      min_value=min_time, max_value=max_time)
+    else:
+        surrogate_data_set = create_surrogate_dataset(train_list, nsurrogate, sigma)
     cdf_matrix = cdf_distance(current_train_list, surrogate_data_set)
 
     while not done:
-        print "doing step", nstep
-        print "computing cdf"
+        print(f"doing step {nstep}")
+        print("computing cdf")
         scale_matrix = scaled_significance_matrix(current_train_list, cdf_matrix)
         maximum_scale = np.max(scale_matrix)
-        print "max scale", maximum_scale
+        print(f"max scale {maximum_scale}")
         if early_stop and maximum_scale < 1.0:
+            print(f"early_stop maximum_scale{maximum_scale}, len(current_train_list){len(current_train_list)}")
             done = True
         else:
             i, j = np.unravel_index(np.argmax(scale_matrix), scale_matrix.shape)
-            print "max index", i, j
+            print(f"max index {i} {j}")
             if i > j:
                 i, j = j, i
 
@@ -284,7 +293,7 @@ def create_linkage(n_nodes, merge_history):
             id2 = cluster_size[cluster_list.index(cl2)]
             cluster2_size = cluster_size[id1] + cluster_size[id2]
             cluster_size.append(cluster2_size)
-        print len(cluster_size)
+        print(f"len(cluster_size) {len(cluster_size)}")
         ix1 = cluster_list.index(cluster1)
         ix2 = cluster_list.index(cluster2)
         Z.append([ix1, ix2, 1.0, 1])

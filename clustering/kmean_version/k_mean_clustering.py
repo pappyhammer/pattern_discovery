@@ -75,7 +75,8 @@ def surrogate_clustering(m_sces, n_clusters, n_surrogate, n_trials, perc_thresho
 def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_silhouettes=np.median,
                               shuffling=False, n_surrogate=100,
                               nth_best_clusters=-1, neurons_labels=None,
-                              plot_matrix=False, data_str="", path_results=None):
+                              plot_matrix=False, data_str="", path_results=None,
+                              perc_thresholds_for_surrogate=(95, 99)):
     """
 
     :param cells_in_sce:
@@ -117,7 +118,7 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
 
     # nb of time to apply one given number of cluster
     n_trials = 100
-    
+    best_kmeans_by_cluster = dict()
 
     for n_clusters in range_n_clusters:
         print(f"n_clusters {n_clusters}")
@@ -126,7 +127,7 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
             surrogate_percentiles = surrogate_clustering(m_sces=m_sces, n_clusters=n_clusters,
                                                          n_surrogate=n_surrogate,
                                                          n_trials=100,
-                                                         perc_thresholds=[95, 99], debug_mode=True)
+                                                         perc_thresholds=perc_thresholds_for_surrogate, debug_mode=True)
             print(f"surrogate_percentiles {surrogate_percentiles}")
 
         best_kmeans = None
@@ -185,6 +186,7 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
 
             # if best_kmeans is None:
             #     continue
+        best_kmeans_by_cluster[n_clusters] = best_kmeans
         cluster_labels_for_neurons[n_clusters] = \
             find_cluster_labels_for_neurons(cells_in_peak=cells_in_sce,
                                             cluster_labels=best_kmeans.labels_)
@@ -196,7 +198,7 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
                                      show_silhouettes=True, neurons_labels=neurons_labels,
                                      surrogate_silhouette_avg=surrogate_percentiles)
   
-    return dict_best_clusters, cluster_labels_for_neurons
+    return dict_best_clusters, best_kmeans_by_cluster, m_sces, cluster_labels_for_neurons, surrogate_percentiles
 
 
 # TODO: do shuffling before the real cluster
@@ -204,18 +206,26 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
 
 def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_labels_for_neurons,
                              data_str, path_results=None, show_fig=False, show_silhouettes=False,
-                             surrogate_silhouette_avg=None, neurons_labels=None):
-    if show_silhouettes:
-        fig, (ax0, ax1, ax2) = plt.subplots(nrows=1, ncols=3, sharex=False,
-                                            gridspec_kw={'height_ratios': [1], 'width_ratios': [6, 6, 10]},
-                                            figsize=(20, 12))
+                             surrogate_silhouette_avg=None, neurons_labels=None, axes_list=None, fig_to_use=None,
+                             save_formats="pdf"):
+
+    if axes_list is None:
+        if show_silhouettes:
+            fig, (ax0, ax1, ax2) = plt.subplots(nrows=1, ncols=3, sharex=False,
+                                                gridspec_kw={'height_ratios': [1], 'width_ratios': [6, 6, 10]},
+                                                figsize=(20, 12))
+        else:
+            fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, sharex=False,
+                                           gridspec_kw={'height_ratios': [1], 'width_ratios': [4, 10]},
+                                           figsize=(20, 12))
+        plt.tight_layout(pad=3, w_pad=7, h_pad=3)
+        # ax1 = plt.subplot(121)
+        plt.title(f"{data_str} {n_clusters} clusters")
     else:
-        fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, sharex=False,
-                                       gridspec_kw={'height_ratios': [1], 'width_ratios': [4, 10]},
-                                       figsize=(20, 12))
-    plt.tight_layout(pad=3, w_pad=7, h_pad=3)
-    # ax1 = plt.subplot(121)
-    plt.title(f"{data_str} {n_clusters} clusters")
+        if show_silhouettes:
+            ax0, ax1, ax2 = axes_list
+        else:
+            ax1, ax2 = axes_list
     # list of size nb_neurons, each neuron having a value from 0 to k clusters
     cluster_labels = kmeans.labels_
 
@@ -419,12 +429,14 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         for i in np.arange(nb_neurons_without_clusters):
             ax2.get_yticklabels()[i].set_color("red")
 
-    if path_results is not None:
-        fig.savefig(f'{path_results}/{n_clusters}_clusters_{data_str}.pdf',
-                    format="pdf")
+    if (path_results is not None) and ((axes_list is None) or (fig_to_use is not None)):
+        if fig_to_use is not None:
+            fig = fig_to_use
+        fig.savefig(f'{path_results}/{n_clusters}_clusters_{data_str}.{save_formats}',
+                    format=f"{save_formats}")
     if show_fig:
         plt.show()
-    plt.close()
+        plt.close()
 
 
 def find_cluster_labels_for_neurons(cells_in_peak, cluster_labels):

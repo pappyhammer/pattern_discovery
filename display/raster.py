@@ -28,7 +28,8 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        raster_face_color='black',
                        cell_spikes_color='white',
                        seq_times_to_color_dict=None,
-                       seq_colors=None, debug_mode=False
+                       seq_colors=None, debug_mode=False,
+                       axes_list=None
                        ):
     """
     
@@ -65,6 +66,8 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     be colored. It will be colored if there is indeed a spike at that time otherwise, the default color will be used.
     :param seq_colors: A dict, with key a tuple represening the indices of the seq and as value of colors,
     a color, should have the same keys as seq_times_to_color_dict
+    :param axes_list if not None, give a list of axes that will be used, and be filled, but no figure will be created
+    or saved then. Doesn't work yet is show_amplitude is True
     :return: 
     """
 
@@ -76,16 +79,18 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         return
 
     n_cells = len(spike_nums)
-
-    if not plot_with_amplitude:
-        fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True,
-                                       gridspec_kw={'height_ratios': [10, 2]},
-                                       figsize=(15, 8))
-        fig.set_tight_layout({'rect': [0, 0, 1, 0.95], 'pad': 1.5, 'h_pad': 1.5})
+    if axes_list is None:
+        if not plot_with_amplitude:
+            fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True,
+                                           gridspec_kw={'height_ratios': [10, 2]},
+                                           figsize=(15, 8))
+            fig.set_tight_layout({'rect': [0, 0, 1, 0.95], 'pad': 1.5, 'h_pad': 1.5})
+        else:
+            fig = plt.figure(figsize=(15, 8))
+            fig.set_tight_layout({'rect': [0, 0, 1, 1], 'pad': 1, 'h_pad': 1})
+            outer = gridspec.GridSpec(1, 2, width_ratios=[100, 1])  # , wspace=0.2, hspace=0.2)
     else:
-        fig = plt.figure(figsize=(15, 8))
-        fig.set_tight_layout({'rect': [0, 0, 1, 1], 'pad': 1, 'h_pad': 1})
-        outer = gridspec.GridSpec(1, 2, width_ratios=[100, 1])  # , wspace=0.2, hspace=0.2)
+        ax1, ax2 = axes_list
 
     if plot_with_amplitude:
         inner = gridspec.GridSpecFromSubplotSpec(2, 1,
@@ -347,14 +352,14 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                                                    subplot_spec=outer[1])  # , wspace=0.1, hspace=0.1)
         ax3 = fig.add_subplot(inner_2[0])  # plt.Subplot(fig, inner_2[0])
         fig.colorbar(scalar_map, cax=ax3)
-
-    if save_raster and (param is not None):
-        # transforming a string in a list
-        if isinstance(save_formats, str):
-            save_formats = [save_formats]
-        for save_format in save_formats:
-            fig.savefig(f'{param.path_results}/{file_name}_{param.time_str}.{save_format}', format=f"{save_format}")
-    # Display the spike raster plot
-    if show_raster:
-        plt.show()
-    plt.close()
+    if axes_list is None:
+        if save_raster and (param is not None):
+            # transforming a string in a list
+            if isinstance(save_formats, str):
+                save_formats = [save_formats]
+            for save_format in save_formats:
+                fig.savefig(f'{param.path_results}/{file_name}_{param.time_str}.{save_format}', format=f"{save_format}")
+        # Display the spike raster plot
+        if show_raster:
+            plt.show()
+        plt.close()
