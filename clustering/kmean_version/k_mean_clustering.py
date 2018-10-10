@@ -297,7 +297,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
 
     co_var = np.corrcoef(ordered_m_sces)  # cov
     # sns.set()
-    result = sns.heatmap(co_var, cmap="jet", ax=ax1)  # , vmin=0, vmax=1) YlGnBu
+    result = sns.heatmap(co_var, cmap="Blues", ax=ax1)  # , vmin=0, vmax=1) YlGnBu  cmap="jet"
     # ax1.hlines(cluster_coord_thresholds, 0, np.shape(co_var)[0], color="black", linewidth=1,
     #            linestyles="dashed")
     for n_c, clusters_threshold in enumerate(cluster_coord_thresholds):

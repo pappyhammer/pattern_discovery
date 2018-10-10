@@ -9,7 +9,293 @@ import numpy as np
 import numpy.random as rnd
 import pattern_discovery.tools.sce_detection as sce_detection
 import pattern_discovery.tools.trains as trains_module
+import matplotlib.cm as cm
 
+class ClusterTree:
+    def __init__(self, clusters_lists, n_cells, max_scale_value, non_significant_color = "black",
+                 merge_history_list=None, father=None):
+        # if clusters_lists is a list, it should contain 2 elements
+        self.clusters_lists = clusters_lists
+        self.merge_history_list = merge_history_list
+        # the tree might have no father
+        self.father = father
+        self.max_scale_value = max_scale_value
+        self.cluster_nb = None
+
+        #  ######################## plot param ########################
+        self.far_left_child_pos = None
+        self.far_right_child_pos = None
+        self.x_pos = None
+        self.y_pos = None
+        self.max_y_pos = 10
+        if self.father is None:
+            # use for plotting, give the x pos for a given cell_id (key)
+            self.x_pos_for_cell = dict()
+            # use for filling the position
+            self.free_x_pos = np.ones(n_cells, dtype="bool")
+            # for each pos, gives the number of cell, used for setting x_axis
+            self.pos_cells = np.zeros(n_cells, dtype="uint16")
+            # key is an int representing the cluster number
+            # and value is the top tree of representing the clusters
+            self.cluster_dict = dict()
+            self.cluster_nb_list = []
+        else:
+            self.x_pos_for_cell = self.father.x_pos_for_cell
+            self.free_x_pos = self.father.free_x_pos
+            self.pos_cells = self.father.pos_cells
+            self.cluster_dict = self.father.cluster_dict
+            self.cluster_nb_list = self.father.cluster_nb_list
+
+        #  ##############################################################
+
+        # scale_vlaue will be NOne if the tree has no child
+        self.scale_value = None
+        self.cell_id = None
+
+        self.color = non_significant_color
+
+            # each tree can have either no child, or 2 childs
+        if isinstance(clusters_lists, int):
+            self.no_child = True
+            self.cell_id = clusters_lists
+            x_pos = np.where(self.free_x_pos)[0][0]
+            self.free_x_pos[x_pos] = False
+            self.x_pos_for_cell[self.cell_id] = x_pos
+            self.pos_cells[x_pos] = self.cell_id
+            # print(f"self.cell_id {self.cell_id}")
+        else:
+            if len(clusters_lists) != 2:
+                print(f"len(clusters_lists) != 2")
+            self.no_child = False
+            first_child_clusters = clusters_lists[0]
+            second_child_clusters = clusters_lists[1]
+
+            index_hist = self.find_merge_history_index(first_child_clusters, second_child_clusters)
+            merge_history = self.merge_history_list[index_hist]
+            del self.merge_history_list[index_hist]
+            self.scale_value = merge_history[2]
+            nb_elements=0
+
+            if isinstance(first_child_clusters, int):
+                self.first_child = ClusterTree(clusters_lists=first_child_clusters, max_scale_value=max_scale_value,
+                                               father=self, n_cells=n_cells)
+            else:
+                nb_elements = self.nb_cells_in_list(first_child_clusters)
+                self.first_child = ClusterTree(clusters_lists=first_child_clusters,n_cells=n_cells,
+                                               max_scale_value=max_scale_value,
+                                               merge_history_list=self.merge_history_list,
+                                               father=self)
+
+            if isinstance(second_child_clusters, int):
+                self.second_child = ClusterTree(clusters_lists=second_child_clusters, father=self,
+                                               max_scale_value=max_scale_value,
+                                               n_cells=n_cells)
+            else:
+                # nb_elements = self.nb_cells_in_list(second_child_clusters)
+                self.second_child = ClusterTree(clusters_lists=second_child_clusters, n_cells=n_cells,
+                                                max_scale_value=max_scale_value,
+                                                merge_history_list=self.merge_history_list,
+                                                father=self)
+        # things that need to be done after all childs have been created
+        if self.father is None:
+            nb_intersections = self.get_nb_intersections()
+            self.significant_threshold = self.set_y_pos(nb_intersections=nb_intersections)
+            self.compute_clusters()
+
+            n_clusters = len(self.cluster_nb_list)
+
+            self.set_colors(n_clusters=n_clusters)
+
+
+    def set_colors(self, n_clusters):
+        if self.cluster_nb is not None:
+            self.color = cm.nipy_spectral(float(self.cluster_nb + 1) / n_clusters)
+        if not self.no_child:
+            self.first_child.set_colors(n_clusters)
+            self.second_child.set_colors(n_clusters)
+
+    def compute_clusters(self):
+        if self.father is not None:
+            if self.father.cluster_nb is not None:
+                self.cluster_nb = self.father.cluster_nb
+
+        if self.no_child:
+            return
+
+        # determining cluster
+        if (self.cluster_nb is None) and (self.scale_value >= 1) and (self.are_child_significant()):
+            self.cluster_nb = len(self.cluster_nb_list)
+            self.cluster_nb_list.append(self.cluster_nb)
+            self.cluster_dict[self.cluster_nb] = self
+
+        self.first_child.compute_clusters()
+        self.second_child.compute_clusters()
+
+
+
+    def get_cells_id(self):
+        """
+
+        :return: a list of int representing the cells index
+        """
+        cells = []
+        if self.no_child:
+            return [self.cell_id]
+        cells.extend(self.first_child.get_cells_id())
+        cells.extend(self.second_child.get_cells_id())
+
+        return cells
+
+    def set_y_pos(self, nb_intersections):
+        # using breadth first search technique
+        actual_y_pos = self.max_y_pos
+        # to determine the position of last intersection being significant, we look
+        # first index is the y_pos, second one is the scale_value
+        pos_significant_threshold = [100, 100]
+
+        current_depth = 0
+        nodes_to_expend = {current_depth: [self]}
+        nodes_at_depth = dict()
+        nodes_at_depth[current_depth] = []
+        nodes_at_depth[current_depth].append(self)
+        while True:
+            current_node = nodes_to_expend[current_depth][0]
+            nodes_to_expend[current_depth] = nodes_to_expend[current_depth][1:]
+            if current_node.no_child:
+                current_node.y_pos = 0
+            else:
+                current_node.y_pos = actual_y_pos
+                actual_y_pos -= (self.max_y_pos/nb_intersections)
+                if (current_node.scale_value >= 1) and (current_node.are_child_significant()):
+                    if current_node.scale_value < pos_significant_threshold[1]:
+                        pos_significant_threshold[1] = current_node.scale_value
+                        pos_significant_threshold[0] = current_node.y_pos
+                    if current_node.scale_value == pos_significant_threshold[1]:
+                        if current_node.y_pos > pos_significant_threshold[0]:
+                            pos_significant_threshold[0] = current_node.y_pos
+
+            if not current_node.no_child:
+                if (current_depth + 1) not in nodes_at_depth:
+                    nodes_at_depth[current_depth + 1] = []
+                nodes_at_depth[current_depth + 1].append(current_node.first_child)
+                nodes_at_depth[current_depth + 1].append(current_node.second_child)
+
+            # we need to check how many leafs are in the tree at this current_depth
+            # and remove the one with the lower score
+            # adding to nodes_to_expend only the best nodes
+
+            if len(nodes_to_expend[current_depth]) == 0:
+                current_depth += 1
+                if current_depth in nodes_at_depth:
+                    nodes_to_expend[current_depth] = nodes_at_depth[current_depth]
+                else:
+                    break
+        # return significant threshold position
+        return pos_significant_threshold[0] + ((self.max_y_pos/nb_intersections) / 2)
+
+    def get_nb_intersections(self):
+        if self.no_child:
+            return 0
+        return 1 + self.first_child.get_nb_intersections() + self.second_child.get_nb_intersections()
+
+    def are_child_significant(self):
+        """
+        return true if all child have a scale_value >=1
+        :return:
+        """
+        if self.no_child:
+            return True
+        if self.scale_value < 1:
+            return False
+        return (self.first_child.are_child_significant() and self.second_child.are_child_significant())
+
+    def plot_cluster(self, ax, with_scale_value=False):
+        if self.no_child:
+            return
+        else:
+            x_pos = self.get_x_pos()
+
+            ax.hlines(self.y_pos, self.first_child.get_x_pos(), self.second_child.get_x_pos(),
+                      color=self.color,
+                      linewidth=4)
+            if with_scale_value:
+                ax.text(x_pos, self.y_pos-0.2, f'{np.round(self.scale_value, 2)}', horizontalalignment='center',
+                        verticalalignment = 'center')
+
+            y_bottom = self.first_child.y_pos
+            ax.vlines(self.first_child.get_x_pos(), y_bottom, self.y_pos,
+                      color=self.color,
+                      linewidth=4)
+
+            y_bottom = self.second_child.y_pos
+            ax.vlines(self.second_child.get_x_pos(), y_bottom, self.y_pos,
+                      color=self.color,
+                      linewidth=4)
+
+            self.first_child.plot_cluster(ax, with_scale_value=with_scale_value)
+            self.second_child.plot_cluster(ax, with_scale_value=with_scale_value)
+
+    def get_x_pos(self):
+        if self.x_pos is None:
+            self.far_left_child_pos = self.get_first_x_pos()
+            self.far_right_child_pos = self.get_last_x_pos()
+            self.x_pos = np.mean((self.far_left_child_pos, self.far_right_child_pos))
+        return self.x_pos
+
+
+    def get_first_x_pos(self):
+        """
+        Look for the pos of the child the most on the left of the dendogram from this tree
+        :return:
+        """
+        if self.no_child:
+            self.x_pos = self.x_pos_for_cell[self.cell_id]
+            return self.x_pos
+        else:
+            self.far_left_child_pos = self.first_child.get_first_x_pos()
+            return self.far_left_child_pos
+
+    def get_last_x_pos(self):
+        """
+        Look for the pos of the child the most on the left of the dendogram from this tree
+        :return:
+        """
+        if self.no_child:
+            self.x_pos = self.x_pos_for_cell[self.cell_id]
+            return self.x_pos
+        else:
+            self.far_right_child_pos = self.second_child.get_last_x_pos()
+            return self.far_right_child_pos
+
+    def find_merge_history_index(self, first_child_clusters, second_child_clusters):
+        for index, merge_history in enumerate(self.merge_history_list):
+            if (merge_history[0] == first_child_clusters) and (merge_history[1] == second_child_clusters):
+                return index
+        return None
+
+
+    def nb_cells_in_list(self, cells):
+        if isinstance(cells, list):
+            if len(cells) == 0:
+                return 1
+            next_sum = 0
+            for item in cells:
+                next_sum += self.nb_cells_in_list(item)
+            return 1 + next_sum
+        else:
+            return 0
+
+
+def get_min_max_scale_from_merge_history(merge_history):
+    min_scale = 100
+    max_scale = 0
+
+    for merge_data in merge_history:
+        scale_value = merge_data[2]
+        min_scale = np.min((scale_value, min_scale))
+        max_scale = np.max((scale_value, max_scale))
+
+    return min_scale, max_scale
 
 def average_minimum_distance(train1, train2):
     """
@@ -91,7 +377,7 @@ def update_distance_data_set(distance_matrix, train_list, idx_train1, surrogate_
     :return: a len(train_list) square matrix with distance
     """
     ntrains = len(train_list)
-
+    # print(f"np.shape(distance_matrix) {np.shape(distance_matrix)} ntrains {ntrains}")
     for j in np.arange(ntrains):
         train2 = train_list[j]
         d = average_minimum_distance(surrogate_train, train2)
@@ -203,7 +489,7 @@ def update_cdf_distance(cdf_matrix, surrogate_data_set, train_list, idx_train1, 
     return cdf_matrix
 
 
-def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=True):
+def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=True, rolling_surrogate=False):
     """
         Main clustering algorithm
     :param train_list:
@@ -218,12 +504,12 @@ def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=Tr
     current_cluster = list(np.arange(ntrain))
     merge_history = []
     nstep = 0
-    use_rolling_method_fo_surrogate = False
-    if use_rolling_method_fo_surrogate:
+    if rolling_surrogate:
         min_time, max_time = trains_module.get_range_train_list(train_list)
         surrogate_data_set = sce_detection.create_surrogate_dataset(train_list=train_list, nsurrogate=nsurrogate,
                                                       min_value=min_time, max_value=max_time)
     else:
+        # original method by Feldt
         surrogate_data_set = create_surrogate_dataset(train_list, nsurrogate, sigma)
     cdf_matrix = cdf_distance(current_train_list, surrogate_data_set)
 
@@ -238,7 +524,14 @@ def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=Tr
             done = True
         else:
             i, j = np.unravel_index(np.argmax(scale_matrix), scale_matrix.shape)
-            print(f"max index {i} {j}")
+
+            if i == j:
+                # part not included in the original algorithm
+                # usually means that scale_matrix contains only 0.00
+                i = 0
+                j = 1
+                # break
+
             if i > j:
                 i, j = j, i
 

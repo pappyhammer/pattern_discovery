@@ -3,6 +3,57 @@ import numpy as np
 import math
 
 
+def plot_dendogram_from_fca(cluster_tree, nb_cells, save_plot, axes_list=None, fig_to_use=None, file_name="",
+                            param=None,
+                            show_plot=False, save_formats="pdf"):
+    """
+
+    :param current_cluster:
+    :param merge_history: list of list, each list is composed of 3 elemnts, the two first are the ones merged (could
+    be a list or an int) and the last value is a float representing the scale value
+    :return:
+    """
+    # scale value under 1 are not significant
+    if fig_to_use is None:
+        fig, ax1 = plt.subplots(nrows=1, ncols=1,
+                                figsize=(15, 8))
+
+        fig.set_tight_layout({'rect': [0, 0, 1, 1], 'pad': 1, 'h_pad': 1})
+    else:
+        fig = fig_to_use
+        ax1 = axes_list[0]
+
+    max_y = cluster_tree.max_y_pos
+
+    cluster_tree.plot_cluster(ax=ax1, with_scale_value=True)
+
+    ax1.hlines(cluster_tree.significant_threshold, 0, nb_cells - 1, color="black", linewidth=2,
+               linestyles="dashed")
+
+    ax1.set_xticks(np.arange(nb_cells))
+    ax1.set_xticklabels(cluster_tree.pos_cells)
+    ax1.xaxis.set_ticks_position('none')
+    ax1.yaxis.set_ticks_position('none')
+    ax1.set_yticklabels([])
+    ax1.set_xlim(-1, nb_cells + 1)
+    ax1.set_ylim(0, max_y + 1)
+    ax1.set_frame_on(False)
+
+    if fig_to_use is not None:
+        return
+
+    if save_plot and (param is not None):
+        # transforming a string in a list
+        if isinstance(save_formats, str):
+            save_formats = [save_formats]
+        for save_format in save_formats:
+            fig.savefig(f'{param.path_results}/{file_name}_{param.time_str}.{save_format}', format=f"{save_format}")
+    # Display the spike raster plot
+    if show_plot:
+        plt.show()
+    plt.close()
+
+
 def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        spike_train_format=False,
                        y_ticks_labels=None,
@@ -20,6 +71,10 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        horizontal_lines=None,
                        horizontal_lines_colors=None,
                        horizontal_lines_sytle=None,
+                       vertical_lines=None,
+                       vertical_lines_colors=None,
+                       vertical_lines_sytle=None,
+                       vertical_lines_linewidth=None,
                        sliding_window_duration=1,
                        show_sum_spikes_as_percentage=False,
                        span_cells_to_highlight=True,
@@ -58,6 +113,11 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     :param horizontal_lines_colors: if horizontal_lines is not None, will set the colors of each line,
     list of string or color code
     :param horizontal_lines_style: give the style of the lines, string
+    :param vertical_lines: list of float, representing the x coord at which trace vertical lines
+    :param vertical__lines_colors: if horizontal_lines is not None, will set the colors of each line,
+    list of string or color code
+    :param vertical__lines_style: give the style of the lines, string
+    :param vertical_lines_linewidth:
     :param raster_face_color:
     :param cell_spikes_color:
     :param spike_shape: shape of the spike, "|", "*", "o"
@@ -211,6 +271,13 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
             line_end_x = len(spike_nums[0, :]) + 1
         ax1.hlines(horizontal_lines, line_beg_x, line_end_x, color=horizontal_lines_colors, linewidth=2,
                    linestyles=horizontal_lines_sytle)
+
+    if vertical_lines is not None:
+        line_beg_y = 0
+        line_end_y = len(spike_nums) - 1
+        ax1.vlines(vertical_lines, line_beg_y, line_end_y, color=vertical_lines_colors,
+                   linewidth=vertical_lines_linewidth,
+                   linestyles=vertical_lines_sytle)
 
     ax1.set_ylim(-1, len(spike_nums))
     if y_ticks_labels is not None:
