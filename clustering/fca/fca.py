@@ -21,6 +21,7 @@ class ClusterTree:
         self.father = father
         self.max_scale_value = max_scale_value
         self.cluster_nb = None
+        self.n_cells = n_cells
 
         #  ######################## plot param ########################
         self.far_left_child_pos = None
@@ -78,24 +79,28 @@ class ClusterTree:
 
             if isinstance(first_child_clusters, int):
                 self.first_child = ClusterTree(clusters_lists=first_child_clusters, max_scale_value=max_scale_value,
-                                               father=self, n_cells=n_cells)
+                                               father=self, n_cells=n_cells,
+                                               non_significant_color=non_significant_color)
             else:
                 nb_elements = self.nb_cells_in_list(first_child_clusters)
                 self.first_child = ClusterTree(clusters_lists=first_child_clusters,n_cells=n_cells,
                                                max_scale_value=max_scale_value,
                                                merge_history_list=self.merge_history_list,
-                                               father=self)
+                                               father=self,
+                                               non_significant_color=non_significant_color)
 
             if isinstance(second_child_clusters, int):
                 self.second_child = ClusterTree(clusters_lists=second_child_clusters, father=self,
                                                max_scale_value=max_scale_value,
-                                               n_cells=n_cells)
+                                               n_cells=n_cells,
+                                               non_significant_color=non_significant_color)
             else:
                 # nb_elements = self.nb_cells_in_list(second_child_clusters)
                 self.second_child = ClusterTree(clusters_lists=second_child_clusters, n_cells=n_cells,
                                                 max_scale_value=max_scale_value,
                                                 merge_history_list=self.merge_history_list,
-                                                father=self)
+                                                father=self,
+                                               non_significant_color=non_significant_color)
         # things that need to be done after all childs have been created
         if self.father is None:
             nb_intersections = self.get_nb_intersections()
@@ -109,7 +114,7 @@ class ClusterTree:
 
     def set_colors(self, n_clusters):
         if self.cluster_nb is not None:
-            self.color = cm.nipy_spectral(float(self.cluster_nb + 1) / n_clusters)
+            self.color = cm.nipy_spectral(float(self.cluster_nb + 1) / (n_clusters+1))
         if not self.no_child:
             self.first_child.set_colors(n_clusters)
             self.second_child.set_colors(n_clusters)
@@ -209,7 +214,7 @@ class ClusterTree:
             return False
         return (self.first_child.are_child_significant() and self.second_child.are_child_significant())
 
-    def plot_cluster(self, ax, with_scale_value=False):
+    def plot_cluster(self, ax, default_line_color, with_scale_value=False):
         if self.no_child:
             return
         else:
@@ -220,7 +225,7 @@ class ClusterTree:
                       linewidth=4)
             if with_scale_value:
                 ax.text(x_pos, self.y_pos-0.2, f'{np.round(self.scale_value, 2)}', horizontalalignment='center',
-                        verticalalignment = 'center')
+                        verticalalignment = 'center', color=default_line_color)
 
             y_bottom = self.first_child.y_pos
             ax.vlines(self.first_child.get_x_pos(), y_bottom, self.y_pos,
@@ -232,8 +237,8 @@ class ClusterTree:
                       color=self.color,
                       linewidth=4)
 
-            self.first_child.plot_cluster(ax, with_scale_value=with_scale_value)
-            self.second_child.plot_cluster(ax, with_scale_value=with_scale_value)
+            self.first_child.plot_cluster(ax, with_scale_value=with_scale_value, default_line_color=default_line_color)
+            self.second_child.plot_cluster(ax, with_scale_value=with_scale_value, default_line_color=default_line_color)
 
     def get_x_pos(self):
         if self.x_pos is None:

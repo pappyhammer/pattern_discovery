@@ -235,7 +235,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
     if show_silhouettes:
         # Compute the silhouette scores for each sample
         sample_silhouette_values = metrics.silhouette_samples(m_sces, cluster_labels)
-
+        ax0.set_facecolor("black")
         y_lower = 10
         for i in range(n_clusters):
             # Aggregate the silhouette scores for samples belonging to
@@ -248,13 +248,13 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
             size_cluster_i = ith_cluster_silhouette_values.shape[0]
             y_upper = y_lower + size_cluster_i
 
-            color = cm.nipy_spectral(float(i+1) / n_clusters)
+            color = cm.nipy_spectral(float(i+1) / (n_clusters+1))
             ax0.fill_betweenx(np.arange(y_lower, y_upper),
                               0, ith_cluster_silhouette_values,
                               facecolor=color, edgecolor=color, alpha=0.7)
 
             # Label the silhouette plots with their cluster numbers at the middle
-            ax0.text(-0.05, y_lower + 0.5 * size_cluster_i, str(i))
+            ax0.text(-0.05, y_lower + 0.5 * size_cluster_i, str(i), color="white")
 
             # Compute the new y_lower for next plot
             y_lower = y_upper + 10  # 10 for the 0 samples
@@ -297,7 +297,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
 
     co_var = np.corrcoef(ordered_m_sces)  # cov
     # sns.set()
-    result = sns.heatmap(co_var, cmap="Blues", ax=ax1)  # , vmin=0, vmax=1) YlGnBu  cmap="jet"
+    result = sns.heatmap(co_var, cmap="Blues", ax=ax1)  # , vmin=0, vmax=1) YlGnBu  cmap="jet" Blues
     # ax1.hlines(cluster_coord_thresholds, 0, np.shape(co_var)[0], color="black", linewidth=1,
     #            linestyles="dashed")
     for n_c, clusters_threshold in enumerate(cluster_coord_thresholds):
@@ -438,7 +438,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         list_color = ['black']
         bounds = [-2.5, -0.5]
         for i in np.arange(n_clusters):
-            color = cm.nipy_spectral(float(i+1) / n_clusters)
+            color = cm.nipy_spectral(float(i+1) / (n_clusters+1))
             list_color.append(color)
             bounds.append(i+0.5)
         cmap = mpl.colors.ListedColormap(list_color)
@@ -502,7 +502,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
     for cell in np.arange(n_cells):
         cluster = cells_cluster_dict[cell]
         if cluster >=0:
-            color = cm.nipy_spectral(float(cluster + 1) / n_clusters)
+            color = cm.nipy_spectral(float(cluster + 1) / (n_clusters+1))
             ax2.get_yticklabels()[cell].set_color(color)
 
     ax2.invert_yaxis()

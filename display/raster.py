@@ -4,6 +4,9 @@ import math
 
 
 def plot_dendogram_from_fca(cluster_tree, nb_cells, save_plot, axes_list=None, fig_to_use=None, file_name="",
+                            dendo_face_color='black',
+                            default_line_color='white',
+                            cell_labels=None,
                             param=None,
                             show_plot=False, save_formats="pdf"):
     """
@@ -23,24 +26,35 @@ def plot_dendogram_from_fca(cluster_tree, nb_cells, save_plot, axes_list=None, f
         fig = fig_to_use
         ax1 = axes_list[0]
 
+    ax1.set_facecolor(dendo_face_color)
+
     max_y = cluster_tree.max_y_pos
 
-    cluster_tree.plot_cluster(ax=ax1, with_scale_value=True)
+    cluster_tree.plot_cluster(ax=ax1, with_scale_value=True, default_line_color=default_line_color)
 
-    ax1.hlines(cluster_tree.significant_threshold, 0, nb_cells - 1, color="black", linewidth=2,
+    ax1.hlines(cluster_tree.significant_threshold, 0, nb_cells - 1, color=default_line_color, linewidth=2,
                linestyles="dashed")
 
     ax1.set_xticks(np.arange(nb_cells))
-    ax1.set_xticklabels(cluster_tree.pos_cells)
+    if cell_labels is None:
+        ax1.set_xticklabels(cluster_tree.pos_cells)
+    else:
+        ticks_labels = []
+        for pos in cluster_tree.pos_cells:
+            ticks_labels.append(cell_labels[pos])
+
+        plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45)
+        # plt.setp(ax1, facecolor='black')
+        # ax1.xaxis.get_majorticklabels().set_rotation(45)
+        ax1.xaxis.set_tick_params(labelsize=8)
+        ax1.set_xticklabels(ticks_labels)
     ax1.xaxis.set_ticks_position('none')
     ax1.yaxis.set_ticks_position('none')
     ax1.set_yticklabels([])
     ax1.set_xlim(-1, nb_cells + 1)
     ax1.set_ylim(0, max_y + 1)
-    ax1.set_frame_on(False)
+    # ax1.set_frame_on(False)
 
-    if fig_to_use is not None:
-        return
 
     if save_plot and (param is not None):
         # transforming a string in a list
@@ -85,7 +99,8 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        seq_times_to_color_dict=None,
                        seq_colors=None, debug_mode=False,
                        axes_list=None,
-                       SCE_times=None
+                       SCE_times=None,
+                       ylabel="Cells (#)"
                        ):
     """
     
@@ -301,7 +316,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     # Give x axis label for the spike raster plot
     # ax.xlabel('Frames')
     # Give y axis label for the spike raster plot
-    ax1.set_ylabel('Cells (#)')
+    ax1.set_ylabel(ylabel)
 
     if sliding_window_duration >= 1:
         # print("sliding_window_duration > 1")
