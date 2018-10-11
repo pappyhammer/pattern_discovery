@@ -55,7 +55,6 @@ def plot_dendogram_from_fca(cluster_tree, nb_cells, save_plot, axes_list=None, f
     ax1.set_ylim(0, max_y + 1)
     # ax1.set_frame_on(False)
 
-
     if save_plot and (param is not None):
         # transforming a string in a list
         if isinstance(save_formats, str):
@@ -100,7 +99,8 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        seq_colors=None, debug_mode=False,
                        axes_list=None,
                        SCE_times=None,
-                       ylabel="Cells (#)"
+                       ylabel="Cells (#)",
+                       without_activity_sum=False
                        ):
     """
     
@@ -148,6 +148,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     (last index being included in the SCE). Will display the position of the SCE and their number above the activity
     diagram. If None, the overall time will be displayed. Need to be adapted to the format spike_numw or
     spike_train
+    :param without_activity_sum: if True, don't plot the sum of activity diagram, valid only if axes_list is not None
     :return: 
     """
 
@@ -171,7 +172,10 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
             fig.set_tight_layout({'rect': [0, 0, 1, 1], 'pad': 1, 'h_pad': 1})
             outer = gridspec.GridSpec(1, 2, width_ratios=[100, 1])  # , wspace=0.2, hspace=0.2)
     else:
-        ax1, ax2 = axes_list
+        if without_activity_sum:
+            ax1 = axes_list[0]
+        else:
+            ax1, ax2 = axes_list
 
     if plot_with_amplitude:
         inner = gridspec.GridSpecFromSubplotSpec(2, 1,
@@ -318,6 +322,12 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     # Give y axis label for the spike raster plot
     ax1.set_ylabel(ylabel)
 
+    if (axes_list is not None) and without_activity_sum:
+        return
+
+    # ################################################################################################
+    # ################################ Activity sum plot part ################################
+    # ################################################################################################
     if sliding_window_duration >= 1:
         # print("sliding_window_duration > 1")
         sum_spikes = np.zeros(n_times)
@@ -465,3 +475,49 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         if show_raster:
             plt.show()
         plt.close()
+
+def plot_sum_active_clusters(clusters_activations,
+                             data_str, sliding_window_duration=None, show_fig=False, save_plot=True, axes_list=None,
+                             fig_to_use=None, param=None,
+                             save_formats="pdf"):
+    if axes_list is None:
+        fig, ax1 = plt.subplots(nrows=1, ncols=1, sharex=False,
+                                           gridspec_kw={'height_ratios': [1], 'width_ratios': [1]},
+                                           figsize=(20, 5))
+        plt.tight_layout(pad=3, w_pad=7, h_pad=3)
+    else:
+        ax1 = axes_list[0]
+        fig = fig_to_use
+    
+    n_clusters = len(clusters_activations)
+    n_times = len(clusters_activations[0, :])
+    if sliding_window_duration is None:
+        sum_clusters = np.sum(clusters_activations, axis=0)
+    else:
+        sum_clusters = np.zeros(n_times)
+        for t in np.arange(0, (n_times - sliding_window_duration)):
+            # One spike by cell max in the sum process
+            sum_value = np.sum(clusters_activations[:, t:(t + sliding_window_duration)], axis=1)
+            sum_clusters[t] = len(np.where(sum_value)[0])
+        sum_clusters[(n_times - sliding_window_duration):] = len(np.where(sum_value)[0])
+    
+    # expressed in percentages
+    sum_clusters = sum_clusters / n_clusters
+    sum_clusters *= 100
+
+    x_value = np.arange(n_times)
+
+    ax1.fill_between(x_value, 0, sum_clusters, facecolor="black")
+
+    ax1.set_ylim(0, np.max(sum_clusters))
+
+    if save_plot and (param is not None):
+        # transforming a string in a list
+        if isinstance(save_formats, str):
+            save_formats = [save_formats]
+        for save_format in save_formats:
+            fig.savefig(f'{param.path_results}/{data_str}_{param.time_str}.{save_format}', format=f"{save_format}")
+    # Display the spike raster plot
+    if show_fig:
+        plt.show()
+    plt.close()

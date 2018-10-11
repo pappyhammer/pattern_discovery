@@ -266,7 +266,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         silhouette_avg = metrics.silhouette_score(m_sces, cluster_labels, metric='euclidean')
         if surrogate_silhouette_avg is not None:
             for value in surrogate_silhouette_avg:
-                ax0.axvline(x=value, color="black", linestyle="--")
+                ax0.axvline(x=value, color="white", linestyle="--")
         # The vertical line for average silhouette score of all the values
         ax0.axvline(x=silhouette_avg, color="red", linestyle="--")
 
