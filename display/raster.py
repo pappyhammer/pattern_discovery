@@ -84,6 +84,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        horizontal_lines=None,
                        horizontal_lines_colors=None,
                        horizontal_lines_sytle=None,
+                       horizontal_lines_linewidth=None,
                        vertical_lines=None,
                        vertical_lines_colors=None,
                        vertical_lines_sytle=None,
@@ -288,8 +289,13 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         else:
             line_beg_x = -1
             line_end_x = len(spike_nums[0, :]) + 1
-        ax1.hlines(horizontal_lines, line_beg_x, line_end_x, color=horizontal_lines_colors, linewidth=2,
+        if horizontal_lines_linewidth is None:
+            ax1.hlines(horizontal_lines, line_beg_x, line_end_x, color=horizontal_lines_colors, linewidth=2,
                    linestyles=horizontal_lines_sytle)
+        else:
+            ax1.hlines(horizontal_lines, line_beg_x, line_end_x, color=horizontal_lines_colors,
+                       linewidth=horizontal_lines_linewidth,
+                       linestyles=horizontal_lines_sytle)
 
     if vertical_lines is not None:
         line_beg_y = 0
@@ -476,19 +482,20 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
             plt.show()
         plt.close()
 
+
 def plot_sum_active_clusters(clusters_activations,
                              data_str, sliding_window_duration=None, show_fig=False, save_plot=True, axes_list=None,
                              fig_to_use=None, param=None,
                              save_formats="pdf"):
     if axes_list is None:
         fig, ax1 = plt.subplots(nrows=1, ncols=1, sharex=False,
-                                           gridspec_kw={'height_ratios': [1], 'width_ratios': [1]},
-                                           figsize=(20, 5))
+                                gridspec_kw={'height_ratios': [1], 'width_ratios': [1]},
+                                figsize=(20, 5))
         plt.tight_layout(pad=3, w_pad=7, h_pad=3)
     else:
         ax1 = axes_list[0]
         fig = fig_to_use
-    
+
     n_clusters = len(clusters_activations)
     n_times = len(clusters_activations[0, :])
     if sliding_window_duration is None:
@@ -500,7 +507,7 @@ def plot_sum_active_clusters(clusters_activations,
             sum_value = np.sum(clusters_activations[:, t:(t + sliding_window_duration)], axis=1)
             sum_clusters[t] = len(np.where(sum_value)[0])
         sum_clusters[(n_times - sliding_window_duration):] = len(np.where(sum_value)[0])
-    
+
     # expressed in percentages
     sum_clusters = sum_clusters / n_clusters
     sum_clusters *= 100

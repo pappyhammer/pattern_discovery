@@ -13,20 +13,6 @@ def detect_cluster_activations_with_sliding_window(spike_nums, window_duration, 
     # sce_times_numbers: an array of len n_times, that for each times give the SCE number or -1 if part of no SCE,
     # return by the function detect_sce_with_sliding_window
 
-    """
-    Use a sliding window to detect sce (define as peak of activity > perc_threshold percentile after
-    randomisation during a time corresponding to window_duration)
-    :param spike_nums: 2D array, lines=cells, columns=time
-    :param window_duration:
-    :param perc_threshold:
-    :return: ** one array (mask, boolean) containing True for indices (times) part of an SCE,
-    ** a list of tuple corresponding to the first and last index of each SCE, (last index being included in the SCE)
-    ** sce_nums: a new spike_nums with in x axis the SCE and in y axis the neurons, with 1 if
-    active during a given SCE.
-    ** an array of len n_times, that for each times give the SCE number or -1 if part of no cluster
-    ** activity_threshold
-
-    """
 
     if non_binary:
         binary_spikes = np.zeros((len(spike_nums), len(spike_nums[0, :])), dtype="int8")
@@ -37,6 +23,7 @@ def detect_cluster_activations_with_sliding_window(spike_nums, window_duration, 
     # first counting how many cells are part of a cluster
     n_cells_in_a_cluster = 0
     n_clusters=0
+    # print(f"np.max(cluster_labels) {np.max(cluster_labels)} cluster_labels {cluster_labels}")
     for cluster_number in np.arange(np.max(cluster_labels) + 1):
         # boolean array, True are the cells part of the cluster cluster_number
         cells_in_cluster_bool = np.equal(cluster_labels, cluster_number)
@@ -52,6 +39,8 @@ def detect_cluster_activations_with_sliding_window(spike_nums, window_duration, 
     n_cells = len(spike_nums)
     n_times = len(spike_nums[0, :])
     n_sces = np.max(sce_times_numbers) + 1
+
+    print(f"n_cells_in_a_cluster {n_cells_in_a_cluster} n_clusters {n_clusters} n_sces {n_sces}")
 
     clusters_activations = np.zeros((n_cells_in_a_cluster, n_times), dtype="uint8")
     clusters_activations_by_cluster = np.zeros((n_clusters, n_times), dtype="uint8")
@@ -99,13 +88,15 @@ def detect_cluster_activations_with_sliding_window(spike_nums, window_duration, 
                     # then a new active cluster period is detected
                     beg = cluster_start_index
                     end_cell = cluster_start_index+nb_cells_in_cluster
+                    print(f"new cluster activation: start_time_active_cluster {start_time_active_cluster}  t {t} " )
                     clusters_activations[beg:end_cell, start_time_active_cluster:t] = 1
                     clusters_activations_by_cluster[significant_cluster_number, start_time_active_cluster:t] = 1
                     # then checking if any of this time is part of an SCE
                     times_part_of_sce = np.where(sce_times_numbers[start_time_active_cluster:t] > -1)[0]
                     if len(times_part_of_sce) > 0:
                         # getting the different SCE index, if more than one is inside
-                        sce_indices = np.unique(sce_times_numbers[times_part_of_sce])
+                        sce_indices = np.unique(sce_times_numbers[times_part_of_sce+start_time_active_cluster])
+                        print(f"sce_indices {sce_indices}")
                         cluster_particpation_to_sce[significant_cluster_number, sce_indices] = 1
                     start_time_active_cluster = -1
         clusters_corresponding_index[cluster_number] = significant_cluster_number

@@ -229,7 +229,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
             ax0, ax1, ax2 = axes_list
         else:
             ax1, ax2 = axes_list
-    # list of size nb_neurons, each neuron having a value from 0 to k clusters
+    # list of size nb_sce, each sce having a value from 0 to k clusters
     cluster_labels = kmeans.labels_
 
     if show_silhouettes:
@@ -360,6 +360,8 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
     # key is the cluster number, k, and value is an np.array of int reprenseting the indices of SCE part of this cluster
     sce_indices_for_each_clusters = dict()
     new_sce_labels = np.zeros(np.shape(cells_in_peak)[1], dtype="int16")
+    nb_cells_by_cluster_of_cells = []
+    nb_cells_by_cluster_of_cells_y_coord = []
     start = 0
     for k in np.arange(n_clusters):
         e = np.equal(cluster_labels, k)
@@ -424,6 +426,8 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
                 # to_modify[np.where(to_modify)[0]] = 2
         ordered_n_cells_in_peak[start:start + nb_cells, :] = ordered_cells_in_peak[e, :]
         neurons_ax_labels[start:start + nb_cells] = neurons_normal_order[e]
+        nb_cells_by_cluster_of_cells.append(nb_cells)
+        nb_cells_by_cluster_of_cells_y_coord.append(start + (nb_cells / 2))
         for cell in np.arange(start, start + nb_cells):
             cells_cluster_dict[cell] = k
         clusters_coords_dict[k] = (start, start + nb_cells)
@@ -459,19 +463,37 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
             ordered_neurons_labels.append(neurons_labels[index])
         ax2.set_yticks(np.arange(len(ordered_neurons_labels)) + 0.5)
         ax2.set_yticklabels(ordered_neurons_labels)
-        ax2.yaxis.set_tick_params(labelsize=8)
+
     else:
         ax2.set_yticks(np.arange(len(neurons_ax_labels)))
         ax2.set_yticklabels(neurons_ax_labels.astype(int))
 
+    if len(neurons_ax_labels) > 100:
+        ax2.yaxis.set_tick_params(labelsize=4)
+    elif len(neurons_ax_labels) > 200:
+        ax2.yaxis.set_tick_params(labelsize=3)
+    elif len(neurons_ax_labels) > 400:
+        ax2.yaxis.set_tick_params(labelsize=2)
+    else:
+        ax2.yaxis.set_tick_params(labelsize=8)
+
     # creating axis at the top
     ax_top = ax2.twiny()
+    ax_right = ax2.twinx()
     ax2.set_frame_on(False)
     ax_top.set_frame_on(False)
     ax_top.set_xlim((0, np.shape(cells_in_peak)[1]))
     ax_top.set_xticks(cluster_x_ticks_coord)
     # clusters labels
     ax_top.set_xticklabels(np.arange(n_clusters))
+
+    # print(f"nb_cells_by_cluster_of_cells_y_coord {nb_cells_by_cluster_of_cells_y_coord} "
+    #       f"nb_cells_by_cluster_of_cells {nb_cells_by_cluster_of_cells}")
+    ax_right.set_frame_on(False)
+    ax_right.set_ylim((0, len(neurons_ax_labels)))
+    ax_right.set_yticks(nb_cells_by_cluster_of_cells_y_coord)
+    # clusters labels
+    ax_right.set_yticklabels(nb_cells_by_cluster_of_cells)
 
     ax2.set_xticks(np.arange(np.shape(cells_in_peak)[1]) + 0.5)
     # sce labels

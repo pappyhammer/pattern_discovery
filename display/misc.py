@@ -61,7 +61,7 @@ def plot_hist_with_first_perc_and_eb(distribution, threshold_perc, eb_values, bi
                 eb_bins[eb_values <= edge] = i
         if sum_perc < threshold_perc:
             bin_to_colors.append(i)
-        # if (eb_bins is not None) and (sum_perc > threshold_perc):
+        # if (  is not None) and (sum_perc > threshold_perc):
         #     break
 
     for i in bin_to_colors:
@@ -85,4 +85,49 @@ def plot_hist_with_first_perc_and_eb(distribution, threshold_perc, eb_values, bi
     if ms.param.with_svg_format:
         fig.savefig(f'{ms.param.path_results}/{filename}_{ms.param.time_str}.svg',
                     format="svg")
+    plt.close()
+
+
+def plot_hist_clusters_by_sce(cluster_particpation_to_sce, data_str="", save_formats="pdf",
+                              param=None, save_plot=True, show_fig=False):
+    # key is a binary tuple representing the activity of a cluster in an SCE, and the value is an int representing
+    # the number of time this pattern of activity is present in SCE
+    tuples_dict = {}
+    n_sces = len(cluster_particpation_to_sce[0, :])
+    for i in np.arange(n_sces):
+        sce_tuple = tuple(cluster_particpation_to_sce[:, i])
+        tuples_dict[sce_tuple] = tuples_dict.get(sce_tuple, 0) + 1
+
+    network_events_percentages = np.array(list(tuples_dict.values()))
+    network_events_percentages = (network_events_percentages / n_sces) * 100
+    distribution = network_events_percentages
+    print(f"network_events_percentages {network_events_percentages}")
+
+    max_range = np.max(distribution)
+    weights = (np.ones_like(distribution) / (len(distribution))) * 100
+    fig = plt.figure(figsize=[15, 8])
+    ax = plt.subplot(111)
+    range_by_bin = 10
+    bins = int(100 / range_by_bin)
+    hist_plt, edges_plt, patches_plt = plt.hist(distribution, bins=bins,  range=(0, 100),
+                                                facecolor="blue",
+                                                weights=weights, log=False)
+
+    plt.xlim(0, 100)
+    xticks_pos = np.arange(0, 100, range_by_bin)
+    ax.set_xticks(xticks_pos)
+    ax.set_xticklabels(xticks_pos)
+    # plt.title(title)
+    plt.xlabel("Percentage of network events")
+    plt.ylabel("Probability")
+
+    if save_plot and (param is not None):
+        # transforming a string in a list
+        if isinstance(save_formats, str):
+            save_formats = [save_formats]
+        for save_format in save_formats:
+            fig.savefig(f'{param.path_results}/{data_str}_{param.time_str}.{save_format}', format=f"{save_format}")
+    # Display the spike raster plot
+    if show_fig:
+        plt.show()
     plt.close()

@@ -56,7 +56,7 @@ class ClusterTree:
         self.color = non_significant_color
 
             # each tree can have either no child, or 2 childs
-        if isinstance(clusters_lists, int):
+        if isinstance(clusters_lists, int) or isinstance(clusters_lists, np.int64):
             self.no_child = True
             self.cell_id = clusters_lists
             x_pos = np.where(self.free_x_pos)[0][0]
@@ -77,7 +77,7 @@ class ClusterTree:
             self.scale_value = merge_history[2]
             nb_elements=0
 
-            if isinstance(first_child_clusters, int):
+            if isinstance(first_child_clusters, int) or isinstance(first_child_clusters, np.int64):
                 self.first_child = ClusterTree(clusters_lists=first_child_clusters, max_scale_value=max_scale_value,
                                                father=self, n_cells=n_cells,
                                                non_significant_color=non_significant_color)
@@ -89,7 +89,7 @@ class ClusterTree:
                                                father=self,
                                                non_significant_color=non_significant_color)
 
-            if isinstance(second_child_clusters, int):
+            if isinstance(second_child_clusters, int) or isinstance(second_child_clusters, np.int64):
                 self.second_child = ClusterTree(clusters_lists=second_child_clusters, father=self,
                                                max_scale_value=max_scale_value,
                                                n_cells=n_cells,
@@ -273,11 +273,73 @@ class ClusterTree:
             return self.far_right_child_pos
 
     def find_merge_history_index(self, first_child_clusters, second_child_clusters):
+        # print(f"self.merge_history_list {self.merge_history_list}")
         for index, merge_history in enumerate(self.merge_history_list):
-            if (merge_history[0] == first_child_clusters) and (merge_history[1] == second_child_clusters):
-                return index
+            # np.all is important because it (merge_history[0] == first_child_clusters) might be a boolean array
+            # print(f"merge_history[0] {merge_history[0]} merge_history[1] {merge_history[1]} "
+            #       f"first_child_clusters {first_child_clusters} second_child_clusters {second_child_clusters}" )
+            # if np.all(merge_history[0] == first_child_clusters) and np.all(merge_history[1] == second_child_clusters):
+            #     # raise a ValueError ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+            #     return index
+
+            # Really not an efficient method, but the one above is not working properly all the time
+
+            are_they_equals = self.are_elements_equals(merge_history[0], first_child_clusters)
+            if not are_they_equals:
+                continue
+
+            are_they_equals = self.are_elements_equals(merge_history[1], second_child_clusters)
+            if are_they_equals:
+                return  index
+
+            if first_child_is_a_int:
+                if first_child_clusters != merge_history[0]:
+                    return False
+
+            if second_child_is_a_int:
+                if second_child_clusters != merge_history[1]:
+                    return False
+
+            # then four of them are list
+            # first we copmpare the size of the list
+            if len(first_child_clusters) != len(merge_history[0]):
+                return False
+
+            if len(second_child_clusters) != len(merge_history[1]):
+                return False
+
+
         return None
 
+
+    def are_elements_equals(self, element_1, element_2):
+        first_element_is_a_int = isinstance(element_1, int) or isinstance(element_1, np.int64)
+        second_element_is_a_int = isinstance(element_2, int) or isinstance(element_2, np.int64)
+
+        # print(f"element_1 {element_1}, element_2 {element_2}")
+        # print(f"first_element_is_a_int {first_element_is_a_int}, second_element_is_a_int {second_element_is_a_int}")
+
+        # both elements shoud be of same type, int or list
+        if (first_element_is_a_int and (not second_element_is_a_int)) or \
+                ((not first_element_is_a_int) and second_element_is_a_int):
+            return False
+
+        if first_element_is_a_int:
+            if element_1 != element_2:
+                return False
+            else:
+                return True
+
+        # then elements are lists
+        if len(element_1) != len(element_2):
+            return False
+
+        # then recursive method
+        for i in np.arange(len(element_1)):
+            if (not self.are_elements_equals(element_1[i], element_2[i])):
+                return False
+
+        return True
 
     def nb_cells_in_list(self, cells):
         if isinstance(cells, list):
@@ -506,7 +568,7 @@ def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=Tr
     done = False
     ntrain = len(train_list)
     current_train_list = train_list[:]
-    current_cluster = list(np.arange(ntrain))
+    current_cluster = list(range(ntrain))
     merge_history = []
     nstep = 0
     if rolling_surrogate:
