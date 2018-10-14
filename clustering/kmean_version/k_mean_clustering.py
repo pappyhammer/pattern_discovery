@@ -10,6 +10,7 @@ from pattern_discovery.clustering.cluster_tools import detect_cluster_activation
 from pattern_discovery.display.raster import plot_spikes_raster
 from pattern_discovery.display.raster import plot_sum_active_clusters
 from pattern_discovery.display.misc import plot_hist_clusters_by_sce
+from pattern_discovery.seq_solver.markov_way import order_spike_nums_by_seq
 
 
 
@@ -507,8 +508,17 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
     ax_right.set_yticklabels(nb_cells_by_cluster_of_cells)
 
     ax2.set_xticks(np.arange(np.shape(cells_in_peak)[1]) + 0.5)
+    plt.setp(ax2.xaxis.get_majorticklabels(), rotation=90)
     # sce labels
     ax2.set_xticklabels(new_sce_labels)
+    if len(new_sce_labels) > 100:
+        ax2.xaxis.set_tick_params(labelsize=4)
+    elif len(new_sce_labels) > 200:
+        ax2.xaxis.set_tick_params(labelsize=3)
+    elif len(new_sce_labels) > 400:
+        ax2.xaxis.set_tick_params(labelsize=2)
+    else:
+        ax2.xaxis.set_tick_params(labelsize=6)
     ax2.hlines(cluster_horizontal_thresholds, 0, np.shape(cells_in_peak)[1], color="red", linewidth=1,
                linestyles="dashed")
     ax2.vlines(cluster_vertical_thresholds, 0, np.shape(cells_in_peak)[0], color="red", linewidth=1,
@@ -583,10 +593,10 @@ def find_cluster_labels_for_neurons(cells_in_peak, cluster_labels):
 def save_stat_SCE_and_cluster_k_mean_version(spike_nums_to_use, activity_threshold, k_means,
                                              SCE_times, n_cluster, param, sliding_window_duration,
                                              cluster_labels_for_neurons, perc_threshold,
-                                             n_surrogate_k_mean,
+                                             n_surrogate_k_mean, data_descr,
                                              n_surrogate_activity_threshold):
     round_factor = 2
-    file_name = f'{param.path_results}/stat_k_mean_v_{n_cluster}_clusters_{param.time_str}.txt'
+    file_name = f'{param.path_results}/stat_k_mean_v_{data_descr}_{n_cluster}_clusters_{param.time_str}.txt'
     with open(file_name, "w", encoding='UTF-8') as file:
         file.write(f"Stat k_mean version for {n_cluster} clusters" + '\n')
         file.write("" + '\n')
@@ -701,9 +711,10 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                                                   param,
                                                   sliding_window_duration, sce_times_numbers,
                                                   SCE_times, perc_threshold,
-                                                  n_surrogate_activity_threshold,
-                                                with_shuffling=True,
-                                                   debug_mode=False):
+                                                   n_surrogate_activity_threshold,
+                                                   with_shuffling=True,
+                                                   debug_mode=False,
+                                                   with_cells_in_cluster_seq_sorted=False):
     # perc_threshold is the number of percentile choosen to determine the threshold
     #
     # -------- clustering params ------ -----
@@ -723,6 +734,9 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                                   neurons_labels=labels,
                                   debug_mode=debug_mode)
 
+    if with_cells_in_cluster_seq_sorted:
+        data_descr = data_descr + "_seq"
+
     for n_cluster in range_n_clusters_k_mean:
         clustered_spike_nums = np.copy(spike_nums_to_use)
         cell_labels = []
@@ -734,8 +748,19 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
         for k in np.arange(-1, np.max(cluster_labels) + 1):
             e = np.equal(cluster_labels, k)
             nb_k = np.sum(e)
-            clustered_spike_nums[start:start + nb_k, :] = spike_nums_to_use[e, :]
-            for index in np.where(e)[0]:
+            if nb_k==0:
+                continue
+            cells_indices = np.where(e)[0]
+            if with_cells_in_cluster_seq_sorted and (len(cells_indices) > 2):
+                result_ordering = order_spike_nums_by_seq(spike_nums_to_use[cells_indices, :], param,
+                                                                        debug_mode=debug_mode)
+                seq_dict_tmp, ordered_indices, all_best_seq = result_ordering
+                # if a list of ordered_indices, the size of the list is equals to ne number of cells,
+                # each list correspond to the best order with this cell as the first one in the ordered seq
+                if ordered_indices is not None:
+                    cells_indices = cells_indices[ordered_indices]
+            clustered_spike_nums[start:start + nb_k, :] = spike_nums_to_use[cells_indices, :]
+            for index in cells_indices:
                 cell_labels.append(labels[index])
             if k >= 0:
                 color = cm.nipy_spectral(float(k + 1) / (n_cluster + 1))
@@ -767,13 +792,16 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
         # ax2 contains the peak activity diagram
         ax4 = fig.add_subplot(inner_bottom[1])
         ax5 = fig.add_subplot(inner_bottom[2])
-
+        if len(cell_labels) > 100:
+            y_ticks_labels_size = 1
+        else:
+            y_ticks_labels_size = 3
         plot_spikes_raster(spike_nums=clustered_spike_nums, param=param,
                            spike_train_format=False,
                            title=f"{n_cluster} clusters raster plot {data_descr}",
                            file_name=f"spike_nums_{data_descr}_{n_cluster}_clusters",
                            y_ticks_labels=cell_labels,
-                           y_ticks_labels_size=4,
+                           y_ticks_labels_size=y_ticks_labels_size,
                            save_raster=False,
                            show_raster=False,
                            plot_with_amplitude=False,
@@ -895,12 +923,14 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                                  axes_list=[ax2],
                                  fig_to_use=fig)
 
-        plot_hist_clusters_by_sce(cluster_particpation_to_sce, data_str="hist_percentage_of_network_events",
+        plot_hist_clusters_by_sce(cluster_particpation_to_sce,
+                                  data_str=f"hist_percentage_of_network_events_{n_cluster}_clusters",
                                   param=param)
 
         plt.close()
 
         save_stat_SCE_and_cluster_k_mean_version(spike_nums_to_use=spike_nums_to_use,
+                                                 data_descr=data_descr,
                                                  activity_threshold=activity_threshold,
                                                  k_means=best_kmeans_by_cluster[n_cluster],
                                                  SCE_times=SCE_times, n_cluster=n_cluster, param=param,

@@ -704,6 +704,7 @@ def order_spike_nums_by_seq(spike_nums, param, debug_mode=True, reverse_order=Fa
     # ordered_spike_nums = spike_nums.copy()
     nb_neurons = len(spike_nums)
     if debug_mode:
+        print("")
         print(f"nb_neurons {nb_neurons}")
     if nb_neurons == 0:
         return [], []
@@ -821,7 +822,7 @@ def order_spike_nums_by_seq(spike_nums, param, debug_mode=True, reverse_order=Fa
             ordered_result_seq_dict = result_seq_dict
         # then we have to do the same for new_list_seq_dict
     else:
-        ordered_result_seq_dict
+        ordered_result_seq_dict = result_seq_dict
     if reverse_order:
         # we are reversing best seq, so the seq will appear from top to bottom
         best_seq = best_seq[::-1]
