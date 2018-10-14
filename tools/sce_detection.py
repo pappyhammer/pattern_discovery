@@ -260,8 +260,8 @@ def detect_sce_with_sliding_window(spike_nums, window_duration, perc_threshold=9
             if start_sce > -1:
                 # then a new SCE is detected
                 sce_bool[start_sce:t] = True
-                # sce_tuples.append((start_sce, (t + window_duration) - 2))
-                sce_tuples.append((start_sce, t-1))
+                sce_tuples.append((start_sce, (t + window_duration) - 2))
+                # sce_tuples.append((start_sce, t-1))
                 sce_times_numbers[start_sce:t] = len(sce_tuples) - 1
                 start_sce = -1
                 cells_in_sce_so_far = np.zeros(n_cells, dtype="bool")

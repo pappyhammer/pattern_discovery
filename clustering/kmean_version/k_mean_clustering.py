@@ -5,6 +5,12 @@ from sklearn.cluster import KMeans
 import numpy as np
 import matplotlib as mpl
 import matplotlib.cm as cm
+import matplotlib.gridspec as gridspec
+from pattern_discovery.clustering.cluster_tools import detect_cluster_activations_with_sliding_window
+from pattern_discovery.display.raster import plot_spikes_raster
+from pattern_discovery.display.raster import plot_sum_active_clusters
+from pattern_discovery.display.misc import plot_hist_clusters_by_sce
+
 
 
 # normalized co-variance
@@ -21,7 +27,8 @@ def covnorm(m_sces):
     return co_var_matrix
 
 
-def surrogate_clustering(m_sces, n_clusters, n_surrogate, n_trials, perc_thresholds, debug_mode=False):
+def surrogate_clustering(m_sces, n_clusters, n_surrogate, n_trials, perc_thresholds,
+                         fct_to_keep_best_silhouettes, debug_mode=False):
     """
 
     :param m_sces: sce matrix used for the clustering after permutation
@@ -30,7 +37,8 @@ def surrogate_clustering(m_sces, n_clusters, n_surrogate, n_trials, perc_thresho
     :param n_trials: number of trials by surrogate, keeping one avg silhouette by surrogate
     :param perc_thresholds: list of threshold as percentile
     :param debug_mode:
-    :return: a list of value representing the nth percentile over the average threshold of each surrogate
+    :return: a list of value representing the nth percentile over the average threshold of each surrogate, keeping
+    each individual silhouette score, not just the mean of each surrogate
     """
     surrogate_silhouettes = np.zeros(n_surrogate * n_clusters)
     m_sces = np.copy(m_sces)
@@ -58,7 +66,7 @@ def surrogate_clustering(m_sces, n_clusters, n_surrogate, n_trials, perc_thresho
                 avg_ith_cluster_silhouette_values = np.mean(ith_cluster_silhouette_values)
                 local_clusters_silhouette[i] = avg_ith_cluster_silhouette_values
                 # ith_cluster_silhouette_values.sort()
-            med = np.median(local_clusters_silhouette)
+            med = fct_to_keep_best_silhouettes(local_clusters_silhouette)
             if med > best_median_silhouettes:
                 best_median_silhouettes = med
                 best_silhouettes_clusters_avg = local_clusters_silhouette
@@ -76,7 +84,7 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
                               shuffling=False, n_surrogate=100,
                               nth_best_clusters=-1, neurons_labels=None,
                               plot_matrix=False, data_str="", path_results=None,
-                              perc_thresholds_for_surrogate=(95, 99)):
+                              perc_thresholds_for_surrogate=(95, 99), debug_mode=False):
     """
 
     :param cells_in_sce:
@@ -121,14 +129,17 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
     best_kmeans_by_cluster = dict()
     surrogate_percentiles_by_n_cluster = dict()
     for n_clusters in range_n_clusters:
-        print(f"n_clusters {n_clusters}")
+        if debug_mode:
+            print(f"n_clusters {n_clusters}")
         surrogate_percentiles = []
         if shuffling:
             surrogate_percentiles = surrogate_clustering(m_sces=m_sces, n_clusters=n_clusters,
                                                          n_surrogate=n_surrogate,
                                                          n_trials=100,
+                                                         fct_to_keep_best_silhouettes=fct_to_keep_best_silhouettes,
                                                          perc_thresholds=perc_thresholds_for_surrogate, debug_mode=True)
-            print(f"surrogate_percentiles {surrogate_percentiles}")
+            if debug_mode:
+                print(f"surrogate_percentiles {surrogate_percentiles}")
 
         best_kmeans = None
         silhouette_avgs = np.zeros(n_trials)
@@ -198,7 +209,7 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
                                      data_str=data_str, path_results=path_results,
                                      show_silhouettes=True, neurons_labels=neurons_labels,
                                      surrogate_silhouette_avg=surrogate_percentiles)
-  
+
     return dict_best_clusters, best_kmeans_by_cluster, m_sces, cluster_labels_for_neurons, \
            surrogate_percentiles_by_n_cluster
 
@@ -248,7 +259,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
             size_cluster_i = ith_cluster_silhouette_values.shape[0]
             y_upper = y_lower + size_cluster_i
 
-            color = cm.nipy_spectral(float(i+1) / (n_clusters+1))
+            color = cm.nipy_spectral(float(i + 1) / (n_clusters + 1))
             ax0.fill_betweenx(np.arange(y_lower, y_upper),
                               0, ith_cluster_silhouette_values,
                               facecolor=color, edgecolor=color, alpha=0.7)
@@ -368,7 +379,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         nb_k = np.sum(e)
         if color_each_clusters:
             for cell in np.arange(len(cells_in_peak)):
-                spikes_index = np.where(cells_in_peak[cell, e]==1)[0]
+                spikes_index = np.where(cells_in_peak[cell, e] == 1)[0]
                 to_put_to_true = np.where(e)[0][spikes_index]
                 tmp_e = np.zeros(len(e), dtype="bool")
                 tmp_e[to_put_to_true] = True
@@ -377,7 +388,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
                 #       f" cells_in_peak[cell, spikes_index] {cells_in_peak[cell, spikes_index]}")
                 # K +2 to avoid zero and one, and at the end we will substract 1
                 # print(f"cell {cell}, k {k}, cells_in_peak[cell, :] {cells_in_peak[cell, :]}")
-                cells_in_peak[cell, tmp_e] = k+2
+                cells_in_peak[cell, tmp_e] = k + 2
                 # print(f"cells_in_peak[cell, :] {cells_in_peak[cell, :]}")
 
         ordered_cells_in_peak[:, start:start + nb_k] = cells_in_peak[:, e]
@@ -442,9 +453,9 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         list_color = ['black']
         bounds = [-2.5, -0.5]
         for i in np.arange(n_clusters):
-            color = cm.nipy_spectral(float(i+1) / (n_clusters+1))
+            color = cm.nipy_spectral(float(i + 1) / (n_clusters + 1))
             list_color.append(color)
-            bounds.append(i+0.5)
+            bounds.append(i + 0.5)
         cmap = mpl.colors.ListedColormap(list_color)
     else:
         # light_blue_color = [0, 0.871, 0.219]
@@ -509,22 +520,22 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
             # means no cell has this cluster as main cluster
             continue
         y_bottom, y_top = clusters_coords_dict[cluster]
-        x_left = 0 if (cluster == 0) else cluster_vertical_thresholds[cluster-1]
-        x_right = np.shape(cells_in_peak)[1] if (cluster == (n_clusters-1)) else cluster_vertical_thresholds[cluster]
+        x_left = 0 if (cluster == 0) else cluster_vertical_thresholds[cluster - 1]
+        x_right = np.shape(cells_in_peak)[1] if (cluster == (n_clusters - 1)) else cluster_vertical_thresholds[cluster]
         linewidth = 3
         color_border = "white"
-        ax2.vlines(x_left, y_bottom, y_top, color = color_border, linewidth = linewidth)
-        ax2.vlines(x_right, y_bottom, y_top, color = color_border, linewidth=linewidth)
-        ax2.hlines(y_bottom, x_left, x_right, color = color_border, linewidth=linewidth)
-        ax2.hlines(y_top, x_left, x_right, color = color_border, linewidth=linewidth)
+        ax2.vlines(x_left, y_bottom, y_top, color=color_border, linewidth=linewidth)
+        ax2.vlines(x_right, y_bottom, y_top, color=color_border, linewidth=linewidth)
+        ax2.hlines(y_bottom, x_left, x_right, color=color_border, linewidth=linewidth)
+        ax2.hlines(y_top, x_left, x_right, color=color_border, linewidth=linewidth)
 
     # plt.setp(ax2.xaxis.get_majorticklabels(), rotation=90)
     plt.setp(ax2.yaxis.get_majorticklabels(), rotation=0)
-    
+
     for cell in np.arange(n_cells):
         cluster = cells_cluster_dict[cell]
-        if cluster >=0:
-            color = cm.nipy_spectral(float(cluster + 1) / (n_clusters+1))
+        if cluster >= 0:
+            color = cm.nipy_spectral(float(cluster + 1) / (n_clusters + 1))
             ax2.get_yticklabels()[cell].set_color(color)
 
     ax2.invert_yaxis()
@@ -567,3 +578,335 @@ def find_cluster_labels_for_neurons(cells_in_peak, cluster_labels):
             # if removing_multiple_spikes_among_cluster:
             #     cells_in_peak[n, np.not_equal(cluster_labels, max_cluster)] = 0
     return cluster_labels_for_neurons
+
+
+def save_stat_SCE_and_cluster_k_mean_version(spike_nums_to_use, activity_threshold, k_means,
+                                             SCE_times, n_cluster, param, sliding_window_duration,
+                                             cluster_labels_for_neurons, perc_threshold,
+                                             n_surrogate_k_mean,
+                                             n_surrogate_activity_threshold):
+    round_factor = 2
+    file_name = f'{param.path_results}/stat_k_mean_v_{n_cluster}_clusters_{param.time_str}.txt'
+    with open(file_name, "w", encoding='UTF-8') as file:
+        file.write(f"Stat k_mean version for {n_cluster} clusters" + '\n')
+        file.write("" + '\n')
+        file.write(f"cells {len(spike_nums_to_use)}, events {len(SCE_times)}" + '\n')
+        file.write(f"Event participation threshold {activity_threshold}, {perc_threshold} percentile, "
+                   f"{n_surrogate_activity_threshold} surrogates" + '\n')
+        file.write(f"Sliding window duration {sliding_window_duration}" + '\n')
+        file.write(f"{n_surrogate_k_mean} surrogates for kmean" + '\n')
+        file.write("" + '\n')
+        file.write("" + '\n')
+        cluster_labels = k_means.labels_
+
+        for k in np.arange(n_cluster):
+
+            e = np.equal(cluster_labels, k)
+
+            nb_sce_in_cluster = np.sum(e)
+            sce_ids = np.where(e)[0]
+
+            e_cells = np.equal(cluster_labels_for_neurons, k)
+            n_cells_in_cluster = np.sum(e_cells)
+
+            file.write("#" * 10 + f"   cluster {k} / {nb_sce_in_cluster} events / {n_cells_in_cluster} cells" +
+                       "#" * 10 + '\n')
+            file.write('\n')
+
+            duration_values = np.zeros(nb_sce_in_cluster, dtype="uint16")
+            max_activity_values = np.zeros(nb_sce_in_cluster, dtype="float")
+            mean_activity_values = np.zeros(nb_sce_in_cluster, dtype="float")
+            overall_activity_values = np.zeros(nb_sce_in_cluster, dtype="float")
+
+            for n, sce_id in enumerate(sce_ids):
+                duration_values[n], max_activity_values[n], \
+                mean_activity_values[n], overall_activity_values[n] = \
+                    give_stat_one_sce(sce_id=sce_id,
+                                      spike_nums_to_use=spike_nums_to_use,
+                                      SCE_times=SCE_times, sliding_window_duration=sliding_window_duration)
+            file.write(f"Duration: mean {np.round(np.mean(duration_values), round_factor)}, "
+                       f"std {np.round(np.std(duration_values), round_factor)}, "
+                       f"median {np.round(np.median(duration_values), round_factor)}\n")
+            file.write(f"Overall participation: mean {np.round(np.mean(overall_activity_values), round_factor)}, "
+                       f"std {np.round(np.std(overall_activity_values), round_factor)}, "
+                       f"median {np.round(np.median(overall_activity_values), round_factor)}\n")
+            file.write(f"Max participation: mean {np.round(np.mean(max_activity_values), round_factor)}, "
+                       f"std {np.round(np.std(max_activity_values), round_factor)}, "
+                       f"median {np.round(np.median(max_activity_values), round_factor)}\n")
+            file.write(f"Mean participation: mean {np.round(np.mean(mean_activity_values), round_factor)}, "
+                       f"std {np.round(np.std(mean_activity_values), round_factor)}, "
+                       f"median {np.round(np.median(mean_activity_values), round_factor)}\n")
+            file.write('\n')
+
+        file.write('\n')
+        file.write('\n')
+        file.write("#" * 50 + '\n')
+        file.write('\n')
+        file.write('\n')
+        # for each SCE
+        for sce_id in np.arange(len(SCE_times)):
+            result = give_stat_one_sce(sce_id=sce_id,
+                                       spike_nums_to_use=spike_nums_to_use,
+                                       SCE_times=SCE_times,
+                                       sliding_window_duration=sliding_window_duration)
+            duration_in_frames, max_activity, mean_activity, overall_activity = result
+            file.write(f"SCE {sce_id}" + '\n')
+            file.write(f"Duration_in_frames {duration_in_frames}" + '\n')
+            file.write(f"Overall participation {np.round(overall_activity, round_factor)}" + '\n')
+            file.write(f"Max participation {np.round(max_activity, round_factor)}" + '\n')
+            file.write(f"Mean participation {np.round(mean_activity, round_factor)}" + '\n')
+
+            file.write('\n')
+            file.write('\n')
+
+
+def give_stat_one_sce(sce_id, spike_nums_to_use, SCE_times, sliding_window_duration):
+    """
+
+    :param sce_id:
+    :param spike_nums_to_use:
+    :param SCE_times:
+    :param sliding_window_duration:
+    :return: duration_in_frames: duration of the sce in frames
+     max_activity: the max number of cells particpating during a window_duration to the sce
+     mean_activity: the mean of cells particpating during the sum of window_duration
+     overall_activity: the number of different cells participating to the SCE all along
+     if duration == sliding_window duration, max_activity, mean_activity and overall_activity will be equal
+    """
+    time_tuple = SCE_times[sce_id]
+    duration_in_frames = (time_tuple[1] - time_tuple[0]) + 1
+    n_slidings = (duration_in_frames - sliding_window_duration) + 1
+    # print(f"duration_in_frames {duration_in_frames}")
+    # print(f"sliding_window_duration {sliding_window_duration}")
+    # print(f"time_tuple[1] {time_tuple[1]}, time_tuple[0] {time_tuple[0]}")
+    # print(f"n_slidings {n_slidings}")
+    sum_activity_for_each_frame = np.zeros(n_slidings)
+    for n in np.arange(n_slidings):
+        # see to use window_duration to find the amount of participation
+        time_beg = time_tuple[0] + n
+        sum_activity_for_each_frame[n] = len(np.where(np.sum(spike_nums_to_use[:,
+                                                             time_beg:(time_beg + sliding_window_duration)],
+                                                             axis=1))[0])
+    max_activity = np.max(sum_activity_for_each_frame)
+    mean_activity = np.mean(sum_activity_for_each_frame)
+    overall_activity = len(np.where(np.sum(spike_nums_to_use[:,
+                                           time_tuple[0]:(time_tuple[1] + 1)], axis=1))[0])
+
+    return duration_in_frames, max_activity, mean_activity, overall_activity
+
+
+def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, range_n_clusters_k_mean,
+                                                  n_surrogate_k_mean,
+                                                  spike_nums_to_use, cellsinpeak, data_descr,
+                                                  param,
+                                                  sliding_window_duration, sce_times_numbers,
+                                                  SCE_times, perc_threshold,
+                                                  n_surrogate_activity_threshold,
+                                                with_shuffling=True,
+                                                   debug_mode=False):
+    # perc_threshold is the number of percentile choosen to determine the threshold
+    #
+    # -------- clustering params ------ -----
+    # range_n_clusters_k_mean = np.arange(2, 17)
+    # n_surrogate_k_mean = 100
+
+
+    clusters_sce, best_kmeans_by_cluster, m_cov_sces, cluster_labels_for_neurons, surrogate_percentiles = \
+        co_var_first_and_clusters(cells_in_sce=cellsinpeak, shuffling=with_shuffling,
+                                  n_surrogate=n_surrogate_k_mean,
+                                  fct_to_keep_best_silhouettes=np.mean,
+                                  range_n_clusters=range_n_clusters_k_mean,
+                                  nth_best_clusters=-1,
+                                  plot_matrix=False,
+                                  data_str=data_descr,
+                                  path_results=param.path_results,
+                                  neurons_labels=labels,
+                                  debug_mode=debug_mode)
+
+    for n_cluster in range_n_clusters_k_mean:
+        clustered_spike_nums = np.copy(spike_nums_to_use)
+        cell_labels = []
+        cluster_labels = cluster_labels_for_neurons[n_cluster]
+        cluster_horizontal_thresholds = []
+        cells_to_highlight = []
+        cells_to_highlight_colors = []
+        start = 0
+        for k in np.arange(-1, np.max(cluster_labels) + 1):
+            e = np.equal(cluster_labels, k)
+            nb_k = np.sum(e)
+            clustered_spike_nums[start:start + nb_k, :] = spike_nums_to_use[e, :]
+            for index in np.where(e)[0]:
+                cell_labels.append(labels[index])
+            if k >= 0:
+                color = cm.nipy_spectral(float(k + 1) / (n_cluster + 1))
+                cell_indices = list(np.arange(start, start + nb_k))
+                cells_to_highlight.extend(cell_indices)
+                cells_to_highlight_colors.extend([color] * len(cell_indices))
+            start += nb_k
+            if (k + 1) < (np.max(cluster_labels) + 1):
+                cluster_horizontal_thresholds.append(start)
+
+        fig = plt.figure(figsize=(20, 14))
+        fig.set_tight_layout({'rect': [0, 0, 1, 1], 'pad': 1, 'h_pad': 2})
+        outer = gridspec.GridSpec(2, 1, height_ratios=[60, 40])
+
+        inner_top = gridspec.GridSpecFromSubplotSpec(2, 1,
+                                                     subplot_spec=outer[1], height_ratios=[10, 2])
+
+        # clusters display
+        inner_bottom = gridspec.GridSpecFromSubplotSpec(1, 3,
+                                                        subplot_spec=outer[0], width_ratios=[6, 10, 6])
+
+        # top is bottom and bottom is top, so the raster is under
+        # ax1 contains raster
+        ax1 = fig.add_subplot(inner_top[0])
+        # ax2 contains the peak activity diagram
+        ax2 = fig.add_subplot(inner_top[1], sharex=ax1)
+
+        ax3 = fig.add_subplot(inner_bottom[0])
+        # ax2 contains the peak activity diagram
+        ax4 = fig.add_subplot(inner_bottom[1])
+        ax5 = fig.add_subplot(inner_bottom[2])
+
+        plot_spikes_raster(spike_nums=clustered_spike_nums, param=param,
+                           spike_train_format=False,
+                           title=f"{n_cluster} clusters raster plot {data_descr}",
+                           file_name=f"spike_nums_{data_descr}_{n_cluster}_clusters",
+                           y_ticks_labels=cell_labels,
+                           y_ticks_labels_size=4,
+                           save_raster=False,
+                           show_raster=False,
+                           plot_with_amplitude=False,
+                           activity_threshold=activity_threshold,
+                           span_cells_to_highlight=False,
+                           raster_face_color='black',
+                           cell_spikes_color='white',
+                           horizontal_lines=np.array(cluster_horizontal_thresholds) - 0.5,
+                           horizontal_lines_colors=['white'] * len(cluster_horizontal_thresholds),
+                           horizontal_lines_sytle="dashed",
+                           horizontal_lines_linewidth=[1] * len(cluster_horizontal_thresholds),
+                           vertical_lines=SCE_times,
+                           vertical_lines_colors=['white'] * len(SCE_times),
+                           vertical_lines_sytle="solid",
+                           vertical_lines_linewidth=[0.2] * len(SCE_times),
+                           cells_to_highlight=cells_to_highlight,
+                           cells_to_highlight_colors=cells_to_highlight_colors,
+                           sliding_window_duration=sliding_window_duration,
+                           show_sum_spikes_as_percentage=True,
+                           spike_shape="|",
+                           spike_shape_size=1,
+                           save_formats="pdf",
+                           axes_list=[ax1, ax2],
+                           SCE_times=SCE_times)
+
+        show_co_var_first_matrix(cells_in_peak=np.copy(cellsinpeak), m_sces=m_cov_sces,
+                                 n_clusters=n_cluster, kmeans=best_kmeans_by_cluster[n_cluster],
+                                 cluster_labels_for_neurons=cluster_labels_for_neurons[n_cluster],
+                                 data_str=data_descr, path_results=param.path_results,
+                                 show_silhouettes=True, neurons_labels=labels,
+                                 surrogate_silhouette_avg=surrogate_percentiles[n_cluster],
+                                 axes_list=[ax5, ax3, ax4], fig_to_use=fig, save_formats="pdf")
+        plt.close()
+
+        # ######### Plot that show cluster activation
+
+        result_detection = detect_cluster_activations_with_sliding_window(spike_nums=spike_nums_to_use,
+                                                                          window_duration=sliding_window_duration,
+                                                                          cluster_labels=cluster_labels,
+                                                                          sce_times_numbers=sce_times_numbers,
+                                                                          debug_mode=False)
+
+        clusters_activations_by_cell, clusters_activations_by_cluster, cluster_particpation_to_sce, \
+        clusters_corresponding_index = result_detection
+        # print(f"cluster_particpation_to_sce {cluster_particpation_to_sce}")
+
+        cell_labels = []
+        cluster_horizontal_thresholds = []
+        cells_to_highlight = []
+        cells_to_highlight_colors = []
+        start = 0
+        for k in np.arange(np.max(cluster_labels) + 1):
+            e = np.equal(cluster_labels, k)
+            nb_k = np.sum(e)
+            if nb_k == 0:
+                continue
+            for index in np.where(e)[0]:
+                cell_labels.append(labels[index])
+            if k >= 0:
+                color = cm.nipy_spectral(float(k + 1) / (n_cluster + 1))
+                cell_indices = list(np.arange(start, start + nb_k))
+                cells_to_highlight.extend(cell_indices)
+                cells_to_highlight_colors.extend([color] * len(cell_indices))
+            start += nb_k
+            if (k + 1) < (np.max(cluster_labels) + 1):
+                cluster_horizontal_thresholds.append(start)
+
+        fig = plt.figure(figsize=(20, 14))
+        fig.set_tight_layout({'rect': [0, 0, 1, 1], 'pad': 1, 'h_pad': 3})
+        outer = gridspec.GridSpec(1, 1)  # , height_ratios=[60, 40])
+
+        # clusters display
+        # inner_top = gridspec.GridSpecFromSubplotSpec(1, 1,
+        #                                              subplot_spec=outer[0])
+
+        inner_bottom = gridspec.GridSpecFromSubplotSpec(2, 1,
+                                                        subplot_spec=outer[0], height_ratios=[10, 2])
+
+        # top is bottom and bottom is top, so the raster is under
+        # ax1 contains raster
+        ax1 = fig.add_subplot(inner_bottom[0])
+        # ax3 contains the peak activity diagram
+        ax2 = fig.add_subplot(inner_bottom[1], sharex=ax1)
+
+        plot_spikes_raster(spike_nums=clusters_activations_by_cell, param=param,
+                           spike_train_format=False,
+                           file_name=f"raster_clusters_detection_{data_descr}",
+                           y_ticks_labels=cell_labels,
+                           y_ticks_labels_size=4,
+                           save_raster=True,
+                           show_raster=False,
+                           plot_with_amplitude=False,
+                           span_cells_to_highlight=False,
+                           raster_face_color='black',
+                           cell_spikes_color='white',
+                           horizontal_lines=np.array(cluster_horizontal_thresholds) - 0.5,
+                           horizontal_lines_colors=['white'] * len(cluster_horizontal_thresholds),
+                           horizontal_lines_sytle="dashed",
+                           vertical_lines=SCE_times,
+                           vertical_lines_colors=['white'] * len(SCE_times),
+                           vertical_lines_sytle="dashed",
+                           vertical_lines_linewidth=[0.4] * len(SCE_times),
+                           cells_to_highlight=cells_to_highlight,
+                           cells_to_highlight_colors=cells_to_highlight_colors,
+                           sliding_window_duration=sliding_window_duration,
+                           show_sum_spikes_as_percentage=True,
+                           spike_shape="|",
+                           spike_shape_size=1,
+                           save_formats="pdf",
+                           axes_list=[ax1],
+                           without_activity_sum=True,
+                           ylabel="")
+
+        # print(f"n_cluster {n_cluster} len(clusters_activations) {len(clusters_activations)}")
+
+        plot_sum_active_clusters(clusters_activations=clusters_activations_by_cluster, param=param,
+                                 sliding_window_duration=sliding_window_duration,
+                                 data_str=f"raster_{n_cluster}_clusters_participation_{data_descr}",
+                                 axes_list=[ax2],
+                                 fig_to_use=fig)
+
+        plot_hist_clusters_by_sce(cluster_particpation_to_sce, data_str="hist_percentage_of_network_events",
+                                  param=param)
+
+        plt.close()
+
+        save_stat_SCE_and_cluster_k_mean_version(spike_nums_to_use=spike_nums_to_use,
+                                                 activity_threshold=activity_threshold,
+                                                 k_means=best_kmeans_by_cluster[n_cluster],
+                                                 SCE_times=SCE_times, n_cluster=n_cluster, param=param,
+                                                 sliding_window_duration=sliding_window_duration,
+                                                 cluster_labels_for_neurons=cluster_labels_for_neurons[n_cluster],
+                                                 perc_threshold=perc_threshold,
+                                                 n_surrogate_k_mean=n_surrogate_k_mean,
+                                                 n_surrogate_activity_threshold=n_surrogate_activity_threshold
+                                                 )

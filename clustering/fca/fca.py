@@ -10,6 +10,9 @@ import numpy.random as rnd
 import pattern_discovery.tools.sce_detection as sce_detection
 import pattern_discovery.tools.trains as trains_module
 import matplotlib.cm as cm
+from pattern_discovery.display.raster import plot_spikes_raster
+from pattern_discovery.display.raster import plot_sum_active_clusters
+from pattern_discovery.display.misc import plot_hist_clusters_by_sce
 
 class ClusterTree:
     def __init__(self, clusters_lists, n_cells, max_scale_value, non_significant_color = "black",
@@ -352,6 +355,14 @@ class ClusterTree:
         else:
             return 0
 
+def give_all_cells_from_cluster(cluster_list):
+    if isinstance(cluster_list, int) or isinstance(cluster_list, np.int64):
+        return [cluster_list]
+    else:
+        result = []
+        for element in cluster_list:
+            result.extend(give_all_cells_from_cluster(element))
+        return result
 
 def get_min_max_scale_from_merge_history(merge_history):
     min_scale = 100
@@ -587,7 +598,7 @@ def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=Tr
         maximum_scale = np.max(scale_matrix)
         print(f"max scale {maximum_scale}")
         if early_stop and maximum_scale < 1.0:
-            print(f"early_stop maximum_scale{maximum_scale}, len(current_train_list){len(current_train_list)}")
+            print(f"early_stop maximum_scale {maximum_scale}, len(current_train_list) {len(current_train_list)}")
             done = True
         else:
             i, j = np.unravel_index(np.argmax(scale_matrix), scale_matrix.shape)
@@ -659,3 +670,256 @@ def create_linkage(n_nodes, merge_history):
         Z.append([ix1, ix2, 1.0, 1])
     return Z
 
+
+def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_descr, param,
+                                                 sliding_window_duration, sce_times_numbers,
+                                                 SCE_times, perc_threshold,
+                                                 n_surrogate_activity_threshold,
+                                                 sigma, n_surrogate_fca,
+                                                 labels,
+                                                 activity_threshold,
+                                                 fca_early_stop=True):
+
+    n_cells = len(spike_trains)
+    # sigma = 4
+    # n_surrogate_fca = 20
+
+    merge_history, current_cluster = functional_clustering_algorithm(spike_trains,
+                                                                     nsurrogate=n_surrogate_fca,
+                                                                     sigma=sigma,
+                                                                     early_stop=fca_early_stop,
+                                                                     rolling_surrogate=False)
+    print(f"merge_history {merge_history}")
+    print(f"current_cluster {current_cluster}")
+    if fca_early_stop:
+        # each element is a list representing the cells of a cluster
+        cells_in_clusters = []
+        for element in current_cluster:
+            if isinstance(element, int) or isinstance(element, np.int64):
+                continue
+            cells_in_clusters.append(give_all_cells_from_cluster(element))
+        n_cluster = len(cells_in_clusters)
+    else:
+        min_scale, max_scale = get_min_max_scale_from_merge_history(merge_history)
+        cluster_tree = ClusterTree(clusters_lists=current_cluster[0], merge_history_list=merge_history, father=None,
+                                       n_cells=n_cells, max_scale_value=max_scale, non_significant_color="white")
+
+        n_cluster = len(cluster_tree.cluster_nb_list)
+
+    print(f"n_cluster {n_cluster}")
+    # each index correspond to a cell index, and the value is the cluster the cell belongs,
+    # if -1, it means no cluster
+    cluster_labels = np.zeros(n_cells, dtype="int16")
+    cluster_labels = cluster_labels - 1
+    for cluster in np.arange(n_cluster):
+        if fca_early_stop:
+            cells_in_cluster = np.array(cells_in_clusters[cluster])
+        else:
+            ct = cluster_tree.cluster_dict[cluster]
+            cells_in_cluster = ct.get_cells_id()
+            cells_in_cluster = np.array(cells_in_cluster)
+        cluster_labels[cells_in_cluster] = cluster
+
+    if fca_early_stop:
+        axes_list_raster = None
+    else:
+        fig = plt.figure(figsize=(20, 14))
+        fig.set_tight_layout({'rect': [0, 0, 1, 1], 'pad': 1, 'h_pad': 3})
+        outer = gridspec.GridSpec(2, 1, height_ratios=[60, 40])
+
+        # clusters display
+        inner_top = gridspec.GridSpecFromSubplotSpec(1, 1,
+                                                     subplot_spec=outer[0])
+
+        inner_bottom = gridspec.GridSpecFromSubplotSpec(2, 1,
+                                                        subplot_spec=outer[1], height_ratios=[10, 2])
+
+        # top is bottom and bottom is top, so the raster is under
+        # ax1 contains raster
+        ax1 = fig.add_subplot(inner_top[0])
+
+        ax2 = fig.add_subplot(inner_bottom[0])
+        # ax3 contains the peak activity diagram
+        ax3 = fig.add_subplot(inner_bottom[1], sharex=ax2)
+        axes_list_raster = [ax2, ax3]
+
+    clustered_spike_nums = np.copy(spike_nums)
+    cell_labels = []
+    cluster_horizontal_thresholds = []
+    cells_to_highlight = []
+    cells_to_highlight_colors = []
+    start = 0
+    for k in np.arange(-1, np.max(cluster_labels) + 1):
+        e = np.equal(cluster_labels, k)
+        nb_k = np.sum(e)
+        clustered_spike_nums[start:start + nb_k, :] = spike_nums[e, :]
+        for index in np.where(e)[0]:
+            cell_labels.append(labels[index])
+        if k >= 0:
+            color = cm.nipy_spectral(float(k + 1) / (n_cluster + 1))
+            cell_indices = list(np.arange(start, start + nb_k))
+            cells_to_highlight.extend(cell_indices)
+            cells_to_highlight_colors.extend([color] * len(cell_indices))
+        start += nb_k
+        if (k + 1) < (np.max(cluster_labels) + 1):
+            cluster_horizontal_thresholds.append(start)
+
+    plot_spikes_raster(spike_nums=clustered_spike_nums, param=param,
+                       spike_train_format=False,
+                       title=f"{n_cluster} clusters raster plot {data_descr}",
+                       file_name=f"spike_nums_{data_descr}_{n_cluster}_clusters_hierarchical",
+                       y_ticks_labels=cell_labels,
+                       y_ticks_labels_size=4,
+                       save_raster=True,
+                       show_raster=False,
+                       plot_with_amplitude=False,
+                       activity_threshold=activity_threshold,
+                       span_cells_to_highlight=False,
+                       raster_face_color='black',
+                       cell_spikes_color='white',
+                       horizontal_lines=np.array(cluster_horizontal_thresholds) - 0.5,
+                       horizontal_lines_colors=['white'] * len(cluster_horizontal_thresholds),
+                       horizontal_lines_sytle="dashed",
+                       horizontal_lines_linewidth=[1] * len(cluster_horizontal_thresholds),
+                       vertical_lines=SCE_times,
+                       vertical_lines_colors=['white'] * len(SCE_times),
+                       vertical_lines_sytle="solid",
+                       vertical_lines_linewidth=[0.2] * len(SCE_times),
+                       cells_to_highlight=cells_to_highlight,
+                       cells_to_highlight_colors=cells_to_highlight_colors,
+                       sliding_window_duration=sliding_window_duration,
+                       show_sum_spikes_as_percentage=True,
+                       spike_shape="o",
+                       spike_shape_size=2,
+                       save_formats="pdf",
+                       axes_list=axes_list_raster,
+                       SCE_times=SCE_times,
+                       ylabel="")
+
+    if not fca_early_stop:
+        plot_dendogram_from_fca(cluster_tree=cluster_tree, nb_cells=n_cells, save_plot=True,
+                                file_name=f"dendogram_{data_descr}",
+                                param=param,
+                                cell_labels=labels,
+                                axes_list=[ax1], fig_to_use=fig)
+
+    result_detection = detect_cluster_activations_with_sliding_window(spike_nums=spike_nums,
+                                                                      window_duration=sliding_window_duration,
+                                                                      cluster_labels=cluster_labels,
+                                                                      sce_times_numbers=sce_times_numbers)
+
+    clusters_activations_by_cell, clusters_activations_by_cluster, cluster_particpation_to_sce, \
+    clusters_corresponding_index = result_detection
+
+    cell_labels = []
+    cluster_horizontal_thresholds = []
+    cells_to_highlight = []
+    cells_to_highlight_colors = []
+    start = 0
+    for k in np.arange(np.max(cluster_labels) + 1):
+        e = np.equal(cluster_labels, k)
+        nb_k = np.sum(e)
+        if nb_k == 0:
+            continue
+        for index in np.where(e)[0]:
+            cell_labels.append(labels[index])
+        if k >= 0:
+            color = cm.nipy_spectral(float(k + 1) / (n_cluster + 1))
+            cell_indices = list(np.arange(start, start + nb_k))
+            cells_to_highlight.extend(cell_indices)
+            cells_to_highlight_colors.extend([color] * len(cell_indices))
+        start += nb_k
+        if (k + 1) < (np.max(cluster_labels) + 1):
+            cluster_horizontal_thresholds.append(start)
+
+    fig = plt.figure(figsize=(20, 14))
+    fig.set_tight_layout({'rect': [0, 0, 1, 1], 'pad': 1, 'h_pad': 3})
+    outer = gridspec.GridSpec(1, 1)  # , height_ratios=[60, 40])
+
+    # clusters display
+    # inner_top = gridspec.GridSpecFromSubplotSpec(1, 1,
+    #                                              subplot_spec=outer[0])
+
+    inner_bottom = gridspec.GridSpecFromSubplotSpec(2, 1,
+                                                    subplot_spec=outer[0], height_ratios=[10, 2])
+
+    # top is bottom and bottom is top, so the raster is under
+    # ax1 contains raster
+    ax1 = fig.add_subplot(inner_bottom[0])
+    # ax3 contains the peak activity diagram
+    ax2 = fig.add_subplot(inner_bottom[1], sharex=ax1)
+
+    plot_spikes_raster(spike_nums=clusters_activations_by_cell, param=param,
+                       spike_train_format=False,
+                       file_name=f"raster_clusters_detection_{data_descr}",
+                       y_ticks_labels=cell_labels,
+                       y_ticks_labels_size=4,
+                       save_raster=True,
+                       show_raster=False,
+                       plot_with_amplitude=False,
+                       span_cells_to_highlight=False,
+                       raster_face_color='black',
+                       cell_spikes_color='white',
+                       horizontal_lines=np.array(cluster_horizontal_thresholds) - 0.5,
+                       horizontal_lines_colors=['white'] * len(cluster_horizontal_thresholds),
+                       horizontal_lines_sytle="dashed",
+                       vertical_lines=SCE_times,
+                       vertical_lines_colors=['white'] * len(SCE_times),
+                       vertical_lines_sytle="solid",
+                       vertical_lines_linewidth=[0.4] * len(SCE_times),
+                       cells_to_highlight=cells_to_highlight,
+                       cells_to_highlight_colors=cells_to_highlight_colors,
+                       sliding_window_duration=sliding_window_duration,
+                       show_sum_spikes_as_percentage=True,
+                       spike_shape="|",
+                       spike_shape_size=1,
+                       save_formats="pdf",
+                       axes_list=[ax1],
+                       without_activity_sum=True,
+                       ylabel="")
+
+    plot_sum_active_clusters(clusters_activations=clusters_activations_by_cluster, param=param,
+                             sliding_window_duration=sliding_window_duration,
+                             data_str=f"raster_clusters_participation_{data_descr}",
+                             axes_list=[ax2],
+                             fig_to_use=fig)
+
+    plot_hist_clusters_by_sce(cluster_particpation_to_sce, data_str="hist_percentage_of_network_events", param=param)
+
+    plt.close()
+
+    save_stat_SCE_and_cluster_fca_version(spike_nums_to_use=spike_nums,
+                                          sigma=sigma,
+                                          activity_threshold=activity_threshold,
+                                          SCE_times=SCE_times, n_cluster=n_cluster, param=param,
+                                          sliding_window_duration=sliding_window_duration,
+                                          cluster_labels_for_neurons=cluster_labels,
+                                          perc_threshold=perc_threshold,
+                                          n_surrogate_FCA=n_surrogate_fca,
+                                          n_surrogate_activity_threshold=n_surrogate_activity_threshold)
+
+
+def save_stat_SCE_and_cluster_fca_version(spike_nums_to_use, activity_threshold, sigma,
+                                          SCE_times, n_cluster, param, sliding_window_duration,
+                                          cluster_labels_for_neurons, perc_threshold,
+                                          n_surrogate_FCA, n_surrogate_activity_threshold):
+    round_factor = 2
+    file_name = f'{param.path_results}/stat_fca_v_{n_cluster}_clusters_{param.time_str}.txt'
+    with open(file_name, "w", encoding='UTF-8') as file:
+        file.write(f"Stat FCA version for {n_cluster} clusters" + '\n')
+        file.write("" + '\n')
+        file.write(f"cells {len(spike_nums_to_use)}, events {len(SCE_times)}" + '\n')
+        file.write(f"Event participation threshold {activity_threshold}, {perc_threshold} percentile, "
+                   f"{n_surrogate_activity_threshold} surrogates" + '\n')
+        file.write(f"Sliding window duration {sliding_window_duration}" + '\n')
+        file.write(f"Sigma {sigma}" + f", {n_surrogate_FCA} FCA surrogates " + '\n')
+        file.write("" + '\n')
+        file.write("" + '\n')
+
+        for k in np.arange(n_cluster):
+            e_cells = np.equal(cluster_labels_for_neurons, k)
+            n_cells_in_cluster = np.sum(e_cells)
+
+            file.write("#" * 10 + f"   cluster {k} / {n_cells_in_cluster} cells" +
+                       "#" * 10 + '\n')
+            file.write('\n')
