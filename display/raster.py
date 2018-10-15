@@ -463,13 +463,15 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         ax_top.set_xticklabels(np.arange(len(SCE_times)))
         plt.setp(ax_top.xaxis.get_majorticklabels(), rotation=90)
         if len(SCE_times) > 30:
-            ax_top.xaxis.set_tick_params(labelsize=4)
-        elif len(SCE_times) > 50:
             ax_top.xaxis.set_tick_params(labelsize=3)
-        elif len(SCE_times) > 100:
+        elif len(SCE_times) > 50:
             ax_top.xaxis.set_tick_params(labelsize=2)
+        elif len(SCE_times) > 100:
+            ax_top.xaxis.set_tick_params(labelsize=1)
+        elif len(SCE_times) > 300:
+            ax_top.xaxis.set_tick_params(labelsize=0.5)
         else:
-            ax_top.xaxis.set_tick_params(labelsize=6)
+            ax_top.xaxis.set_tick_params(labelsize=4)
     # print(f"max sum_spikes {np.max(sum_spikes)}, mean  {np.mean(sum_spikes)}, median {np.median(sum_spikes)}")
     ax2.set_ylim(0, np.max(sum_spikes))
 

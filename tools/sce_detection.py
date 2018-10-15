@@ -50,7 +50,8 @@ def create_surrogate_dataset(train_list, nsurrogate, min_value, max_value):
     return surrogate_data_set
 
 
-def get_sce_detection_threshold(spike_nums, window_duration, n_surrogate, perc_threshold=95, non_binary=False,
+def get_sce_detection_threshold(spike_nums, window_duration, n_surrogate, use_max_of_each_surrogate=False,
+                                perc_threshold=95, non_binary=False,
                                 debug_mode=False, spike_train_mode=False, sigma=0.1):
     """
     Compute the activity threshold (ie: nb of onset at each time, if param.bin_size > 1, then will first bin
@@ -59,6 +60,8 @@ def get_sce_detection_threshold(spike_nums, window_duration, n_surrogate, perc_t
     :param non_binary: means that spike_nums could hold values that are not only 0 or 1
     :param spike_train_mode: if True, spike_nums should be a list of np.array with float or int value
     representing the spike time of each cell (each np.array representing a cell)
+    :param use_max_of_each_surrogate: if True, the percentile threshold will be applied to the max sum of each
+    surrogate generated.
     :return:
     """
     if debug_mode:
@@ -70,7 +73,7 @@ def get_sce_detection_threshold(spike_nums, window_duration, n_surrogate, perc_t
                                                       min_value=min_time, max_value=max_time)
         n_times = int(math.ceil(max_time - min_time))
         n_cells = len(spike_nums)
-        just_keeping_the_max_of_each_surrogate = False
+        just_keeping_the_max_of_each_surrogate = use_max_of_each_surrogate
 
         number_of_times_without_spikes = 0
 
@@ -94,7 +97,7 @@ def get_sce_detection_threshold(spike_nums, window_duration, n_surrogate, perc_t
             for cell_number in np.arange(n_cells):
                 windows_set[cell_number] = set()
 
-            for cell, spikes_train in enumerate(spike_nums):
+            for cell, spikes_train in enumerate(surrogate_train_list):
                 # if debug_mode and (cell == 0):
                 #     print(f"len(spikes_train): {len(spikes_train)}")
                 for spike_time in spikes_train:
@@ -151,7 +154,10 @@ def get_sce_detection_threshold(spike_nums, window_duration, n_surrogate, perc_t
     n_times = len(spike_nums[0, :])
 
     # computing threshold to detect synchronous peak of activity
-    n_rand_sum = np.zeros(n_surrogate * n_times)
+    if use_max_of_each_surrogate:
+        n_rand_sum = np.zeros(n_surrogate)
+    else:
+        n_rand_sum = np.zeros(n_surrogate * (n_times- window_duration))
     for i in np.arange(n_surrogate):
         if debug_mode:
             print(f"surrogate n°: {i}")
@@ -159,20 +165,27 @@ def get_sce_detection_threshold(spike_nums, window_duration, n_surrogate, perc_t
         for n, neuron_spikes in enumerate(copy_spike_nums):
             # roll the data to a random displace number
             copy_spike_nums[n, :] = np.roll(neuron_spikes, np.random.randint(1, n_times))
+
         max_sum = 0
         for t in np.arange(0, (n_times - window_duration)):
-            sum_value = np.sum(spike_nums[:, t:(t + window_duration)])
-            n_rand_sum[(i * n_times) + t] = sum_value
-            # max_sum = max(sum_value, max_sum)
-        for t in np.arange((n_times - window_duration), n_times):
-            sum_value = np.sum(spike_nums[:, t:])
-            n_rand_sum[(i * n_times) + t] = sum_value
+            sum_value = np.sum(copy_spike_nums[:, t:(t + window_duration)])
+            max_sum = np.max((sum_value, max_sum))
+            if not use_max_of_each_surrogate:
+                n_rand_sum[(i * (n_times- window_duration)) + t] = sum_value
+
+        # for t in np.arange((n_times - window_duration), n_times):
+        #     sum_value = np.sum(spike_nums[:, t:])
+        #     n_rand_sum[(i * n_times) + t] = sum_value
+
         # Keeping the max value for each surrogate data
-        # n_rand_sum[i] = max_sum
+        if use_max_of_each_surrogate:
+            n_rand_sum[i] = max_sum
+
 
     activity_threshold = np.percentile(n_rand_sum, perc_threshold)
 
     return activity_threshold
+
 
 # TODO: same method but with spike_trains
 # TODO: for concatenation of SCE, if the same cells spike more than one, then the following should be considered

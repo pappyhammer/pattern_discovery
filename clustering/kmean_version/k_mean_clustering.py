@@ -565,7 +565,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         plt.close()
 
 
-def find_cluster_labels_for_neurons(cells_in_peak, cluster_labels, m_sces=m_sces):
+def find_cluster_labels_for_neurons(cells_in_peak, cluster_labels, m_sces):
     cluster_labels_for_neurons = np.zeros(np.shape(cells_in_peak)[0], dtype="int8")
     # sorting neurons spikes, keeping them only in one cluster, the one with the most spikes from this neuron
     # if spikes < 2 in any clusters, then removing spikes
