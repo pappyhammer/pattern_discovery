@@ -85,7 +85,7 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
                               shuffling=False, n_surrogate=100,
                               nth_best_clusters=-1, neurons_labels=None,
                               plot_matrix=False, data_str="", path_results=None,
-                              perc_thresholds_for_surrogate=(95, 99), debug_mode=False):
+                              perc_thresholds_for_surrogate=(95), debug_mode=False):
     """
 
     :param cells_in_sce:
@@ -199,9 +199,11 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
             # if best_kmeans is None:
             #     continue
         best_kmeans_by_cluster[n_clusters] = best_kmeans
+        # TODO: only keeping clusters of SCE which are significant and
+        # and creating cluster_labels, which will put SCE without cluster to -1, and resdistributed other from 0
         cluster_labels_for_neurons[n_clusters] = \
             find_cluster_labels_for_neurons(cells_in_peak=cells_in_sce,
-                                            cluster_labels=best_kmeans.labels_)
+                                            cluster_labels=best_kmeans.labels_, m_sces=m_sces)
         surrogate_percentiles_by_n_cluster[n_clusters] = surrogate_percentiles
         if plot_matrix:
             show_co_var_first_matrix(cells_in_peak=np.copy(cells_in_sce), m_sces=m_sces,
@@ -563,7 +565,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         plt.close()
 
 
-def find_cluster_labels_for_neurons(cells_in_peak, cluster_labels):
+def find_cluster_labels_for_neurons(cells_in_peak, cluster_labels, m_sces=m_sces):
     cluster_labels_for_neurons = np.zeros(np.shape(cells_in_peak)[0], dtype="int8")
     # sorting neurons spikes, keeping them only in one cluster, the one with the most spikes from this neuron
     # if spikes < 2 in any clusters, then removing spikes
@@ -596,7 +598,7 @@ def save_stat_SCE_and_cluster_k_mean_version(spike_nums_to_use, activity_thresho
                                              n_surrogate_k_mean, data_descr,
                                              n_surrogate_activity_threshold):
     round_factor = 2
-    file_name = f'{param.path_results}/stat_k_mean_v_{data_descr}_{n_cluster}_clusters_{param.time_str}.txt'
+    file_name = f'{param.path_results}/{n_cluster}_clusters_stat_k_mean_v_{data_descr}_{param.time_str}.txt'
     with open(file_name, "w", encoding='UTF-8') as file:
         file.write(f"Stat k_mean version for {n_cluster} clusters" + '\n')
         file.write("" + '\n')
@@ -796,6 +798,9 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
             y_ticks_labels_size = 1
         else:
             y_ticks_labels_size = 3
+        spike_shape_size = 1
+        if len(cell_labels) > 150:
+            spike_shape_size = 0.5
         plot_spikes_raster(spike_nums=clustered_spike_nums, param=param,
                            spike_train_format=False,
                            title=f"{n_cluster} clusters raster plot {data_descr}",
@@ -821,8 +826,8 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                            cells_to_highlight_colors=cells_to_highlight_colors,
                            sliding_window_duration=sliding_window_duration,
                            show_sum_spikes_as_percentage=True,
-                           spike_shape="|",
-                           spike_shape_size=1,
+                           spike_shape="o",
+                           spike_shape_size=spike_shape_size,
                            save_formats="pdf",
                            axes_list=[ax1, ax2],
                            SCE_times=SCE_times)
@@ -919,12 +924,12 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
 
         plot_sum_active_clusters(clusters_activations=clusters_activations_by_cluster, param=param,
                                  sliding_window_duration=sliding_window_duration,
-                                 data_str=f"raster_{n_cluster}_clusters_participation_{data_descr}",
+                                 data_str=f"{n_cluster}_clusters_raster_participation_{data_descr}",
                                  axes_list=[ax2],
                                  fig_to_use=fig)
 
         plot_hist_clusters_by_sce(cluster_particpation_to_sce,
-                                  data_str=f"hist_percentage_of_network_events_{n_cluster}_clusters",
+                                  data_str=f"{n_cluster}_clusters_hist_percentage_of_network_events",
                                   param=param)
 
         plt.close()
