@@ -78,6 +78,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        save_formats="png",
                        span_area_coords=None,
                        span_area_colors=None,
+                       span_area_only_on_raster=True,
                        cells_to_highlight=None,
                        cells_to_highlight_colors=None,
                        color_peaks_activity=False,
@@ -226,16 +227,16 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
             if plot_with_amplitude:
                 ax1.scatter(neuron_times, np.repeat(y, len(neuron_times)), color=scalar_map.to_rgba(neuron[neuron > 0]),
                             marker=spike_shape,
-                            s=spike_shape_size)
+                            s=spike_shape_size, zorder=20)
             else:
                 ax1.scatter(neuron_times, np.repeat(y, len(neuron_times)), color=color_neuron, marker=spike_shape,
-                            s=spike_shape_size)
+                            s=spike_shape_size, zorder=20)
         else:
             if plot_with_amplitude:
                 ax1.vlines(neuron_times, y - .5, y + .5, color=scalar_map.to_rgba(neuron[neuron > 0]),
-                           linewidth=1)
+                           linewidth=1, zorder=20)
             else:
-                ax1.vlines(neuron_times, y - .5, y + .5, color=color_neuron, linewidth=1)
+                ax1.vlines(neuron_times, y - .5, y + .5, color=color_neuron, linewidth=1, zorder=20)
 
     if seq_times_to_color_dict is not None:
         for seq_indices, seq_times_list in seq_times_to_color_dict.items():
@@ -255,10 +256,10 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                     if spike_shape != "|":
                         ax1.scatter(t, cell_index, color=seq_colors[seq_indices],
                                     marker=spike_shape,
-                                    s=spike_shape_size)
+                                    s=spike_shape_size, zorder=20)
                     else:
                         ax1.vlines(t, cell_index - .5, cell_index + .5, color=seq_colors[seq_indices],
-                                   linewidth=1)
+                                   linewidth=1, zorder=20)
     if spike_train_format:
         n_times = int(math.ceil(max_time - min_time))
     else:
@@ -274,7 +275,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                     color = span_area_colors[index]
                 else:
                     color = "lightgrey"
-                ax1.axvspan(coord[0], coord[1], alpha=0.5, facecolor=color)
+                ax1.axvspan(coord[0], coord[1], alpha=0.5, facecolor=color, zorder=1)
 
     if (cells_to_highlight is not None) and span_cells_to_highlight:
         for index, cell_to_span in enumerate(cells_to_highlight):
@@ -291,7 +292,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
             line_end_x = len(spike_nums[0, :]) + 1
         if horizontal_lines_linewidth is None:
             ax1.hlines(horizontal_lines, line_beg_x, line_end_x, color=horizontal_lines_colors, linewidth=2,
-                   linestyles=horizontal_lines_sytle)
+                       linestyles=horizontal_lines_sytle)
         else:
             ax1.hlines(horizontal_lines, line_beg_x, line_end_x, color=horizontal_lines_colors,
                        linewidth=horizontal_lines_linewidth,
@@ -425,14 +426,14 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         ax2.hlines(activity_threshold, line_beg_x, line_end_x, color="red", linewidth=2, linestyles="dashed")
 
     # draw span to highlight some periods
-    if span_area_coords is not None:
+    if (span_area_coords is not None) and (not span_area_only_on_raster):
         for index, span_area_coord in enumerate(span_area_coords):
             for coord in span_area_coord:
                 if span_area_colors is not None:
                     color = span_area_colors[index]
                 else:
                     color = "lightgrey"
-                ax2.axvspan(coord[0], coord[1], alpha=0.5, facecolor=color)
+                ax2.axvspan(coord[0], coord[1], alpha=0.5, facecolor=color, zorder=1)
 
     # early born
     if cells_to_highlight is not None and color_peaks_activity:

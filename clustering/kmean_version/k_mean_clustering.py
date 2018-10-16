@@ -13,7 +13,6 @@ from pattern_discovery.display.misc import plot_hist_clusters_by_sce
 from pattern_discovery.seq_solver.markov_way import order_spike_nums_by_seq
 
 
-
 # normalized co-variance
 def covnorm(m_sces):
     nb_events = np.shape(m_sces)[1]
@@ -28,7 +27,7 @@ def covnorm(m_sces):
     return co_var_matrix
 
 
-def surrogate_clustering(m_sces, n_clusters, n_surrogate, n_trials, perc_thresholds,
+def surrogate_clustering(m_sces, n_clusters, n_surrogate, n_trials, perc_threshold,
                          fct_to_keep_best_silhouettes, debug_mode=False):
     """
 
@@ -36,7 +35,7 @@ def surrogate_clustering(m_sces, n_clusters, n_surrogate, n_trials, perc_thresho
     :param n_clusters: number of clusters
     :param n_surrogate: number of surrogates
     :param n_trials: number of trials by surrogate, keeping one avg silhouette by surrogate
-    :param perc_thresholds: list of threshold as percentile
+    :param perc_threshold: threshold as percentile (int)
     :param debug_mode:
     :return: a list of value representing the nth percentile over the average threshold of each surrogate, keeping
     each individual silhouette score, not just the mean of each surrogate
@@ -75,51 +74,31 @@ def surrogate_clustering(m_sces, n_clusters, n_surrogate, n_trials, perc_thresho
         surrogate_silhouettes[index:index + n_clusters] = best_silhouettes_clusters_avg
     if debug_mode:
         print(f'end shuffling for {n_clusters} clusters and {n_surrogate} surrogates')
-    percentile_results = []
-    for perc_threshold in perc_thresholds:
-        percentile_results.append(np.percentile(surrogate_silhouettes, perc_threshold))
-    return percentile_results
+    percentile_result = np.percentile(surrogate_silhouettes, perc_threshold)
+    return percentile_result
 
 
-def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_silhouettes=np.median,
-                              shuffling=False, n_surrogate=100,
-                              nth_best_clusters=-1, neurons_labels=None,
-                              plot_matrix=False, data_str="", path_results=None,
-                              perc_thresholds_for_surrogate=(95), debug_mode=False):
+def clusters_on_sce_from_covnorm(cells_in_sce, range_n_clusters, fct_to_keep_best_silhouettes=np.mean,
+                              n_surrogate=1000, neurons_labels=None,
+                              perc_threshold_for_surrogate=95, debug_mode=False):
     """
 
     :param cells_in_sce:
     :param range_n_clusters:
     :param fct_to_keep_best_silhouettes: function used to keep the best trial, will be applied on all the silhouette
     scores of each trials, the max will be kept
-    :param shuffling:
-    :param nth_best_clusters: how many clusters to return, if -1 return them all
-    :param plot_matrix:
-    :param data_str:
     :return:
     """
-    # ms = mouse_session
-    # param = ms.param
+
     m_sces = cells_in_sce
-    # ax = sns.heatmap(m_sces, cmap="jet")  # , vmin=0, vmax=1) YlGnBu
-    # ax.invert_yaxis()
-    # plt.show()
-    # m_sces = np.transpose(cellsinpeak)
-    # m_sces = np.cov(m_sces)
-    # print(f'np.shape(m_sces) {np.shape(m_sces)}')
+    # normalized covariance matrix
     m_sces = covnorm(m_sces)
     # m_sces = np.corrcoef(m_sces)
-
-    # ax = sns.heatmap(m_sces, cmap="jet")  # , vmin=0, vmax=1) YlGnBu
-    # ax.invert_yaxis()
-    # plt.show()
-
-    original_m_sces = m_sces
-    testing = True
 
     # key is the nth clusters as int, value is a list of list of SCE
     # (each list representing a cluster, so we have as many list as the number of cluster wanted)
     dict_best_clusters = dict()
+    significant_sce_clusters = dict()
     # the key is the nth cluster (int) and the value is a list of cluster number for each cell
     cluster_labels_for_neurons = dict()
     for i in range_n_clusters:
@@ -132,32 +111,20 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
     for n_clusters in range_n_clusters:
         if debug_mode:
             print(f"n_clusters {n_clusters}")
-        surrogate_percentiles = []
-        if shuffling:
-            surrogate_percentiles = surrogate_clustering(m_sces=m_sces, n_clusters=n_clusters,
-                                                         n_surrogate=n_surrogate,
-                                                         n_trials=100,
-                                                         fct_to_keep_best_silhouettes=fct_to_keep_best_silhouettes,
-                                                         perc_thresholds=perc_thresholds_for_surrogate, debug_mode=True)
-            if debug_mode:
-                print(f"surrogate_percentiles {surrogate_percentiles}")
+
+        surrogate_percentile = surrogate_clustering(m_sces=m_sces, n_clusters=n_clusters,
+                                                    n_surrogate=n_surrogate,
+                                                    n_trials=100,
+                                                    fct_to_keep_best_silhouettes=fct_to_keep_best_silhouettes,
+                                                    perc_threshold=perc_threshold_for_surrogate, debug_mode=True)
+        if debug_mode:
+            print(f"surrogate_percentile {surrogate_percentile}")
 
         best_kmeans = None
-        silhouette_avgs = np.zeros(n_trials)
-        best_silhouettes_clusters_avg = None
-        max_local_clusters_silhouette = 0
         best_silhouettes = 0
-        silhouettes_clusters_avg = []
         for trial in np.arange(n_trials):
-            # co_var = np.cov(m_sces)
             kmeans = KMeans(n_clusters=n_clusters).fit(m_sces)
             cluster_labels = kmeans.labels_
-            # if np.max(cluster_labels) == 0:
-            #     print(f"only one cluster for {n_clusters} clusters")
-            #     break
-            silhouette_avg = metrics.silhouette_score(m_sces, cluster_labels, metric='euclidean')
-            silhouette_avgs[trial] = silhouette_avg
-            # print(f"Avg silhouette: {silhouette_avg}")
             sample_silhouette_values = metrics.silhouette_samples(m_sces, cluster_labels, metric='euclidean')
             local_clusters_silhouette = np.zeros(n_clusters)
             for i in range(n_clusters):
@@ -165,130 +132,121 @@ def co_var_first_and_clusters(cells_in_sce, range_n_clusters, fct_to_keep_best_s
                 # cluster i, and sort them
                 ith_cluster_silhouette_values = \
                     sample_silhouette_values[cluster_labels == i]
-                # print(f'ith_cluster_silhouette_values {ith_cluster_silhouette_values}')
-                # print(f'np.mean(ith_cluster_silhouette_values) {np.mean(ith_cluster_silhouette_values)}')
                 avg_ith_cluster_silhouette_values = np.mean(ith_cluster_silhouette_values)
-                silhouettes_clusters_avg.append(avg_ith_cluster_silhouette_values)
-                # print(ith_cluster_silhouette_values)
                 local_clusters_silhouette[i] = avg_ith_cluster_silhouette_values
-                # ith_cluster_silhouette_values.sort()
+
             # compute a score based on the silhouette of each cluster for this trial and compare it with the best score
             # so far, keeping it if it's better
             computed_score = fct_to_keep_best_silhouettes(local_clusters_silhouette)
             if computed_score > best_silhouettes:
                 best_silhouettes = computed_score
-                best_silhouettes_clusters_avg = local_clusters_silhouette
-
-            max_local = computed_score  # np.max(local_clusters_silhouette)  # silhouette_avg
-            # TO display, we keep the group with the cluster with the max silhouette
-            if (best_kmeans is None) or (computed_score > max_local_clusters_silhouette):
-                max_local_clusters_silhouette = max_local
                 best_kmeans = kmeans
-                nth_best_list = []
-                count_clusters = nth_best_clusters
-                if count_clusters == -1:
-                    count_clusters = n_clusters
-                for b in np.arange(count_clusters):
-                    arg = np.argmax(local_clusters_silhouette)
-                    # TODO: put neurons list instead of SCEs
-                    nth_best_list.append(np.arange(len(m_sces))[cluster_labels == arg])
-                    local_clusters_silhouette[arg] = -1
-                dict_best_clusters[n_clusters] = nth_best_list
-            # silhouettes_clusters_avg.extend(sample_silhouette_values)
 
-            # if best_kmeans is None:
-            #     continue
         best_kmeans_by_cluster[n_clusters] = best_kmeans
+        surrogate_percentiles_by_n_cluster[n_clusters] = surrogate_percentile
+
+        # cluster_labels = best_kmeans.labels_
+        # significant_sce_clusters[n_clusters] = []
+        #
+        # # keeping only the significant clusters
+        # sample_silhouette_values = metrics.silhouette_samples(m_sces, cluster_labels, metric='euclidean')
+        #
+        # for cluster_id in range(n_clusters):
+        #     # Aggregate the silhouette scores for samples belonging to
+        #     # cluster i
+        #     ith_cluster_silhouette_values = \
+        #         sample_silhouette_values[cluster_labels == cluster_id]
+        #     avg_ith_cluster_silhouette_values = np.mean(ith_cluster_silhouette_values)
+        #     if avg_ith_cluster_silhouette_values > surrogate_percentiles:
+        #         # then we keep it
+        #         significant_sce_clusters[n_clusters].append(cluster_id)
+        # significant_sce_clusters[n_clusters] = np.array(significant_sce_clusters[n_clusters])
+
         # TODO: only keeping clusters of SCE which are significant and
         # and creating cluster_labels, which will put SCE without cluster to -1, and resdistributed other from 0
-        cluster_labels_for_neurons[n_clusters] = \
-            find_cluster_labels_for_neurons(cells_in_peak=cells_in_sce,
-                                            cluster_labels=best_kmeans.labels_, m_sces=m_sces)
-        surrogate_percentiles_by_n_cluster[n_clusters] = surrogate_percentiles
-        if plot_matrix:
-            show_co_var_first_matrix(cells_in_peak=np.copy(cells_in_sce), m_sces=m_sces,
-                                     n_clusters=n_clusters, kmeans=best_kmeans,
-                                     cluster_labels_for_neurons=cluster_labels_for_neurons[n_clusters],
-                                     data_str=data_str, path_results=path_results,
-                                     show_silhouettes=True, neurons_labels=neurons_labels,
-                                     surrogate_silhouette_avg=surrogate_percentiles)
+        # cluster_labels_for_neurons[n_clusters] = \
+        #     find_cluster_labels_for_neurons(cells_in_peak=cells_in_sce,
+        #                                     cluster_labels=cluster_labels, m_sces=m_sces,
+        #                                     significant_clusters=significant_sce_clusters[n_clusters])
 
-    return dict_best_clusters, best_kmeans_by_cluster, m_sces, cluster_labels_for_neurons, \
-           surrogate_percentiles_by_n_cluster
+    return best_kmeans_by_cluster, m_sces,  surrogate_percentiles_by_n_cluster
 
 
-# TODO: do shuffling before the real cluster
-# TODO: when showing co-var, show the 95th percentile of shuffling, to see which cluster is significant
+def give_significant_sce_clusters(kmeans_dict, range_n_clusters, m_sces, surrogate_percentile):
+    significant_sce_clusters = dict()
+    for n_cluster in range_n_clusters:
+        cluster_labels = kmeans_dict[n_cluster].labels_
+        significant_sce_clusters[n_cluster] = []
 
-def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_labels_for_neurons,
-                             data_str, path_results=None, show_fig=False, show_silhouettes=False,
-                             surrogate_silhouette_avg=None, neurons_labels=None, axes_list=None, fig_to_use=None,
-                             save_formats="pdf"):
-    n_cells = len(cells_in_peak)
+        # keeping only the significant clusters
+        sample_silhouette_values = metrics.silhouette_samples(m_sces, cluster_labels, metric='euclidean')
 
-    if axes_list is None:
-        if show_silhouettes:
-            fig, (ax0, ax1, ax2) = plt.subplots(nrows=1, ncols=3, sharex=False,
-                                                gridspec_kw={'height_ratios': [1], 'width_ratios': [6, 6, 10]},
-                                                figsize=(20, 12))
-        else:
-            fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, sharex=False,
-                                           gridspec_kw={'height_ratios': [1], 'width_ratios': [4, 10]},
-                                           figsize=(20, 12))
-        plt.tight_layout(pad=3, w_pad=7, h_pad=3)
-        # ax1 = plt.subplot(121)
-        plt.title(f"{data_str} {n_clusters} clusters")
-    else:
-        if show_silhouettes:
-            ax0, ax1, ax2 = axes_list
-        else:
-            ax1, ax2 = axes_list
-    # list of size nb_sce, each sce having a value from 0 to k clusters
-    cluster_labels = kmeans.labels_
-
-    if show_silhouettes:
-        # Compute the silhouette scores for each sample
-        sample_silhouette_values = metrics.silhouette_samples(m_sces, cluster_labels)
-        ax0.set_facecolor("black")
-        y_lower = 10
-        for i in range(n_clusters):
+        for cluster_id in range(n_cluster):
             # Aggregate the silhouette scores for samples belonging to
-            # cluster i, and sort them
+            # cluster i
             ith_cluster_silhouette_values = \
-                sample_silhouette_values[cluster_labels == i]
+                sample_silhouette_values[cluster_labels == cluster_id]
+            avg_ith_cluster_silhouette_values = np.mean(ith_cluster_silhouette_values)
+            if avg_ith_cluster_silhouette_values > surrogate_percentile[n_cluster]:
+                # then we keep it
+                significant_sce_clusters[n_cluster].append(cluster_id)
+        significant_sce_clusters[n_cluster] = np.array(significant_sce_clusters[n_cluster])
 
-            ith_cluster_silhouette_values.sort()
+    return significant_sce_clusters
 
-            size_cluster_i = ith_cluster_silhouette_values.shape[0]
-            y_upper = y_lower + size_cluster_i
 
-            color = cm.nipy_spectral(float(i + 1) / (n_clusters + 1))
-            ax0.fill_betweenx(np.arange(y_lower, y_upper),
-                              0, ith_cluster_silhouette_values,
-                              facecolor=color, edgecolor=color, alpha=0.7)
+def plot_silhouettes(ax0, kmeans, m_sces, n_clusters, surrogate_silhouette_avg):
+    cluster_labels = kmeans.labels_
+    sample_silhouette_values = metrics.silhouette_samples(m_sces, cluster_labels)
+    ax0.set_facecolor("black")
+    y_lower = 10
+    for i in range(n_clusters):
+        # Aggregate the silhouette scores for samples belonging to
+        # cluster i, and sort them
+        ith_cluster_silhouette_values = \
+            sample_silhouette_values[cluster_labels == i]
 
-            # Label the silhouette plots with their cluster numbers at the middle
-            ax0.text(-0.05, y_lower + 0.5 * size_cluster_i, str(i), color="white")
+        ith_cluster_silhouette_values.sort()
 
-            # Compute the new y_lower for next plot
-            y_lower = y_upper + 10  # 10 for the 0 samples
+        size_cluster_i = ith_cluster_silhouette_values.shape[0]
+        y_upper = y_lower + size_cluster_i
 
-        ax0.set_title("The silhouette plot for the various clusters.")
-        ax0.set_xlabel("The silhouette coefficient values")
-        ax0.set_ylabel("Cluster label")
+        color = cm.nipy_spectral(float(i + 1) / (n_clusters + 1))
+        ax0.fill_betweenx(np.arange(y_lower, y_upper),
+                          0, ith_cluster_silhouette_values,
+                          facecolor=color, edgecolor=color, alpha=1)
 
-        silhouette_avg = metrics.silhouette_score(m_sces, cluster_labels, metric='euclidean')
+        # putting a white edge around significan silhouette
         if surrogate_silhouette_avg is not None:
-            for value in surrogate_silhouette_avg:
-                ax0.axvline(x=value, color="white", linestyle="--")
-        # The vertical line for average silhouette score of all the values
-        ax0.axvline(x=silhouette_avg, color="red", linestyle="--")
+            if np.mean(ith_cluster_silhouette_values) > surrogate_silhouette_avg:
+                ax0.plot(ith_cluster_silhouette_values, np.arange(y_lower, y_upper),
+                         color="white", linewidth=1)
+                # horizontal white line
+                ax0.hlines(y_upper-1, 0, ith_cluster_silhouette_values[-1],
+                           color="white", linewidth=1)
 
-        ax0.set_yticks([])  # Clear the yaxis labels / ticks
-        ax0.set_xticks([-0.1, 0, 0.2, 0.4, 0.6, 0.8, 1])
+        # Label the silhouette plots with their cluster numbers at the middle
+        ax0.text(-0.05, y_lower + 0.5 * size_cluster_i, str(i), color="white")
 
+        # Compute the new y_lower for next plot
+        y_lower = y_upper + 10  # 10 for the 0 samples
+
+    ax0.set_title("The silhouette plot for the various clusters.")
+    ax0.set_xlabel("The silhouette coefficient values")
+    ax0.set_ylabel("Cluster label")
+
+    silhouette_avg = metrics.silhouette_score(m_sces, cluster_labels, metric='euclidean')
+    if surrogate_silhouette_avg is not None:
+        ax0.axvline(x=surrogate_silhouette_avg, color="white", linestyle="--")
+    # The vertical line for average silhouette score of all the values
+    ax0.axvline(x=silhouette_avg, color="red", linestyle="--")
+
+    ax0.set_yticks([])  # Clear the yaxis labels / ticks
+    ax0.set_xticks([-0.1, 0, 0.2, 0.4, 0.6, 0.8, 1])
+
+def plot_covnorm_matrix(ax1, m_sces, n_clusters, cluster_labels):
+    # display the normlized covariance matrix organized by cluster of SCE such as detected by initial kmeans
     # contains the neurons from the SCE, but ordered by cluster
-    # print(f'// np.shape(m_sces) {np.shape(m_sces)}')
     ordered_m_sces = np.zeros((np.shape(m_sces)[0], np.shape(m_sces)[1]))
     # to plot line that separate clusters
     cluster_coord_thresholds = []
@@ -348,7 +306,53 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
     # ax1.yaxis.set_tick_params(labelsize=5)
     ax1.invert_yaxis()
 
-    # plt.show()
+# TODO: do shuffling before the real cluster
+# TODO: when showing co-var, show the 95th percentile of shuffling, to see which cluster is significant
+
+def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_labels_for_neurons,
+                             significant_sce_clusters,
+                             data_str, path_results=None, show_fig=False, show_silhouettes=False,
+                             surrogate_silhouette_avg=None, neurons_labels=None, axes_list=None, fig_to_use=None,
+                             save_formats="pdf"):
+    n_cells = len(cells_in_peak)
+
+    if axes_list is None:
+        if show_silhouettes:
+            fig, (ax0, ax1, ax2) = plt.subplots(nrows=1, ncols=3, sharex=False,
+                                                gridspec_kw={'height_ratios': [1], 'width_ratios': [6, 6, 10]},
+                                                figsize=(20, 12))
+        else:
+            fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, sharex=False,
+                                           gridspec_kw={'height_ratios': [1], 'width_ratios': [4, 10]},
+                                           figsize=(20, 12))
+        plt.tight_layout(pad=3, w_pad=7, h_pad=3)
+        # ax1 = plt.subplot(121)
+        plt.title(f"{data_str} {n_clusters} clusters")
+    else:
+        if show_silhouettes:
+            ax0, ax1, ax2 = axes_list
+        else:
+            ax1, ax2 = axes_list
+    # list of size nb_sce, each sce having a value from 0 to k clusters
+    cluster_labels = kmeans.labels_
+
+    # ################
+    # silhouettes plot
+    # ################
+    if show_silhouettes:
+        # Compute the silhouette scores for each sample
+        plot_silhouettes(ax0=ax0, kmeans=kmeans, m_sces=m_sces, n_clusters=n_clusters,
+                         surrogate_silhouette_avg=surrogate_silhouette_avg)
+
+    # ############################
+    # Normalized covariance plot
+    # ############################
+    plot_covnorm_matrix(ax1=ax1, m_sces=m_sces, n_clusters=n_clusters, cluster_labels=cluster_labels )
+
+    # ############################
+    # Heatmap cells vs SCE
+    # ############################
+
     original_cells_in_peak = cells_in_peak
 
     cells_in_peak = np.copy(original_cells_in_peak)
@@ -377,7 +381,21 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
     nb_cells_by_cluster_of_cells = []
     nb_cells_by_cluster_of_cells_y_coord = []
     start = 0
-    for k in np.arange(n_clusters):
+    # first we put the sce that are not significant
+    non_significant_sce_cluster = np.setdiff1d(np.arange(n_clusters), significant_sce_clusters)
+    for sce_cluster_id in non_significant_sce_cluster:
+        e = np.equal(cluster_labels, sce_cluster_id)
+        nb_k = np.sum(e)
+        ordered_cells_in_peak[:, start:start + nb_k] = cells_in_peak[:, e]
+        sce_indices_for_each_clusters[sce_cluster_id] = np.arange(start, start + nb_k)
+        old_pos = np.where(e)[0]
+        for i, sce_index in enumerate(np.arange(start, start + nb_k)):
+            new_sce_labels[sce_index] = old_pos[i]
+        start += nb_k
+
+    start_coord_significant_sce_clusters = start
+
+    for index_k, k in enumerate(significant_sce_clusters):
         e = np.equal(cluster_labels, k)
         nb_k = np.sum(e)
         if color_each_clusters:
@@ -386,13 +404,8 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
                 to_put_to_true = np.where(e)[0][spikes_index]
                 tmp_e = np.zeros(len(e), dtype="bool")
                 tmp_e[to_put_to_true] = True
-                # print(f"cell {cell}, spikes_index {spikes_index}, "
-                #       f"cells_in_peak[cell, :] {cells_in_peak[cell, :]},"
-                #       f" cells_in_peak[cell, spikes_index] {cells_in_peak[cell, spikes_index]}")
                 # K +2 to avoid zero and one, and at the end we will substract 1
-                # print(f"cell {cell}, k {k}, cells_in_peak[cell, :] {cells_in_peak[cell, :]}")
                 cells_in_peak[cell, tmp_e] = k + 2
-                # print(f"cells_in_peak[cell, :] {cells_in_peak[cell, :]}")
 
         ordered_cells_in_peak[:, start:start + nb_k] = cells_in_peak[:, e]
         sce_indices_for_each_clusters[k] = np.arange(start, start + nb_k)
@@ -400,9 +413,9 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         for i, sce_index in enumerate(np.arange(start, start + nb_k)):
             new_sce_labels[sce_index] = old_pos[i]
         start += nb_k
-        if (k + 1) < n_clusters:
-            if k == 0:
-                cluster_x_ticks_coord.append(start / 2)
+        if (index_k + 1) < len(significant_sce_clusters):
+            if index_k == 0:
+                cluster_x_ticks_coord.append((start + start_coord_significant_sce_clusters) / 2)
             else:
                 cluster_x_ticks_coord.append((start + cluster_vertical_thresholds[-1]) / 2)
             cluster_vertical_thresholds.append(start)
@@ -453,8 +466,8 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         # print(f"np.min(ordered_n_cells_in_peak) {np.min(ordered_n_cells_in_peak)}")
         ordered_n_cells_in_peak = ordered_n_cells_in_peak - 2
         # print(f"np.min(ordered_n_cells_in_peak) {np.min(ordered_n_cells_in_peak)}")
-        list_color = ['black']
-        bounds = [-2.5, -0.5]
+        list_color = ['black', 'white']
+        bounds = [-2.5, -1.5, -0.5]
         for i in np.arange(n_clusters):
             color = cm.nipy_spectral(float(i + 1) / (n_clusters + 1))
             list_color.append(color)
@@ -499,7 +512,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
     ax_top.set_xlim((0, np.shape(cells_in_peak)[1]))
     ax_top.set_xticks(cluster_x_ticks_coord)
     # clusters labels
-    ax_top.set_xticklabels(np.arange(n_clusters))
+    ax_top.set_xticklabels(significant_sce_clusters)
 
     # print(f"nb_cells_by_cluster_of_cells_y_coord {nb_cells_by_cluster_of_cells_y_coord} "
     #       f"nb_cells_by_cluster_of_cells {nb_cells_by_cluster_of_cells}")
@@ -521,19 +534,22 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         ax2.xaxis.set_tick_params(labelsize=2)
     else:
         ax2.xaxis.set_tick_params(labelsize=6)
-    ax2.hlines(cluster_horizontal_thresholds, 0, np.shape(cells_in_peak)[1], color="red", linewidth=1,
+    ax2.hlines(cluster_horizontal_thresholds, start_coord_significant_sce_clusters, np.shape(cells_in_peak)[1],
+               color="red", linewidth=1,
                linestyles="dashed")
-    ax2.vlines(cluster_vertical_thresholds, 0, np.shape(cells_in_peak)[0], color="red", linewidth=1,
+    ax2.vlines([start_coord_significant_sce_clusters] + cluster_vertical_thresholds, 0,
+               np.shape(cells_in_peak)[0], color="red", linewidth=1,
                linestyles="dashed")
     # print(f"n_clusters {n_clusters}, cluster_vertical_thresholds {cluster_vertical_thresholds}")
-    for cluster in np.arange(n_clusters):
+    for index, cluster in enumerate(significant_sce_clusters):
         if cluster not in clusters_coords_dict:
             # print(f"cluster {cluster} with no cells")
             # means no cell has this cluster as main cluster
             continue
         y_bottom, y_top = clusters_coords_dict[cluster]
-        x_left = 0 if (cluster == 0) else cluster_vertical_thresholds[cluster - 1]
-        x_right = np.shape(cells_in_peak)[1] if (cluster == (n_clusters - 1)) else cluster_vertical_thresholds[cluster]
+        x_left = start_coord_significant_sce_clusters if (index == 0) else cluster_vertical_thresholds[index - 1]
+        x_right = np.shape(cells_in_peak)[1] if (index == (len(significant_sce_clusters) - 1)) \
+            else cluster_vertical_thresholds[index]
         linewidth = 3
         color_border = "white"
         ax2.vlines(x_left, y_bottom, y_top, color=color_border, linewidth=linewidth)
@@ -565,27 +581,58 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         plt.close()
 
 
-def find_cluster_labels_for_neurons(cells_in_peak, cluster_labels, m_sces):
+def find_cluster_labels_for_neurons(cells_in_peak, cluster_labels, m_sces, significant_clusters):
+    """
+    Building cell_assemblies
+    :param cells_in_peak:
+    :param cluster_labels:
+    :param m_sces:
+    :param significant_clusters:
+    :return: cluster_labels_for_neurons np.array of len n_cells, each value correpond to the cell assembly
+    the cell belongs, if the value equal -1, then the cell doesn't belong to any cell assemblie
+    """
     cluster_labels_for_neurons = np.zeros(np.shape(cells_in_peak)[0], dtype="int8")
-    # sorting neurons spikes, keeping them only in one cluster, the one with the most spikes from this neuron
+    # sorting neurons spikes, keeping them only in one cluster, the one with the most percentage spikes from this neuron
+    # only from sce clusters significant
     # if spikes < 2 in any clusters, then removing spikes
     # going neuron by neuron,
-    # removing_multiple_spikes_among_cluster = False
 
     for n, events in enumerate(cells_in_peak):
         pos_events = np.where(events)[0]
-        max_clusters = np.zeros(np.max(cluster_labels) + 1, dtype="int8")
+        # will contains the number of spike in each sce for the neuron n
+        max_clusters = np.zeros(len(significant_clusters), dtype="float")
         for p in pos_events:
             # p correspond to the index of one SCE
-            max_clusters[cluster_labels[p]] += 1
+            sce_cluster_of_p = cluster_labels[p]
+            if sce_cluster_of_p in significant_clusters:
+                index = np.where(significant_clusters == sce_cluster_of_p)[0][0]
+                max_clusters[index] += 1
         if np.max(max_clusters) < 2:
-            # if removing_multiple_spikes_among_cluster:
-            #     cells_in_peak[n, :] = np.zeros(len(cells_in_peak[n, :]))
+            # it should spike at least 2 times in a SCE cluster to be part of it
             cluster_labels_for_neurons[n] = -1
         else:
+            # putting max_clusters into percentages, it means what percentages of sce the cell is spiking on
+            max_clusters_perc = np.copy(max_clusters)
+            for i in np.arange(len(max_clusters)):
+                # i is the index of a sce cluster in significant_clusters
+                nb_sce_in_cluster = len(np.where(cluster_labels == significant_clusters[i])[0])
+                max_clusters_perc[i] = (max_clusters[i] / nb_sce_in_cluster) * 100
             # selecting the cluster with the most spikes from neuron n
-            max_cluster = np.argmax(max_clusters)
-            cluster_labels_for_neurons[n] = max_cluster
+            max_value = np.max(max_clusters_perc)
+            pos_max_value = np.where(max_clusters_perc == max_value)[0]
+            if len(pos_max_value) > 1:
+                # if more than one sce with the max, we keep the one with the more spikes in it
+                max_spikes = 0
+                best_pos = 0
+                for pos in pos_max_value:
+                    if max_spikes < max_clusters[pos]:
+                        max_spikes = max_clusters[pos]
+                        best_pos = pos
+                pos_max_value = best_pos
+            else:
+                pos_max_value = pos_max_value[0]
+            # max_cluster = np.argmax(max_clusters_perc)
+            cluster_labels_for_neurons[n] = significant_clusters[pos_max_value]
             # clearing spikes from other cluster
             # if removing_multiple_spikes_among_cluster:
             #     cells_in_peak[n, np.not_equal(cluster_labels, max_cluster)] = 0
@@ -707,12 +754,45 @@ def give_stat_one_sce(sce_id, spike_nums_to_use, SCE_times, sliding_window_durat
     return duration_in_frames, max_activity, mean_activity, overall_activity
 
 
+def compute_kmean(neurons_labels, cellsinpeak, n_surrogate, range_n_clusters,
+                  fct_to_keep_best_silhouettes=np.mean,
+                  debug_mode=False):
+    best_kmeans_by_cluster, m_cov_sces, surrogate_percentile = clusters_on_sce_from_covnorm(cells_in_sce=cellsinpeak,
+                                        n_surrogate=n_surrogate,
+                                        fct_to_keep_best_silhouettes=fct_to_keep_best_silhouettes,
+                                        range_n_clusters=range_n_clusters,
+                                        neurons_labels=neurons_labels,
+                                        debug_mode=debug_mode)
+
+    # give the indices of the sce cluster for whom the silhouette is > to the 95th percentile from n_surrogate
+    # surrogates
+    significant_sce_clusters = give_significant_sce_clusters(kmeans_dict=best_kmeans_by_cluster,
+                                                             range_n_clusters=range_n_clusters,
+                                                             m_sces=m_cov_sces,
+                                                             surrogate_percentile=surrogate_percentile)
+    # will contains as value list of int (corresponding to sce cluster label, -1 if no sce cluster), the len of
+    # the list is n_cells
+    # So far, a cell belongs to a cluster if the cluster is significant, the cells spikes at least twice in it,
+    # and among the significant cluster, the cell has the highest ratio of spikes in that one (for equal ratios, the
+    # highest number of cells determine to which cluster it belongs
+    cluster_labels_for_neurons = dict()
+    for n_cluster in range_n_clusters:
+        cluster_labels = best_kmeans_by_cluster[n_cluster].labels_
+        cluster_labels_for_neurons[n_cluster] = \
+            find_cluster_labels_for_neurons(cells_in_peak=cellsinpeak,
+                                            cluster_labels=cluster_labels, m_sces=m_cov_sces,
+                                            significant_clusters=significant_sce_clusters[n_cluster])
+
+
+
+    return best_kmeans_by_cluster, m_cov_sces, cluster_labels_for_neurons, surrogate_percentile, significant_sce_clusters
+
 def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, range_n_clusters_k_mean,
-                                                  n_surrogate_k_mean,
-                                                  spike_nums_to_use, cellsinpeak, data_descr,
-                                                  param,
-                                                  sliding_window_duration, sce_times_numbers,
-                                                  SCE_times, perc_threshold,
+                                                   n_surrogate_k_mean,
+                                                   spike_nums_to_use, cellsinpeak, data_descr,
+                                                   param,
+                                                   sliding_window_duration, sce_times_numbers,
+                                                   SCE_times, perc_threshold,
                                                    n_surrogate_activity_threshold,
                                                    with_shuffling=True,
                                                    debug_mode=False,
@@ -723,18 +803,14 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
     # range_n_clusters_k_mean = np.arange(2, 17)
     # n_surrogate_k_mean = 100
 
+    results = compute_kmean(neurons_labels=labels, cellsinpeak=cellsinpeak,
+                            n_surrogate=n_surrogate_k_mean,
+                            range_n_clusters=range_n_clusters_k_mean,
+                            fct_to_keep_best_silhouettes=np.mean,
+                            debug_mode=False)
 
-    clusters_sce, best_kmeans_by_cluster, m_cov_sces, cluster_labels_for_neurons, surrogate_percentiles = \
-        co_var_first_and_clusters(cells_in_sce=cellsinpeak, shuffling=with_shuffling,
-                                  n_surrogate=n_surrogate_k_mean,
-                                  fct_to_keep_best_silhouettes=np.mean,
-                                  range_n_clusters=range_n_clusters_k_mean,
-                                  nth_best_clusters=-1,
-                                  plot_matrix=False,
-                                  data_str=data_descr,
-                                  path_results=param.path_results,
-                                  neurons_labels=labels,
-                                  debug_mode=debug_mode)
+    best_kmeans_by_cluster, m_cov_sces, \
+    cluster_labels_for_neurons, surrogate_percentiles, significant_sce_clusters = results
 
     if with_cells_in_cluster_seq_sorted:
         data_descr = data_descr + "_seq"
@@ -750,12 +826,12 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
         for k in np.arange(-1, np.max(cluster_labels) + 1):
             e = np.equal(cluster_labels, k)
             nb_k = np.sum(e)
-            if nb_k==0:
+            if nb_k == 0:
                 continue
             cells_indices = np.where(e)[0]
             if with_cells_in_cluster_seq_sorted and (len(cells_indices) > 2):
                 result_ordering = order_spike_nums_by_seq(spike_nums_to_use[cells_indices, :], param,
-                                                                        debug_mode=debug_mode)
+                                                          debug_mode=debug_mode)
                 seq_dict_tmp, ordered_indices, all_best_seq = result_ordering
                 # if a list of ordered_indices, the size of the list is equals to ne number of cells,
                 # each list correspond to the best order with this cell as the first one in the ordered seq
@@ -818,10 +894,12 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                            horizontal_lines_colors=['white'] * len(cluster_horizontal_thresholds),
                            horizontal_lines_sytle="dashed",
                            horizontal_lines_linewidth=[1] * len(cluster_horizontal_thresholds),
-                           vertical_lines=SCE_times,
-                           vertical_lines_colors=['white'] * len(SCE_times),
-                           vertical_lines_sytle="solid",
-                           vertical_lines_linewidth=[0.2] * len(SCE_times),
+                           # vertical_lines=SCE_times,
+                           # vertical_lines_colors=['white'] * len(SCE_times),
+                           # vertical_lines_sytle="solid",
+                           # vertical_lines_linewidth=[0.2] * len(SCE_times),
+                           span_area_coords=[SCE_times],
+                           span_area_colors=['white'],
                            cells_to_highlight=cells_to_highlight,
                            cells_to_highlight_colors=cells_to_highlight_colors,
                            sliding_window_duration=sliding_window_duration,
@@ -833,6 +911,7 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                            SCE_times=SCE_times)
 
         show_co_var_first_matrix(cells_in_peak=np.copy(cellsinpeak), m_sces=m_cov_sces,
+                                 significant_sce_clusters=significant_sce_clusters[n_cluster],
                                  n_clusters=n_cluster, kmeans=best_kmeans_by_cluster[n_cluster],
                                  cluster_labels_for_neurons=cluster_labels_for_neurons[n_cluster],
                                  data_str=data_descr, path_results=param.path_results,
