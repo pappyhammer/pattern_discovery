@@ -754,6 +754,119 @@ def give_stat_one_sce(sce_id, spike_nums_to_use, SCE_times, sliding_window_durat
     return duration_in_frames, max_activity, mean_activity, overall_activity
 
 
+def statistiscal_cell_assemblies_def(sce_clusters_id, sce_clusters_labels, cellsinpeak,
+                                     n_surrogate=1000):
+    """
+    :param sce_clusters_id:
+    :param sce_clusters_labels:
+    :param cellsinpeak:
+    :return:
+    """
+    # Count number of participation to each cluster
+    # CellP means cell positives, and R means ratio (CellR gives for each cell the
+    # percentage of sce during which it's active inside a cluster of SCE.
+    n_cells = len(cellsinpeak)
+    n_clusters = len(sce_clusters_id)
+    n_sces = np.shape(cellsinpeak)[1]
+    cells_p = np.zeros((n_cells, n_clusters))
+    cells_r = np.zeros((n_cells, n_clusters))
+    for i, cluster_id in enumerate(sce_clusters_id):
+        cells_p[:, i] = np.sum(cellsinpeak[:, np.equal(sce_clusters_labels, cluster_id)], axis=1)
+        cells_r[:, i] = cells_p[:, i] / np.sum(np.equal(sce_clusters_labels, cluster_id))
+
+    # Test for statistical significance
+    cells_cl = np.zeros((n_clusters, n_cells), dtype="uint8") # Binary matrix of cell associated to clusters
+
+    for j in np.arange(n_cells):
+        # Random distribution among Clusters
+        r_clr = np.zeros((n_clusters, n_surrogate))
+        # number of random values to apply, look at how many times the cell spikes in a SCE
+        n_rnd = np.sum(cellsinpeak[j, :])
+
+        for l in np.arange(n_surrogate):
+            rand_perm = np.random.permutation(n_sces)
+            rand_perm = rand_perm[:n_rnd]
+            racer = np.zeros(n_sces, dtype="uint8")
+            racer[rand_perm] = 1
+            for i, cluster_id in enumerate(sce_clusters_id):
+                r_clr[i, l] = np.sum(racer[np.equal(sce_clusters_labels, cluster_id)])
+        # sorting r_clr, for each cluster, will sort by ascending number of spikes in a surrogate SCE
+        r_clr = np.sort(r_clr)
+        # / n_clusters must be for the bonferroni correction
+        th_max = r_clr[:, int(n_surrogate * (1 - 0.05 / n_clusters))]
+        # print(f"int(n_surrogate * (1 - 0.05 / n_clusters)) {int(n_surrogate * (1 - 0.05 / n_clusters))}")
+        # print(f"th_max {th_max}")
+        # print(f"cells_p[j, :] {cells_p[j, :]}")
+        for i, cluster_id in enumerate(sce_clusters_id):
+            cells_cl[i, j] = int(cells_p[j, i] > th_max[i])
+
+    cells_with_no_sce_cluster = np.where(np.sum(cells_cl, axis=0) == 0)[0] # Cells not in any cluster
+    cells_with_one_sce_cluster = np.where(np.sum(cells_cl, axis=0) == 1)[0]
+    cells_with_several_sce_cluster = np.where(np.sum(cells_cl, axis=0) >= 2)[0]
+
+    # print(f"cells_cl {cells_cl}")
+    print(f"cells_with_no_sce_cluster {cells_with_no_sce_cluster}")
+    print(f"cells_with_one_sce_cluster {cells_with_one_sce_cluster}")
+    print(f"cells_with_several_sce_cluster {cells_with_several_sce_cluster}")
+
+    # Keep cluster where they participate the most
+    for cell_id in cells_with_several_sce_cluster:
+        index_cl = np.argmax(cells_r[cell_id, :])
+        cells_cl[:, cell_id] = 0
+        cells_cl[index_cl, cell_id] = 1
+
+    c_0 = dict()
+    for i, cluster_id in enumerate(sce_clusters_id):
+        min_cells_nb = 5
+        # keep cells index for clusters with at least 5 cells
+        if len(np.where(cells_cl[i, :])[0]) > min_cells_nb:
+            c_0[cluster_id] = (np.where(cells_cl[i, :])[0])
+
+    # Participation rate to its own cluster
+    cells_r_cl = np.max(cells_r[np.concatenate((cells_with_one_sce_cluster,cells_with_several_sce_cluster)), :], axis=1)
+
+    # Assign sce to groups of cells
+
+    # NCl is the number of significant clusters with more than 5 cells
+    # C0 is a dict, key represent cluster number, and value is an array
+    # of cells index belonging to the cluster
+    n_cl = len(c_0)
+    # Cell count in each cluster
+    r_cl = np.zeros((n_cl, n_sces))
+    p_cl = np.zeros((n_cl, n_sces))
+
+    for i, cells in enumerate(c_0.values()):
+        r_cl[i, :] = np.sum(cellsinpeak[cells, :], axis=0)
+
+    r_cln = np.zeros((n_cl, n_sces))
+
+    for j in np.arange(n_sces):
+        # Random distribution among Clusters
+        r_clr = np.zeros((n_cl, n_surrogate))
+        n_rnd = np.sum(cellsinpeak[:, j])
+
+        for l in np.arange(n_surrogate):
+            rand_perm = np.random.permutation(n_cells)
+            rand_perm = rand_perm[:n_rnd]
+            racer = np.zeros(n_cells, dtype="uint8")
+            racer[rand_perm] = 1
+            for i, cells in enumerate(c_0.values()):
+                r_clr[i, l] = np.sum(racer[cells])
+
+        # sorting r_clr, for each cluster, will sort by ascending number of spikes in a surrogate SCE
+        r_clr = np.sort(r_clr)
+        # / n_clusters must be for the bonferroni correction
+        th_max = r_clr[:, int(n_surrogate * (1 - 0.05 / n_clusters))]
+        # print(f"int(n_surrogate * (1 - 0.05 / n_clusters)) {int(n_surrogate * (1 - 0.05 / n_clusters))}")
+        # print(f"th_max {th_max}")
+        # print(f"cells_p[j, :] {cells_p[j, :]}")
+        for i, cells in enumerate(c_0.values()):
+            p_cl[i, j] = int(r_cl[i, j] > th_max[i])
+        # Normalize (probability)
+        r_cln[:, j] = r_cl[:, j] / np.sum(cellsinpeak[:, j])
+
+
+
 def compute_kmean(neurons_labels, cellsinpeak, n_surrogate, range_n_clusters,
                   fct_to_keep_best_silhouettes=np.mean,
                   debug_mode=False):
@@ -770,6 +883,13 @@ def compute_kmean(neurons_labels, cellsinpeak, n_surrogate, range_n_clusters,
                                                              range_n_clusters=range_n_clusters,
                                                              m_sces=m_cov_sces,
                                                              surrogate_percentile=surrogate_percentile)
+
+
+    for n_cluster in  range_n_clusters:
+        kmeans = best_kmeans_by_cluster[n_cluster]
+        statistiscal_cell_assemblies_def(sce_clusters_id=significant_sce_clusters[n_cluster],
+                                         sce_clusters_labels=kmeans.labels_, cellsinpeak=cellsinpeak)
+
     # will contains as value list of int (corresponding to sce cluster label, -1 if no sce cluster), the len of
     # the list is n_cells
     # So far, a cell belongs to a cluster if the cluster is significant, the cells spikes at least twice in it,
