@@ -34,7 +34,9 @@ class MarkovParameters(p_disc_tools_param.Parameters):
         self.stop_if_twin = stop_if_twin
         # making some change for gitkraken test
 
-def build_mle_transition_dict(spike_nums, param, try_uniformity_method=False, debug_mode=False):
+
+def build_mle_transition_dict(spike_nums, param, sce_times_bool=None,
+                              try_uniformity_method=False, debug_mode=False):
     """
     Maximum Likelihood estimation,
     don't take into account the fact that if a neuron A fire after a neuron B ,
@@ -73,19 +75,22 @@ def build_mle_transition_dict(spike_nums, param, try_uniformity_method=False, de
             original_t = t
             t = np.max((0, t + param.min_duration_intra_seq))
             t_max = np.min((t + param.time_inter_seq, len(spike_nums[0]) - 1))
-
+            times_to_check = np.arange(t, t_max)
             # TODO: do something similar to Robin, to detect events, with percentile
-            # doesn't change anything
-            not_for_now = True
-            if not not_for_now:
-                if param.activity_threshold is not None:
-                    if np.sum(spike_nums[:, t:t_max]) > param.activity_threshold:
-                        print(f'spike_nums[:, t:t_max]) > {param.activity_threshold})')
-                        continue
+            if sce_times_bool is not None:
+                # if > 0, means there is a SCE during that interval, and we don't count it
+                # if np.sum(sce_times_bool[t:t_max]) > 0:
+                #         continue
+
+                # another option is to remove the times of the SCE from the search:
+                times_to_check = times_to_check[sce_times_bool[t:t_max]]
+                if len(times_to_check) == 0:
+                    continue
+
             actual_neurons_spikes = spike_nums[n, :] > 0
             spike_nums[n, actual_neurons_spikes] = 0
 
-            pos = np.where(spike_nums[:, t:t_max])[0]
+            pos = np.where(spike_nums[:, times_to_check])[0]
             # pos = np.unique(pos)
             for p in pos:
                 transition_dict[n, p] = transition_dict[n, p] + spike_rates[p]
@@ -102,19 +107,22 @@ def build_mle_transition_dict(spike_nums, param, try_uniformity_method=False, de
                 t = np.max((0, t + param.min_duration_intra_seq))
                 t_max = np.min((t + param.time_inter_seq, len(spike_nums[0]) - 1))
 
+                times_to_check = np.arange(t, t_max)
                 # TODO: do something similar to Robin, to detect events, with percentile
-                # doesn't change anything
-                not_for_now = True
-                if not not_for_now:
-                    if param.activity_threshold is not None:
-                        if np.sum(spike_nums[:, t:t_max]) > param.activity_threshold:
-                            if debug_mode:
-                                print(f'spike_nums[:, t:t_max]) > {param.activity_threshold})')
-                            continue
+                if sce_times_bool is not None:
+                    # if > 0, means there is a SCE during that interval, and we don't count it
+                    # if np.sum(sce_times_bool[t:t_max]) > 0:
+                    #         continue
+
+                    # another option is to remove the times of the SCE from the search:
+                    times_to_check = times_to_check[sce_times_bool[t:t_max]]
+                    if len(times_to_check) == 0:
+                        continue
+
                 actual_neurons_spikes = spike_nums[n, :] > 0
                 spike_nums[n, actual_neurons_spikes] = 0
 
-                pos = np.where(spike_nums[:, t:t_max])[0]
+                pos = np.where(spike_nums[:, times_to_check])[0]
                 # pos = np.unique(pos)
                 for p in pos:
                     uniform_transition_dict[n, p] = uniform_transition_dict[n, p] + spike_rates[p]
@@ -241,7 +249,7 @@ def bfs(trans_dict, neuron_to_start, param, n_std_for_threshold=0):
     return tree_root
 
 
-def find_sequences(spike_nums, param, try_uniformity_method=False, debug_mode=False):
+def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method=False, debug_mode=False):
     """
 
     :param spike_nums:
@@ -268,7 +276,8 @@ def find_sequences(spike_nums, param, try_uniformity_method=False, debug_mode=Fa
 
     transition_dict = build_mle_transition_dict(spike_nums=spike_nums, param=param,
                                                 try_uniformity_method=try_uniformity_method,
-                                                debug_mode=debug_mode)
+                                                debug_mode=debug_mode,
+                                                sce_times_bool=sce_times_bool)
     # print(f"transition_dict {transition_dict}")
     # len of nb_neurons, each element is a dictionary with each key represent a common seq (neurons tuple, first neurons
     # being the index of the list)
@@ -693,7 +702,7 @@ def order_cells_from_seq_dict(seq_dict, non_ordered_neurons, param, debug_mode=F
     return ordered_neurons
 
 
-def order_spike_nums_by_seq(spike_nums, param, debug_mode=True, reverse_order=False):
+def order_spike_nums_by_seq(spike_nums, param, sce_times_bool=None, debug_mode=True, reverse_order=False):
     """
 
     :param spike_nums:
@@ -711,10 +720,12 @@ def order_spike_nums_by_seq(spike_nums, param, debug_mode=True, reverse_order=Fa
 
     # list_seq_dict
     list_seq_dict, dict_by_len_seq, max_seq_dict = find_sequences(spike_nums=spike_nums, param=param,
-                                                                  debug_mode=debug_mode)
+                                                                  debug_mode=debug_mode,
+                                                                  sce_times_bool=sce_times_bool)
     list_seq_dict_uniform, dict_by_len_seq_uniform, max_seq_dict_uniform = \
         find_sequences(spike_nums=spike_nums, param=param,
-                       try_uniformity_method=True, debug_mode=debug_mode)
+                       try_uniformity_method=True, debug_mode=debug_mode,
+                       sce_times_bool=sce_times_bool)
 
     # list_seq_dict: list of length number of neurons, each elemeent represent a dictionnary containing
     # the sequences beginnning by this neuron
