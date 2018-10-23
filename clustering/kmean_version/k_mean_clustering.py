@@ -14,8 +14,8 @@ from pattern_discovery.seq_solver.markov_way import order_spike_nums_by_seq
 
 
 class CellAssembliesStruct:
-    def __init__(self, cellsinpeak, n_clusters, sce_clusters_id, sce_clusters_labels,
-                 cluster_with_best_silhouette_score, param):
+    def __init__(self, cellsinpeak, n_clusters, sce_clusters_id, sce_clusters_labels, neurons_labels,
+                 cluster_with_best_silhouette_score, param, sliding_window_duration):
         # cellsinpeak shape (n_cells, n_sces)
         self.cellsinpeak = cellsinpeak
         self.param = param
@@ -35,6 +35,8 @@ class CellAssembliesStruct:
         self.n_cells_not_in_cell_assemblies = None
         # novel order to display cells organized by cell assembly cluster, last cells being the one without cell assembly
         self.cells_indices = None
+        # new sce indices
+        self.sce_indices = None
         self.n_sce_in_assembly = None
         self.n_cells_in_single_cell_assembly_sce_cl = None
         self.n_cells_in_multiple_cell_assembly_sce_cl = None
@@ -42,7 +44,7 @@ class CellAssembliesStruct:
         self.activity_threshold = None
         self.data_descr = None
         # neurons_labels are the label to be display for each cell, in the original order (before any clustering)
-        self.neurons_labels = None
+        self.neurons_labels = neurons_labels
         self.sliding_window_duration = sliding_window_duration
 
     def plot_cell_assemblies(self, data_descr, SCE_times, activity_threshold,
@@ -59,11 +61,11 @@ class CellAssembliesStruct:
         outer = gridspec.GridSpec(2, 1, height_ratios=[60, 40])
 
         inner_bottom = gridspec.GridSpecFromSubplotSpec(2, 1,
-                                                     subplot_spec=outer[1], height_ratios=[10, 2])
+                                                        subplot_spec=outer[1], height_ratios=[10, 2])
 
         # clusters display
         inner_top = gridspec.GridSpecFromSubplotSpec(1, 1,
-                                                        subplot_spec=outer[0])
+                                                     subplot_spec=outer[0])
 
         # top is bottom and bottom is top, so the raster is under
         # ax1 contains raster
@@ -77,7 +79,7 @@ class CellAssembliesStruct:
                          with_cells_in_cluster_seq_sorted=with_cells_in_cluster_seq_sorted,
                          sce_times_bool=sce_times_bool)
 
-        self.plot_cells_vs_sce(ax=ax3)
+        self.plot_cells_vs_sce(ax2=ax3)
         # show_co_var_first_matrix(cells_in_peak=np.copy(cellsinpeak), m_sces=m_cov_sces,
         #                          significant_sce_clusters=significant_sce_clusters[n_cluster],
         #                          n_clusters=n_cluster, kmeans=best_kmeans_by_cluster[n_cluster],
@@ -108,12 +110,12 @@ class CellAssembliesStruct:
         cells_group_numbers = []
         if len(self.n_cells_in_cell_assemblies_clusters) > 0:
             cells_group_numbers.extend(self.n_cells_in_cell_assemblies_clusters)
-        if self.n_cells_not_in_cell_assemblies == 0:
+        if self.n_cells_not_in_cell_assemblies > 0:
             cells_group_numbers.append(self.n_cells_not_in_cell_assemblies)
 
         for i, group_size in enumerate(cells_group_numbers):
             if with_cells_in_cluster_seq_sorted and (group_size > 2):
-                to_sort = clustered_spike_nums[start:start+group_size, :]
+                to_sort = clustered_spike_nums[start:start + group_size, :]
                 result_ordering = order_spike_nums_by_seq(to_sort, self.param,
                                                           debug_mode=False,
                                                           sce_times_bool=sce_times_bool)
@@ -123,7 +125,7 @@ class CellAssembliesStruct:
                 if ordered_indices is not None:
                     clustered_spike_nums[start:start + group_size, :] = to_sort[ordered_indices, :]
 
-            if (self.n_cells_not_in_cell_assemblies > 0) and (i == (len(cells_group_numbers)-1)):
+            if (self.n_cells_not_in_cell_assemblies > 0) and (i == (len(cells_group_numbers) - 1)):
                 continue
             if len(self.n_cells_in_cell_assemblies_clusters) == 0:
                 continue
@@ -136,7 +138,7 @@ class CellAssembliesStruct:
 
             start += group_size
 
-            if i < (len(cells_group_numbers)-1):
+            if i < (len(cells_group_numbers) - 1):
                 cluster_horizontal_thresholds.append(start)
 
         if len(cell_labels) > 100:
@@ -180,8 +182,140 @@ class CellAssembliesStruct:
                            axes_list=axes_list,
                            SCE_times=self.SCE_times)
 
-    def plot_cells_vs_sce(self, ax):
-        pass
+    def plot_cells_vs_sce(self, ax2):
+        # ############################
+        # Heatmap cells vs SCE
+        # ############################
+
+        n_cell_assemblies = len(self.n_cells_in_cell_assemblies_clusters)
+
+        cluster_horizontal_thresholds = []
+        cells_to_highlight = []
+        cells_to_highlight_colors = []
+        start = 0
+
+        cells_group_numbers = []
+        if n_cell_assemblies > 0:
+            cells_group_numbers.extend(self.n_cells_in_cell_assemblies_clusters)
+        if self.n_cells_not_in_cell_assemblies > 0:
+            cells_group_numbers.append(self.n_cells_not_in_cell_assemblies)
+
+        for i, group_size in enumerate(cells_group_numbers):
+            if (self.n_cells_not_in_cell_assemblies > 0) and (i == (len(cells_group_numbers) - 1)):
+                continue
+            if len(self.n_cells_in_cell_assemblies_clusters) == 0:
+                continue
+
+            # coloring cell assemblies
+            color = cm.nipy_spectral(float(i + 1) / (len(self.n_cells_in_cell_assemblies_clusters) + 1))
+            cell_indices_to_color = list(np.arange(start, start + group_size))
+            cells_to_highlight.extend(cell_indices_to_color)
+            cells_to_highlight_colors.extend([color] * len(cell_indices_to_color))
+
+            start += group_size
+
+            if i < (len(cells_group_numbers) - 1):
+                cluster_horizontal_thresholds.append(start)
+
+        # print(f"np.min(ordered_n_cells_in_peak) {np.min(ordered_n_cells_in_peak)}")
+        # value to one represent the cells spikes without assembly, then number 2 represent the cell assembly 0, etc...
+        self.cellsinpeak_ordered = self.cellsinpeak_ordered - 2
+        # print(f"np.min(ordered_n_cells_in_peak) {np.min(ordered_n_cells_in_peak)}")
+        list_color = ['black', 'white']
+        bounds = [-2.5, -1.5, -0.5]
+        # bounds = [-1.5, 0.5, 1.5]
+        for i in np.arange(n_cell_assemblies):
+            color = cm.nipy_spectral(float(i + 1) / (n_cell_assemblies + 1))
+            list_color.append(color)
+            bounds.append(i + 0.5)
+        cmap = mpl.colors.ListedColormap(list_color)
+        norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+        sns.heatmap(self.cellsinpeak_ordered, cbar=False, ax=ax2, cmap=cmap, norm=norm)
+        # print(f"len(neurons_ax_labels) {len(neurons_ax_labels)}")
+        # TODO: set the position of labels, right now only one on two are displayed, fontsize should be decreased
+        if self.neurons_labels is not None:
+            ordered_neurons_labels = []
+            for index in self.cells_indices:
+                ordered_neurons_labels.append(self.neurons_labels[index])
+            ax2.set_yticks(np.arange(len(ordered_neurons_labels)) + 0.5)
+            ax2.set_yticklabels(ordered_neurons_labels)
+        else:
+            ax2.set_yticks(np.arange(self.n_cells) + 0.5)
+            ax2.set_yticklabels(self.cells_indices.astype(int))
+
+        if self.n_cells > 100:
+            ax2.yaxis.set_tick_params(labelsize=4)
+        elif self.n_cells > 200:
+            ax2.yaxis.set_tick_params(labelsize=3)
+        elif self.n_cells > 400:
+            ax2.yaxis.set_tick_params(labelsize=2)
+        else:
+            ax2.yaxis.set_tick_params(labelsize=8)
+
+        # creating axis at the top
+        ax_top = ax2.twiny()
+        ax_right = ax2.twinx()
+        ax2.set_frame_on(False)
+        ax_top.set_frame_on(False)
+        ax_top.set_xlim((0, self.n_sces))
+        # ax_top.set_xticks(cluster_x_ticks_coord)
+        # sce clusters labels
+        # ax_top.set_xticklabels(significant_sce_clusters)
+
+        # print(f"nb_cells_by_cluster_of_cells_y_coord {nb_cells_by_cluster_of_cells_y_coord} "
+        #       f"nb_cells_by_cluster_of_cells {nb_cells_by_cluster_of_cells}")
+        ax_right.set_frame_on(False)
+        ax_right.set_ylim((0, self.n_cells))
+        # ax_right.set_yticks(nb_cells_by_cluster_of_cells_y_coord)
+        # clusters labels
+        # ax_right.set_yticklabels(nb_cells_by_cluster_of_cells)
+
+        ax2.set_xticks(np.arange(self.n_sces) + 0.5)
+        plt.setp(ax2.xaxis.get_majorticklabels(), rotation=90)
+        # sce labels
+        ax2.set_xticklabels(self.sce_indices.astype(int))
+        # if len(new_sce_labels) > 100:
+        #     ax2.xaxis.set_tick_params(labelsize=4)
+        # elif len(new_sce_labels) > 200:
+        #     ax2.xaxis.set_tick_params(labelsize=3)
+        # elif len(new_sce_labels) > 400:
+        #     ax2.xaxis.set_tick_params(labelsize=2)
+        # else:
+        #     ax2.xaxis.set_tick_params(labelsize=6)
+        # ax2.hlines(cluster_horizontal_thresholds, start_coord_significant_sce_clusters, np.shape(cells_in_peak)[1],
+        #            color="red", linewidth=1,
+        #            linestyles="dashed")
+        # ax2.vlines([start_coord_significant_sce_clusters] + cluster_vertical_thresholds, 0,
+        #            np.shape(cells_in_peak)[0], color="red", linewidth=1,
+        #            linestyles="dashed")
+        # print(f"n_clusters {n_clusters}, cluster_vertical_thresholds {cluster_vertical_thresholds}")
+        # for index, cluster in enumerate(significant_sce_clusters):
+        #     if cluster not in clusters_coords_dict:
+        #         # print(f"cluster {cluster} with no cells")
+        #         # means no cell has this cluster as main cluster
+        #         continue
+        #     y_bottom, y_top = clusters_coords_dict[cluster]
+        #     x_left = start_coord_significant_sce_clusters if (index == 0) else cluster_vertical_thresholds[index - 1]
+        #     x_right = np.shape(cells_in_peak)[1] if (index == (len(significant_sce_clusters) - 1)) \
+        #         else cluster_vertical_thresholds[index]
+        #     linewidth = 3
+        #     color_border = "white"
+        #     ax2.vlines(x_left, y_bottom, y_top, color=color_border, linewidth=linewidth)
+        #     ax2.vlines(x_right, y_bottom, y_top, color=color_border, linewidth=linewidth)
+        #     ax2.hlines(y_bottom, x_left, x_right, color=color_border, linewidth=linewidth)
+        #     ax2.hlines(y_top, x_left, x_right, color=color_border, linewidth=linewidth)
+
+        # plt.setp(ax2.xaxis.get_majorticklabels(), rotation=90)
+        plt.setp(ax2.yaxis.get_majorticklabels(), rotation=0)
+
+        start = 0
+        for i, cell_group_size in enumerate(self.n_cells_in_cell_assemblies_clusters):
+            color = cm.nipy_spectral(float(i + 1) / (n_cell_assemblies + 1))
+            for index in np.arange(start, (start+cell_group_size)):
+                ax2.get_yticklabels()[index].set_color(color)
+            start += cell_group_size
+
+        ax2.invert_yaxis()
 
 
 # normalized co-variance
@@ -280,7 +414,7 @@ def clusters_on_sce_from_covnorm(cells_in_sce, range_n_clusters, fct_to_keep_bes
     best_kmeans_by_cluster = dict()
     surrogate_percentiles_by_n_cluster = dict()
     # will keep the best silhouette score (depending on the fct_to_keep_best_silhouettes) for each number of cluster
-    best_silhouette_score_by_n_cluster = np.zeros(np.max(range_n_clusters))
+    best_silhouette_score_by_n_cluster = np.zeros(np.max(range_n_clusters)+1)
     for n_clusters in range_n_clusters:
         if debug_mode:
             print(f"n_clusters {n_clusters}")
@@ -590,6 +724,7 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         for i, sce_index in enumerate(np.arange(start, start + nb_k)):
             new_sce_labels[sce_index] = old_pos[i]
         start += nb_k
+
         if (index_k + 1) < len(significant_sce_clusters):
             if index_k == 0:
                 cluster_x_ticks_coord.append((start + start_coord_significant_sce_clusters) / 2)
@@ -597,7 +732,10 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
                 cluster_x_ticks_coord.append((start + cluster_vertical_thresholds[-1]) / 2)
             cluster_vertical_thresholds.append(start)
         else:
-            cluster_x_ticks_coord.append((start + cluster_vertical_thresholds[-1]) / 2)
+            if len(cluster_vertical_thresholds) == 0:
+                cluster_x_ticks_coord.append((start + start_coord_significant_sce_clusters) / 2)
+            else:
+                cluster_x_ticks_coord.append((start + cluster_vertical_thresholds[-1]) / 2)
 
     start = 0
 
@@ -775,6 +913,9 @@ def find_cluster_labels_for_neurons(cells_in_peak, cluster_labels, m_sces, signi
     # going neuron by neuron,
 
     for n, events in enumerate(cells_in_peak):
+        if len(significant_clusters) == 0 :
+            cluster_labels_for_neurons[n] = -1
+            continue
         pos_events = np.where(events)[0]
         # will contains the number of spike in each sce for the neuron n
         max_clusters = np.zeros(len(significant_clusters), dtype="float")
@@ -932,7 +1073,7 @@ def give_stat_one_sce(sce_id, spike_nums_to_use, SCE_times, sliding_window_durat
 
 
 def statistical_cell_assemblies_def(cell_assemblies_struct,
-                                    n_surrogate=1000):
+                                    n_surrogate=1000, debug_mode=True):
     """
     :param sce_clusters_id:
     :param sce_clusters_labels:
@@ -996,9 +1137,10 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
     cells_with_several_sce_cluster = np.where(np.sum(cells_cl, axis=0) >= 2)[0]
 
     # print(f"cells_cl {cells_cl}")
-    print(f"cells_with_no_sce_cluster {cells_with_no_sce_cluster}")
-    print(f"cells_with_one_sce_cluster {cells_with_one_sce_cluster}")
-    print(f"cells_with_several_sce_cluster {cells_with_several_sce_cluster}")
+    if debug_mode:
+        print(f"cells_with_no_sce_cluster {cells_with_no_sce_cluster}")
+        print(f"cells_with_one_sce_cluster {cells_with_one_sce_cluster}")
+        print(f"cells_with_several_sce_cluster {cells_with_several_sce_cluster}")
 
     # Keep cluster where they participate the most
     for cell_id in cells_with_several_sce_cluster:
@@ -1018,7 +1160,7 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
     for i, cluster_id in enumerate(sce_clusters_id):
         min_cells_nb = 2
         cells_in_cluster = np.where(cells_cl[i, :])[0]
-        # keep cells index for clusters with at least 5 cells
+        # keep cells index for clusters with at least min_cells_nb
         if len(cells_in_cluster) >= min_cells_nb:
             map_index_cluster_to_original_cluster_id[len(cell_assemblies_clusters)] = cluster_id
             cell_assemblies_clusters.append(cells_in_cluster)
@@ -1035,9 +1177,11 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
     # C0 is a dict, key represent cluster number, and value is an array
     # of cells index belonging to the cluster
     n_cl = len(cell_assemblies_clusters)
+    if debug_mode:
+        print(f"n_cl {n_cl}")
     # Cell count in each cluster
     r_cl = np.zeros((n_cl, n_sces))
-    p_cl = np.zeros((n_cl, n_sces))  # binary matrix of sce associated to cell assembly clusters
+    p_cl = np.zeros((n_cl, n_sces), dtype="uint8")  # binary matrix of sce associated to cell assembly clusters
 
     for i, cells in enumerate(cell_assemblies_clusters):
         r_cl[i, :] = np.sum(cellsinpeak[cells, :], axis=0)
@@ -1070,13 +1214,16 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
             p_cl[i, j] = int(r_cl[i, j] > th_max[i])
         # Normalize (probability)
         r_cln[:, j] = r_cl[:, j] / np.sum(cellsinpeak[:, j])
-    print(f"p_cl {p_cl}")
+    if debug_mode:
+        print(f"np.sum(p_cl, axis=1) {np.sum(p_cl, axis=1)}")
 
     ############################################
     # #### variables for later display purposes
     ############################################
     # give the original cell index
     cells_indices = np.zeros(n_cells, dtype="uint16")
+    # give the original sce index
+    sce_indices = np.zeros(n_sces, dtype="uint16")
     # give the number of sce in the no-assembly-sce, single-assembly and multiple-assembly groups respectively
     n_sce_in_assembly = np.zeros(3, dtype="uint16")
     # contains the nb of cells in each cell assemblie cluster
@@ -1108,46 +1255,71 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
     start = 0
     sce_still_to_organized = np.arange(n_sces)
     no_assembly_sce = np.where(np.sum(p_cl, axis=0) == 0)[0]
-    cellsinpeak_ordered[:, start + (start + len(no_assembly_sce))] = cellsinpeak[:, no_assembly_sce]
+    if debug_mode:
+        print(f"len(no_assembly_sce) {len(no_assembly_sce)}, "
+              f"no_assembly_sce {no_assembly_sce}")
+    cellsinpeak_ordered[:, start:(start + len(no_assembly_sce))] = cellsinpeak[:, no_assembly_sce]
+    sce_indices[start:(start + len(no_assembly_sce))] = no_assembly_sce
     start += len(no_assembly_sce)
     n_sce_in_assembly[0] = len(no_assembly_sce)
     sce_still_to_organized = np.setdiff1d(sce_still_to_organized, no_assembly_sce)
 
+
     # then those sces associated to one cell assembly
     # and we organize sces among them as sce clusters in which the cell assemblie belongs
     single_assembly_sce = np.where(np.sum(p_cl, axis=0) == 1)[0]
+
+    if debug_mode:
+        print(f"len(single_assembly_sce) {len(single_assembly_sce)}, "
+              f"single_assembly_sce {single_assembly_sce}")
     if len(single_assembly_sce) > 0:
         # putting them in the same order as cell assemblies
         sce_already_organized = np.zeros(0, dtype="uint16")
         for cluster_id in np.arange(len(cell_assemblies_clusters)):
             # sce index that are part of this cluster
-            sces_in_cluster = p_cl[cluster_id, :]
+            sces_in_cluster = np.where(p_cl[cluster_id, :])[0]
             # now we check which ones are indeed in the single_assembly_sce group
-            sces_in_cluster = np.setdiff1d(sces_in_cluster, single_assembly_sce)
+            sces_in_cluster = (np.intersect1d(sces_in_cluster, single_assembly_sce)).astype(int)
+            # print(f"np.intersect1d(sces_in_cluster, sce_already_organized) "
+            #       f"{np.intersect1d(sces_in_cluster, sce_already_organized)}")
             if len(sces_in_cluster) > 0:
-                cellsinpeak_ordered[:, start + (start + len(sces_in_cluster))] = cellsinpeak[:, sces_in_cluster]
+                cellsinpeak_ordered[:, start:(start + len(sces_in_cluster))] = cellsinpeak[:, sces_in_cluster]
+                sce_indices[start:(start + len(sces_in_cluster))] = sces_in_cluster
                 start += len(sces_in_cluster)
                 n_sce_in_assembly[1] += len(sces_in_cluster)
                 n_cells_in_single_cell_assembly_sce_cl.append(len(sces_in_cluster))
                 sce_already_organized = np.concatenate((sce_already_organized, sces_in_cluster))
+        # print(f"np.setdiff1d(single_assembly_sce, sce_already_organized : "
+        #       f"{np.setdiff1d(single_assembly_sce, sce_already_organized)}")
         sce_still_to_organized = np.setdiff1d(sce_still_to_organized, sce_already_organized)
 
     # then those sces associated to multiple cell assembly
     # and we organize sces among them as sce clusters in which the cell assemblie belongs
     multiple_assembly_sce = np.where(np.sum(p_cl, axis=0) > 1)[0]
+    if debug_mode:
+        print(f"len(multiple_assembly_sce) {len(multiple_assembly_sce)}, "
+              f"multiple_assembly_sce {multiple_assembly_sce}")
     if len(multiple_assembly_sce) > 0:
         sce_already_organized = np.zeros(0, dtype="uint16")
         for cluster_id in np.arange(len(cell_assemblies_clusters)):
             # sce index that are part of this cluster
-            sces_in_cluster = p_cl[cluster_id, :]
-            # now we check which ones are indeed in the single_assembly_sce group
-            sces_in_cluster = np.setdiff1d(sces_in_cluster, multiple_assembly_sce)
+            sces_in_cluster = np.where(p_cl[cluster_id, :])[0]
+            # now we check which ones are indeed in the multiple_assembly_sce group
+            sces_in_cluster = (np.intersect1d(sces_in_cluster, multiple_assembly_sce)).astype(int)
+            # because they are in multiple cell assemblies, we remove them if they have already been added to a cell
+            # assembly cluster for ordering
+            sces_in_cluster = (np.setdiff1d(sces_in_cluster, sce_already_organized)).astype(int)
+            # print(f"np.intersect1d(sces_in_cluster, sce_already_organized) "
+            #       f"{np.intersect1d(sces_in_cluster, sce_already_organized)}")
             if len(sces_in_cluster) > 0:
-                cellsinpeak_ordered[:, start + (start + len(sces_in_cluster))] = cellsinpeak[:, sces_in_cluster]
+                cellsinpeak_ordered[:, start:(start + len(sces_in_cluster))] = cellsinpeak[:, sces_in_cluster]
+                sce_indices[start:(start + len(sces_in_cluster))] = sces_in_cluster
                 start += len(sces_in_cluster)
                 n_sce_in_assembly[2] += len(sces_in_cluster)
                 n_cells_in_multiple_cell_assembly_sce_cl.append(len(sces_in_cluster))
                 sce_already_organized = np.concatenate((sce_already_organized, sces_in_cluster))
+        # print(f"np.setdiff1d(multiple_assembly_sce, sce_already_organized : "
+        #       f"{np.setdiff1d(multiple_assembly_sce, sce_already_organized)}")
         sce_still_to_organized = np.setdiff1d(sce_still_to_organized, sce_already_organized)
 
     if len(sce_still_to_organized) > 0:
@@ -1157,12 +1329,14 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
     cas.n_cells_in_cell_assemblies_clusters = n_cells_in_cell_assemblies_clusters
     cas.n_cells_not_in_cell_assemblies = cas.n_cells - np.sum(n_cells_in_cell_assemblies_clusters)
     cas.cells_indices = cells_indices
+    cas.sce_indices = sce_indices
     cas.n_sce_in_assembly = n_sce_in_assembly
     cas.n_cells_in_single_cell_assembly_sce_cl = n_cells_in_single_cell_assembly_sce_cl
     cas.n_cells_in_multiple_cell_assembly_sce_cl = n_cells_in_multiple_cell_assembly_sce_cl
 
 
 def compute_kmean(neurons_labels, cellsinpeak, n_surrogate, range_n_clusters, param,
+                  sliding_window_duration,
                   fct_to_keep_best_silhouettes=np.mean,
                   debug_mode=False):
     best_kmeans_by_cluster, m_cov_sces, surrogate_percentile, cluster_with_best_silhouette_score = \
@@ -1186,7 +1360,8 @@ def compute_kmean(neurons_labels, cellsinpeak, n_surrogate, range_n_clusters, pa
         cas = CellAssembliesStruct(sce_clusters_labels=kmeans.labels_, cellsinpeak=cellsinpeak,
                                    sce_clusters_id=significant_sce_clusters[n_cluster], n_clusters=n_cluster,
                                    cluster_with_best_silhouette_score=cluster_with_best_silhouette_score,
-                                   param=param)
+                                   param=param, neurons_labels=neurons_labels,
+                                   sliding_window_duration=sliding_window_duration)
         statistical_cell_assemblies_def(cell_assemblies_struct=cas)
         cell_assemblies_struct_dict[n_cluster] = cas
 
@@ -1228,7 +1403,8 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                             n_surrogate=n_surrogate_k_mean, param=param,
                             range_n_clusters=range_n_clusters_k_mean,
                             fct_to_keep_best_silhouettes=np.mean,
-                            debug_mode=False)
+                            debug_mode=False,
+                            sliding_window_duration=sliding_window_duration)
 
     best_kmeans_by_cluster, m_cov_sces, \
     cluster_labels_for_neurons, surrogate_percentiles, significant_sce_clusters, \
@@ -1243,7 +1419,7 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
         cas = cas_dict[n_cluster]
         cas.neurons_labels = labels
         cas.sliding_window_duration = sliding_window_duration
-        cas.plot_cell_assemblies(data_descr=data_descr, spike_nums_to_use=spike_nums_to_use,
+        cas.plot_cell_assemblies(data_descr=data_descr, spike_nums=spike_nums_to_use,
                                  SCE_times=SCE_times, activity_threshold=activity_threshold,
                                  with_cells_in_cluster_seq_sorted=with_cells_in_cluster_seq_sorted,
                                  sce_times_bool=sce_times_bool)

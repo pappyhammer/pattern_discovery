@@ -283,6 +283,7 @@ def detect_sce_with_sliding_window(spike_nums, window_duration, perc_threshold=9
                 if sum_value > activity_threshold:
                     # then a new SCE start right after the old one
                     start_sce = t
+                    cells_in_sce_so_far = np.zeros(n_cells, dtype="bool")
                     if no_redundancy:
                         # keeping only cells spiking at time t, as we're gonna shift of one on the next step
                         sum_spikes = np.sum(spike_nums[:, t])
