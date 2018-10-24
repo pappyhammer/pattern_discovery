@@ -46,6 +46,10 @@ class CellAssembliesStruct:
         # neurons_labels are the label to be display for each cell, in the original order (before any clustering)
         self.neurons_labels = neurons_labels
         self.sliding_window_duration = sliding_window_duration
+        # key will be the cell assembly index (such as displayed) and the value is a list of list of 2 elements (first and
+        # last sce index of each sce cluster part of this assembly)
+        # used to disply lines around clusters in the heatmap
+        self.sces_in_cell_assemblies_clusters = None
 
     def plot_cell_assemblies(self, data_descr, SCE_times, activity_threshold,
                              spike_nums, sce_times_bool=None,
@@ -99,7 +103,11 @@ class CellAssembliesStruct:
         # this section will order the spike_nums for display purpose
         clustered_spike_nums = np.copy(spike_nums)
 
-        cell_labels = self.neurons_labels[self.cells_indices]
+
+
+        cell_labels = []
+        for index in self.cells_indices:
+            cell_labels.append(self.neurons_labels[index])
         cluster_horizontal_thresholds = []
         cells_to_highlight = []
         cells_to_highlight_colors = []
@@ -190,8 +198,9 @@ class CellAssembliesStruct:
         n_cell_assemblies = len(self.n_cells_in_cell_assemblies_clusters)
 
         cluster_horizontal_thresholds = []
-        cells_to_highlight = []
-        cells_to_highlight_colors = []
+        nb_cells_by_cell_ass_cluster_y_coord = []
+        # clusters labels
+        nb_cells_by_cell_ass_cluster = []
         start = 0
 
         cells_group_numbers = []
@@ -200,26 +209,35 @@ class CellAssembliesStruct:
         if self.n_cells_not_in_cell_assemblies > 0:
             cells_group_numbers.append(self.n_cells_not_in_cell_assemblies)
 
-        for i, group_size in enumerate(cells_group_numbers):
-            if (self.n_cells_not_in_cell_assemblies > 0) and (i == (len(cells_group_numbers) - 1)):
+        for cell_group_id, group_size in enumerate(cells_group_numbers):
+            # print(f"cell_group_id {cell_group_id}, group_size {group_size}")
+            if (self.n_cells_not_in_cell_assemblies > 0) and (cell_group_id == (len(cells_group_numbers) - 1)):
+                nb_cells_by_cell_ass_cluster_y_coord.append((start + self.n_cells) / 2)
+                nb_cells_by_cell_ass_cluster.append(self.n_cells_not_in_cell_assemblies)
                 continue
             if len(self.n_cells_in_cell_assemblies_clusters) == 0:
                 continue
 
-            # coloring cell assemblies
-            color = cm.nipy_spectral(float(i + 1) / (len(self.n_cells_in_cell_assemblies_clusters) + 1))
-            cell_indices_to_color = list(np.arange(start, start + group_size))
-            cells_to_highlight.extend(cell_indices_to_color)
-            cells_to_highlight_colors.extend([color] * len(cell_indices_to_color))
+            nb_cells_by_cell_ass_cluster_y_coord.append(start + (group_size / 2))
+            nb_cells_by_cell_ass_cluster.append(group_size)
+
+            range_group = np.arange(start, start+group_size)
+            for cell_id in range_group:
+                spikes_index = np.where(self.cellsinpeak_ordered[cell_id, :])[0]
+                # keeping only spikes that are part of sce belonging to cell assemblies
+                spikes_index = spikes_index[spikes_index > self.n_sce_in_assembly[0]]
+                # K +2 to avoid zero and one, and at the end we will substract 2
+                self.cellsinpeak_ordered[cell_id, spikes_index] = cell_group_id + 2
 
             start += group_size
 
-            if i < (len(cells_group_numbers) - 1):
+            if cell_group_id < (len(cells_group_numbers) - 1):
                 cluster_horizontal_thresholds.append(start)
 
         # print(f"np.min(ordered_n_cells_in_peak) {np.min(ordered_n_cells_in_peak)}")
         # value to one represent the cells spikes without assembly, then number 2 represent the cell assembly 0, etc...
         self.cellsinpeak_ordered = self.cellsinpeak_ordered - 2
+        # print(f"self.cellsinpeak_ordered {self.cellsinpeak_ordered}")
         # print(f"np.min(ordered_n_cells_in_peak) {np.min(ordered_n_cells_in_peak)}")
         list_color = ['black', 'white']
         bounds = [-2.5, -1.5, -0.5]
@@ -230,9 +248,9 @@ class CellAssembliesStruct:
             bounds.append(i + 0.5)
         cmap = mpl.colors.ListedColormap(list_color)
         norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
-        sns.heatmap(self.cellsinpeak_ordered, cbar=False, ax=ax2, cmap=cmap, norm=norm)
-        # print(f"len(neurons_ax_labels) {len(neurons_ax_labels)}")
-        # TODO: set the position of labels, right now only one on two are displayed, fontsize should be decreased
+        # rasterized=True used to remove the grid
+        sns.heatmap(self.cellsinpeak_ordered, cbar=False, ax=ax2, cmap=cmap, norm=norm, rasterized=True)
+
         if self.neurons_labels is not None:
             ordered_neurons_labels = []
             for index in self.cells_indices:
@@ -244,21 +262,21 @@ class CellAssembliesStruct:
             ax2.set_yticklabels(self.cells_indices.astype(int))
 
         if self.n_cells > 100:
-            ax2.yaxis.set_tick_params(labelsize=4)
-        elif self.n_cells > 200:
             ax2.yaxis.set_tick_params(labelsize=3)
-        elif self.n_cells > 400:
+        elif self.n_cells > 200:
             ax2.yaxis.set_tick_params(labelsize=2)
+        elif self.n_cells > 400:
+            ax2.yaxis.set_tick_params(labelsize=1)
         else:
-            ax2.yaxis.set_tick_params(labelsize=8)
+            ax2.yaxis.set_tick_params(labelsize=4)
 
         # creating axis at the top
-        ax_top = ax2.twiny()
+        # ax_top = ax2.twiny()
         ax_right = ax2.twinx()
         ax2.set_frame_on(False)
-        ax_top.set_frame_on(False)
-        ax_top.set_xlim((0, self.n_sces))
-        # ax_top.set_xticks(cluster_x_ticks_coord)
+        # ax_top.set_frame_on(False)
+        # ax_top.set_xlim((0, self.n_sces))
+        # ax_top.set_xticks(cluster_sce_x_ticks_coord)
         # sce clusters labels
         # ax_top.set_xticklabels(significant_sce_clusters)
 
@@ -266,44 +284,47 @@ class CellAssembliesStruct:
         #       f"nb_cells_by_cluster_of_cells {nb_cells_by_cluster_of_cells}")
         ax_right.set_frame_on(False)
         ax_right.set_ylim((0, self.n_cells))
-        # ax_right.set_yticks(nb_cells_by_cluster_of_cells_y_coord)
+        ax_right.set_yticks(nb_cells_by_cell_ass_cluster_y_coord)
         # clusters labels
-        # ax_right.set_yticklabels(nb_cells_by_cluster_of_cells)
+        ax_right.set_yticklabels(nb_cells_by_cell_ass_cluster)
 
         ax2.set_xticks(np.arange(self.n_sces) + 0.5)
         plt.setp(ax2.xaxis.get_majorticklabels(), rotation=90)
         # sce labels
         ax2.set_xticklabels(self.sce_indices.astype(int))
-        # if len(new_sce_labels) > 100:
-        #     ax2.xaxis.set_tick_params(labelsize=4)
-        # elif len(new_sce_labels) > 200:
-        #     ax2.xaxis.set_tick_params(labelsize=3)
-        # elif len(new_sce_labels) > 400:
-        #     ax2.xaxis.set_tick_params(labelsize=2)
-        # else:
-        #     ax2.xaxis.set_tick_params(labelsize=6)
-        # ax2.hlines(cluster_horizontal_thresholds, start_coord_significant_sce_clusters, np.shape(cells_in_peak)[1],
-        #            color="red", linewidth=1,
+        if self.n_sces > 100:
+            ax2.xaxis.set_tick_params(labelsize=3)
+        elif self.n_sces > 200:
+            ax2.xaxis.set_tick_params(labelsize=2)
+        elif self.n_sces > 400:
+            ax2.xaxis.set_tick_params(labelsize=1)
+        else:
+            ax2.xaxis.set_tick_params(labelsize=4)
+        # horizontal lines showing the border between cell assemblies clusters, not so necessary as they are colored
+        # ax2.hlines(cluster_horizontal_thresholds, self.n_sce_in_assembly[0], self.n_sces,
+        #            color="white", linewidth=1,
         #            linestyles="dashed")
-        # ax2.vlines([start_coord_significant_sce_clusters] + cluster_vertical_thresholds, 0,
-        #            np.shape(cells_in_peak)[0], color="red", linewidth=1,
-        #            linestyles="dashed")
-        # print(f"n_clusters {n_clusters}, cluster_vertical_thresholds {cluster_vertical_thresholds}")
-        # for index, cluster in enumerate(significant_sce_clusters):
-        #     if cluster not in clusters_coords_dict:
-        #         # print(f"cluster {cluster} with no cells")
-        #         # means no cell has this cluster as main cluster
-        #         continue
-        #     y_bottom, y_top = clusters_coords_dict[cluster]
-        #     x_left = start_coord_significant_sce_clusters if (index == 0) else cluster_vertical_thresholds[index - 1]
-        #     x_right = np.shape(cells_in_peak)[1] if (index == (len(significant_sce_clusters) - 1)) \
-        #         else cluster_vertical_thresholds[index]
-        #     linewidth = 3
-        #     color_border = "white"
-        #     ax2.vlines(x_left, y_bottom, y_top, color=color_border, linewidth=linewidth)
-        #     ax2.vlines(x_right, y_bottom, y_top, color=color_border, linewidth=linewidth)
-        #     ax2.hlines(y_bottom, x_left, x_right, color=color_border, linewidth=linewidth)
-        #     ax2.hlines(y_top, x_left, x_right, color=color_border, linewidth=linewidth)
+        ax2.vlines([self.n_sce_in_assembly[0], self.n_sce_in_assembly[0]+self.n_sce_in_assembly[1]], 0,
+                   self.n_cells - self.n_cells_not_in_cell_assemblies, color="white", linewidth=2,
+                   linestyles="dashed")
+        start = 0
+        for index, group_size in enumerate(self.n_cells_in_cell_assemblies_clusters):
+            if index not in self.sces_in_cell_assemblies_clusters:
+                print(f"Something's wrong: {index} not in self.sces_in_cell_assemblies_clusters")
+                continue
+            sces_clusters_borders = self.sces_in_cell_assemblies_clusters[index]
+            for sces_borders in sces_clusters_borders:
+                y_bottom = start
+                y_top = start + group_size
+                x_left = sces_borders[0]
+                x_right = sces_borders[1]
+                linewidth = 2
+                color_border = "white"
+                ax2.vlines(x_left, y_bottom, y_top, color=color_border, linewidth=linewidth)
+                ax2.vlines(x_right, y_bottom, y_top, color=color_border, linewidth=linewidth)
+                ax2.hlines(y_bottom, x_left, x_right, color=color_border, linewidth=linewidth)
+                ax2.hlines(y_top, x_left, x_right, color=color_border, linewidth=linewidth)
+            start += group_size
 
         # plt.setp(ax2.xaxis.get_majorticklabels(), rotation=90)
         plt.setp(ax2.yaxis.get_majorticklabels(), rotation=0)
@@ -403,9 +424,6 @@ def clusters_on_sce_from_covnorm(cells_in_sce, range_n_clusters, fct_to_keep_bes
     # key is the nth clusters as int, value is a list of list of SCE
     # (each list representing a cluster, so we have as many list as the number of cluster wanted)
     dict_best_clusters = dict()
-    significant_sce_clusters = dict()
-    # the key is the nth cluster (int) and the value is a list of cluster number for each cell
-    cluster_labels_for_neurons = dict()
     for i in range_n_clusters:
         dict_best_clusters[i] = []
 
@@ -416,16 +434,14 @@ def clusters_on_sce_from_covnorm(cells_in_sce, range_n_clusters, fct_to_keep_bes
     # will keep the best silhouette score (depending on the fct_to_keep_best_silhouettes) for each number of cluster
     best_silhouette_score_by_n_cluster = np.zeros(np.max(range_n_clusters)+1)
     for n_clusters in range_n_clusters:
-        if debug_mode:
-            print(f"n_clusters {n_clusters}")
+        # if debug_mode:
+        print(f"kmeans {n_clusters} clusters")
 
         surrogate_percentile = surrogate_clustering(m_sces=m_sces, n_clusters=n_clusters,
                                                     n_surrogate=n_surrogate,
                                                     n_trials=100,
                                                     fct_to_keep_best_silhouettes=fct_to_keep_best_silhouettes,
                                                     perc_threshold=perc_threshold_for_surrogate, debug_mode=True)
-        if debug_mode:
-            print(f"surrogate_percentile {surrogate_percentile}")
 
         best_kmeans = None
         best_silhouettes = 0
@@ -452,30 +468,6 @@ def clusters_on_sce_from_covnorm(cells_in_sce, range_n_clusters, fct_to_keep_bes
 
         best_kmeans_by_cluster[n_clusters] = best_kmeans
         surrogate_percentiles_by_n_cluster[n_clusters] = surrogate_percentile
-
-        # cluster_labels = best_kmeans.labels_
-        # significant_sce_clusters[n_clusters] = []
-        #
-        # # keeping only the significant clusters
-        # sample_silhouette_values = metrics.silhouette_samples(m_sces, cluster_labels, metric='euclidean')
-        #
-        # for cluster_id in range(n_clusters):
-        #     # Aggregate the silhouette scores for samples belonging to
-        #     # cluster i
-        #     ith_cluster_silhouette_values = \
-        #         sample_silhouette_values[cluster_labels == cluster_id]
-        #     avg_ith_cluster_silhouette_values = np.mean(ith_cluster_silhouette_values)
-        #     if avg_ith_cluster_silhouette_values > surrogate_percentiles:
-        #         # then we keep it
-        #         significant_sce_clusters[n_clusters].append(cluster_id)
-        # significant_sce_clusters[n_clusters] = np.array(significant_sce_clusters[n_clusters])
-
-        # TODO: only keeping clusters of SCE which are significant and
-        # and creating cluster_labels, which will put SCE without cluster to -1, and resdistributed other from 0
-        # cluster_labels_for_neurons[n_clusters] = \
-        #     find_cluster_labels_for_neurons(cells_in_peak=cells_in_sce,
-        #                                     cluster_labels=cluster_labels, m_sces=m_sces,
-        #                                     significant_clusters=significant_sce_clusters[n_clusters])
 
     return best_kmeans_by_cluster, m_sces, surrogate_percentiles_by_n_cluster, \
            np.argmax(best_silhouette_score_by_n_cluster)
@@ -796,7 +788,8 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
         bounds = [-0.5, 0.5, 1.5, 2.5]
 
     norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
-    sns.heatmap(ordered_n_cells_in_peak, cbar=False, ax=ax2, cmap=cmap, norm=norm)
+    # rasterized=True used to remove the grid
+    sns.heatmap(ordered_n_cells_in_peak, cbar=False, ax=ax2, cmap=cmap, norm=norm, rasterized=True)
     # print(f"len(neurons_ax_labels) {len(neurons_ax_labels)}")
     # TODO: set the position of labels, right now only one on two are displayed, fontsize should be decreased
     if neurons_labels is not None:
@@ -1073,7 +1066,7 @@ def give_stat_one_sce(sce_id, spike_nums_to_use, SCE_times, sliding_window_durat
 
 
 def statistical_cell_assemblies_def(cell_assemblies_struct,
-                                    n_surrogate=1000, debug_mode=True):
+                                    n_surrogate=1000, debug_mode=False):
     """
     :param sce_clusters_id:
     :param sce_clusters_labels:
@@ -1232,8 +1225,11 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
     n_cells_in_single_cell_assembly_sce_cl = []
     # contains the nb of cells in sce multiple cell assembly cluster
     n_cells_in_multiple_cell_assembly_sce_cl = []
+    # key will be the cell assembly index (such as displayed) and the value is a list of list of 2 elements (first and
+    # last sce index of each sce cluster part of this assembly)
+    sces_in_cell_assemblies_clusters = dict()
 
-    cellsinpeak_ordered = np.zeros((n_cells, n_sces), dtype="uint8")
+    cellsinpeak_ordered = np.zeros((n_cells, n_sces), dtype="int16")
 
     # #### ordering cells first   #####
     all_cells = np.arange(n_cells)
@@ -1285,6 +1281,10 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
             if len(sces_in_cluster) > 0:
                 cellsinpeak_ordered[:, start:(start + len(sces_in_cluster))] = cellsinpeak[:, sces_in_cluster]
                 sce_indices[start:(start + len(sces_in_cluster))] = sces_in_cluster
+                if cluster_id not in sces_in_cell_assemblies_clusters:
+                    sces_in_cell_assemblies_clusters[cluster_id] = []
+                sces_in_cell_assemblies_clusters[cluster_id].append((start, (start + len(sces_in_cluster))))
+
                 start += len(sces_in_cluster)
                 n_sce_in_assembly[1] += len(sces_in_cluster)
                 n_cells_in_single_cell_assembly_sce_cl.append(len(sces_in_cluster))
@@ -1314,6 +1314,9 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
             if len(sces_in_cluster) > 0:
                 cellsinpeak_ordered[:, start:(start + len(sces_in_cluster))] = cellsinpeak[:, sces_in_cluster]
                 sce_indices[start:(start + len(sces_in_cluster))] = sces_in_cluster
+                # if cluster_id not in sces_in_cell_assemblies_clusters:
+                #     sces_in_cell_assemblies_clusters[cluster_id] = []
+                # sces_in_cell_assemblies_clusters[cluster_id].append((start, (start + len(sces_in_cluster))))
                 start += len(sces_in_cluster)
                 n_sce_in_assembly[2] += len(sces_in_cluster)
                 n_cells_in_multiple_cell_assembly_sce_cl.append(len(sces_in_cluster))
@@ -1330,6 +1333,7 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
     cas.n_cells_not_in_cell_assemblies = cas.n_cells - np.sum(n_cells_in_cell_assemblies_clusters)
     cas.cells_indices = cells_indices
     cas.sce_indices = sce_indices
+    cas.sces_in_cell_assemblies_clusters = sces_in_cell_assemblies_clusters
     cas.n_sce_in_assembly = n_sce_in_assembly
     cas.n_cells_in_single_cell_assembly_sce_cl = n_cells_in_single_cell_assembly_sce_cl
     cas.n_cells_in_multiple_cell_assembly_sce_cl = n_cells_in_multiple_cell_assembly_sce_cl
@@ -1337,7 +1341,7 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
 
 def compute_kmean(neurons_labels, cellsinpeak, n_surrogate, range_n_clusters, param,
                   sliding_window_duration,
-                  fct_to_keep_best_silhouettes=np.mean,
+                  fct_to_keep_best_silhouettes=np.mean, keep_only_the_best=True,
                   debug_mode=False):
     best_kmeans_by_cluster, m_cov_sces, surrogate_percentile, cluster_with_best_silhouette_score = \
         clusters_on_sce_from_covnorm(cells_in_sce=cellsinpeak,
@@ -1346,6 +1350,10 @@ def compute_kmean(neurons_labels, cellsinpeak, n_surrogate, range_n_clusters, pa
                                      range_n_clusters=range_n_clusters,
                                      neurons_labels=neurons_labels,
                                      debug_mode=debug_mode)
+
+    range_n_clusters_original = range_n_clusters
+    if keep_only_the_best:
+        range_n_clusters = [cluster_with_best_silhouette_score]
 
     # give the indices of the sce cluster for whom the silhouette is > to the 95th percentile from n_surrogate
     # surrogates
@@ -1391,7 +1399,7 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                                                    n_surrogate_activity_threshold,
                                                    with_shuffling=True,
                                                    sce_times_bool=None,
-                                                   debug_mode=False,
+                                                   debug_mode=False, keep_only_the_best=True,
                                                    with_cells_in_cluster_seq_sorted=False):
     # perc_threshold is the number of percentile choosen to determine the threshold
     #
@@ -1403,7 +1411,7 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                             n_surrogate=n_surrogate_k_mean, param=param,
                             range_n_clusters=range_n_clusters_k_mean,
                             fct_to_keep_best_silhouettes=np.mean,
-                            debug_mode=False,
+                            debug_mode=False, keep_only_the_best=keep_only_the_best,
                             sliding_window_duration=sliding_window_duration)
 
     best_kmeans_by_cluster, m_cov_sces, \
@@ -1412,6 +1420,10 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
 
     if with_cells_in_cluster_seq_sorted:
         data_descr = data_descr + "_seq"
+
+    if keep_only_the_best:
+        print(f"best number of clusters: {cluster_with_best_silhouette_score}")
+        range_n_clusters_k_mean = [cluster_with_best_silhouette_score]
 
     for n_cluster in range_n_clusters_k_mean:
         if n_cluster == cluster_with_best_silhouette_score:

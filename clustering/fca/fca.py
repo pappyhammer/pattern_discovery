@@ -19,8 +19,9 @@ from pattern_discovery.display.raster import plot_sum_active_clusters
 from pattern_discovery.display.misc import plot_hist_clusters_by_sce
 from pattern_discovery.seq_solver.markov_way import order_spike_nums_by_seq
 
+
 class ClusterTree:
-    def __init__(self, clusters_lists, n_cells, max_scale_value, non_significant_color = "black",
+    def __init__(self, clusters_lists, n_cells, max_scale_value, non_significant_color="black",
                  merge_history_list=None, father=None):
         # if clusters_lists is a list, it should contain 2 elements
         self.clusters_lists = clusters_lists
@@ -63,7 +64,7 @@ class ClusterTree:
 
         self.color = non_significant_color
 
-            # each tree can have either no child, or 2 childs
+        # each tree can have either no child, or 2 childs
         if isinstance(clusters_lists, int) or isinstance(clusters_lists, np.int64):
             self.no_child = True
             self.cell_id = clusters_lists
@@ -83,7 +84,7 @@ class ClusterTree:
             merge_history = self.merge_history_list[index_hist]
             del self.merge_history_list[index_hist]
             self.scale_value = merge_history[2]
-            nb_elements=0
+            nb_elements = 0
 
             if isinstance(first_child_clusters, int) or isinstance(first_child_clusters, np.int64):
                 self.first_child = ClusterTree(clusters_lists=first_child_clusters, max_scale_value=max_scale_value,
@@ -91,7 +92,7 @@ class ClusterTree:
                                                non_significant_color=non_significant_color)
             else:
                 nb_elements = self.nb_cells_in_list(first_child_clusters)
-                self.first_child = ClusterTree(clusters_lists=first_child_clusters,n_cells=n_cells,
+                self.first_child = ClusterTree(clusters_lists=first_child_clusters, n_cells=n_cells,
                                                max_scale_value=max_scale_value,
                                                merge_history_list=self.merge_history_list,
                                                father=self,
@@ -99,16 +100,16 @@ class ClusterTree:
 
             if isinstance(second_child_clusters, int) or isinstance(second_child_clusters, np.int64):
                 self.second_child = ClusterTree(clusters_lists=second_child_clusters, father=self,
-                                               max_scale_value=max_scale_value,
-                                               n_cells=n_cells,
-                                               non_significant_color=non_significant_color)
+                                                max_scale_value=max_scale_value,
+                                                n_cells=n_cells,
+                                                non_significant_color=non_significant_color)
             else:
                 # nb_elements = self.nb_cells_in_list(second_child_clusters)
                 self.second_child = ClusterTree(clusters_lists=second_child_clusters, n_cells=n_cells,
                                                 max_scale_value=max_scale_value,
                                                 merge_history_list=self.merge_history_list,
                                                 father=self,
-                                               non_significant_color=non_significant_color)
+                                                non_significant_color=non_significant_color)
         # things that need to be done after all childs have been created
         if self.father is None:
             nb_intersections = self.get_nb_intersections()
@@ -119,10 +120,9 @@ class ClusterTree:
 
             self.set_colors(n_clusters=n_clusters)
 
-
     def set_colors(self, n_clusters):
         if self.cluster_nb is not None:
-            self.color = cm.nipy_spectral(float(self.cluster_nb + 1) / (n_clusters+1))
+            self.color = cm.nipy_spectral(float(self.cluster_nb + 1) / (n_clusters + 1))
         if not self.no_child:
             self.first_child.set_colors(n_clusters)
             self.second_child.set_colors(n_clusters)
@@ -143,8 +143,6 @@ class ClusterTree:
 
         self.first_child.compute_clusters()
         self.second_child.compute_clusters()
-
-
 
     def get_cells_id(self):
         """
@@ -178,7 +176,7 @@ class ClusterTree:
                 current_node.y_pos = 0
             else:
                 current_node.y_pos = actual_y_pos
-                actual_y_pos -= (self.max_y_pos/nb_intersections)
+                actual_y_pos -= (self.max_y_pos / nb_intersections)
                 if (current_node.scale_value >= 1) and (current_node.are_child_significant()):
                     if current_node.scale_value < pos_significant_threshold[1]:
                         pos_significant_threshold[1] = current_node.scale_value
@@ -204,7 +202,7 @@ class ClusterTree:
                 else:
                     break
         # return significant threshold position
-        return pos_significant_threshold[0] + ((self.max_y_pos/nb_intersections) / 2)
+        return pos_significant_threshold[0] + ((self.max_y_pos / nb_intersections) / 2)
 
     def get_nb_intersections(self):
         if self.no_child:
@@ -232,8 +230,8 @@ class ClusterTree:
                       color=self.color,
                       linewidth=4)
             if with_scale_value:
-                ax.text(x_pos, self.y_pos-0.2, f'{np.round(self.scale_value, 2)}', horizontalalignment='center',
-                        verticalalignment = 'center', color=default_line_color)
+                ax.text(x_pos, self.y_pos - 0.2, f'{np.round(self.scale_value, 2)}', horizontalalignment='center',
+                        verticalalignment='center', color=default_line_color)
 
             y_bottom = self.first_child.y_pos
             ax.vlines(self.first_child.get_x_pos(), y_bottom, self.y_pos,
@@ -254,7 +252,6 @@ class ClusterTree:
             self.far_right_child_pos = self.get_last_x_pos()
             self.x_pos = np.mean((self.far_left_child_pos, self.far_right_child_pos))
         return self.x_pos
-
 
     def get_first_x_pos(self):
         """
@@ -298,7 +295,7 @@ class ClusterTree:
 
             are_they_equals = self.are_elements_equals(merge_history[1], second_child_clusters)
             if are_they_equals:
-                return  index
+                return index
 
             if first_child_is_a_int:
                 if first_child_clusters != merge_history[0]:
@@ -316,9 +313,7 @@ class ClusterTree:
             if len(second_child_clusters) != len(merge_history[1]):
                 return False
 
-
         return None
-
 
     def are_elements_equals(self, element_1, element_2):
         first_element_is_a_int = isinstance(element_1, int) or isinstance(element_1, np.int64)
@@ -360,6 +355,7 @@ class ClusterTree:
         else:
             return 0
 
+
 def give_all_cells_from_cluster(cluster_list):
     if isinstance(cluster_list, int) or isinstance(cluster_list, np.int64):
         return [cluster_list]
@@ -368,6 +364,7 @@ def give_all_cells_from_cluster(cluster_list):
         for element in cluster_list:
             result.extend(give_all_cells_from_cluster(element))
         return result
+
 
 def get_min_max_scale_from_merge_history(merge_history):
     min_scale = 100
@@ -380,6 +377,7 @@ def get_min_max_scale_from_merge_history(merge_history):
 
     return min_scale, max_scale
 
+
 def average_minimum_distance(train1, train2):
     """
         Compute the average minimum distance between spike trains train 1 and train 2
@@ -390,20 +388,22 @@ def average_minimum_distance(train1, train2):
 
     """
     dist1 = 0
-    for spike_t in train1:
-        diff_spike = train2 - spike_t
-        delta = np.min(np.abs(diff_spike))
-        dist1 += delta
+    if len(train2) > 0:
+        for spike_t in train1:
+            diff_spike = train2 - spike_t
+            delta = np.min(np.abs(diff_spike))
+            dist1 += delta
     dist2 = 0
-    for spike_t in train2:
-        diff_spike = train1 - spike_t
-        delta = np.min(np.abs(diff_spike))
-        dist2 += delta
+    if len(train1) > 0:
+        for spike_t in train2:
+            diff_spike = train1 - spike_t
+            delta = np.min(np.abs(diff_spike))
+            dist2 += delta
 
     return 0.5 * (dist1 + dist2)
 
 
-def jitter_spike_train(train, sigma):
+def jitter_spike_train_with_normal_distribution(train, sigma):
     """
         Compute new spike trains jitterd by gaussian (centered) noise with sd  sigma
         train should be in the form train[i] = T ith spike occurs at time T
@@ -421,7 +421,40 @@ def jitter_spike_train(train, sigma):
     return new_train
 
 
-def jitter_data_set(train_list, sigma):
+def jitter_spike_train_with_uniform_distribution(train, jitter_range):
+    """
+            Compute new spike trains jitterd by gaussian (centered) noise with sd  sigma
+            train should be in the form train[i] = T ith spike occurs at time T
+        :param train:
+        :param sigma:
+        :return: new spike trains - with same number of spike len = len(train)
+
+        """
+
+    n = len(train)
+    new_train = train.copy()
+    random_values = np.linspace(-jitter_range, jitter_range, n)
+    np.random.shuffle(random_values)
+    new_train += random_values
+    return new_train
+
+
+def jitter_data_set_with_uniform_distribution(train_list, jitter_range):
+    """
+            create new train list with jittered spike trains
+        :param train_list: the spike train list to be jittered
+        :param sigma: noise of jittering
+        :return: new jittered train list
+
+        """
+    jittered_list = []
+    for train in train_list:
+        new_train = jitter_spike_train_with_uniform_distribution(train, jitter_range)
+        jittered_list.append(new_train)
+    return jittered_list
+
+
+def jitter_data_set_with_normal_distribution(train_list, sigma):
     """
         create new train list with jittered spike trains
     :param train_list: the spike train list to be jittered
@@ -431,7 +464,7 @@ def jitter_data_set(train_list, sigma):
     """
     jittered_list = []
     for train in train_list:
-        new_train = jitter_spike_train(train, sigma)
+        new_train = jitter_spike_train_with_normal_distribution(train, sigma)
         jittered_list.append(new_train)
     return jittered_list
 
@@ -445,7 +478,7 @@ def distance_data_set(train_list):
     ntrains = len(train_list)
     distance_matrix = np.zeros((ntrains, ntrains))
     for i in range(ntrains):
-        for j in range(i+1, ntrains):
+        for j in range(i + 1, ntrains):
             train1 = train_list[i]
             train2 = train_list[j]
             d = average_minimum_distance(train1, train2)
@@ -480,19 +513,18 @@ def scaled_value(cdf, v, ci=0.05):
     :return: a float os scaled value
     """
     n = len(cdf)
-    n2 = n/2.0
+    n2 = n / 2.0
     n5 = n * ci
     nv = len(cdf[cdf < v])
-    return max(0, (n2-nv)/(n2-n5))
+    return max(0, (n2 - nv) / (n2 - n5))
 
 
 def scaled_significance_matrix(train_list, cdf_matrix):
-
     n_surrogate, nx, ny = cdf_matrix.shape
     distance_matrix = distance_data_set(train_list)
     scaled_matrix = np.zeros((nx, nx))
     for i in range(nx):
-        for j in range(i+1, nx):
+        for j in range(i + 1, nx):
             scaled_matrix[i, j] = scaled_value(cdf_matrix[:, i, j], distance_matrix[i, j])
     return scaled_matrix
 
@@ -509,19 +541,29 @@ def merge_trains(train1, train2):
     return x
 
 
-def create_surrogate_dataset(train_list, nsurrogate, sigma):
+def create_surrogate_dataset(train_list, nsurrogate, sigma,
+                             use_uniform_jittering,
+                             jitter_range):
     surrogate_data_set = []
     for i in range(nsurrogate):
-        surrogate_data_set.append(jitter_data_set(train_list, sigma))
+        if use_uniform_jittering:
+            surrogate_data_set.append(jitter_data_set_with_uniform_distribution(train_list, jitter_range))
+        else:
+            surrogate_data_set.append(jitter_data_set_with_normal_distribution(train_list, sigma))
     return surrogate_data_set
 
 
-def update_surrogate_dataset(surrogate_data_set, sigma, merged_train, idx_train1, idx_train2):
+def update_surrogate_dataset(surrogate_data_set, sigma, merged_train, idx_train1, idx_train2,
+                             use_uniform_jittering,
+                             jitter_range):
     nsurrogate = len(surrogate_data_set)
     for i in range(nsurrogate):
         train_list = surrogate_data_set[i]
         train_list.pop(idx_train2)
-        train_list[idx_train1] = jitter_spike_train(merged_train, sigma)
+        if use_uniform_jittering:
+            train_list[idx_train1] = jitter_spike_train_with_uniform_distribution(merged_train, jitter_range)
+        else:
+            train_list[idx_train1] = jitter_spike_train_with_normal_distribution(merged_train, sigma)
     return surrogate_data_set
 
 
@@ -548,7 +590,7 @@ def cdf_distance(train_list, surrogate_data_set):
 
     # sort each entry to create the cdf
     for i in range(ntrains):
-        for j in range(i+1, ntrains):
+        for j in range(i + 1, ntrains):
             cdf_matrix[:, i, j].sort()
             cdf_matrix[:, j, i].sort()
     return cdf_matrix
@@ -568,13 +610,14 @@ def update_cdf_distance(cdf_matrix, surrogate_data_set, train_list, idx_train1, 
         cdf_matrix[i, :, :] = update_distance_data_set(cdf_matrix[i, :, :], train_list, idx_train1, surrogate_train)
     # sort each entry to create the cdf
     for i in range(ntrains):
-        for j in range(i+1, ntrains):
+        for j in range(i + 1, ntrains):
             cdf_matrix[:, i, j].sort()
             cdf_matrix[:, j, i].sort()
     return cdf_matrix
 
 
-def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=True, rolling_surrogate=False):
+def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=True, rolling_surrogate=False,
+                                    use_uniform_jittering=False, jitter_range=0):
     """
         Main clustering algorithm
     :param train_list:
@@ -582,6 +625,10 @@ def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=Tr
     :param sigma:
     :return:
     """
+    if use_uniform_jittering and (jitter_range == 0):
+        print("jitter range should not be 0 in functional_clustering_algorithm")
+        raise Exception()
+
     print("starting clustering")
     done = False
     ntrain = len(train_list)
@@ -592,10 +639,12 @@ def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=Tr
     if rolling_surrogate:
         min_time, max_time = trains_module.get_range_train_list(train_list)
         surrogate_data_set = sce_detection.create_surrogate_dataset(train_list=train_list, nsurrogate=nsurrogate,
-                                                      min_value=min_time, max_value=max_time)
+                                                                    min_value=min_time, max_value=max_time)
     else:
         # original method by Feldt
-        surrogate_data_set = create_surrogate_dataset(train_list, nsurrogate, sigma)
+        surrogate_data_set = create_surrogate_dataset(train_list, nsurrogate, sigma,
+                                                      use_uniform_jittering=use_uniform_jittering,
+                                                      jitter_range=jitter_range)
     cdf_matrix = cdf_distance(current_train_list, surrogate_data_set)
 
     while not done:
@@ -634,11 +683,12 @@ def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=Tr
                 else:
                     new_list.append(current_train_list[ix])
             current_train_list = new_list[:]
-            if len(current_train_list) == 1 :
+            if len(current_train_list) == 1:
                 done = True
             else:
-                surrogate_data_set = update_surrogate_dataset(surrogate_data_set, sigma, new_train, i, j)
-                cdf_matrix = update_cdf_distance(cdf_matrix,  surrogate_data_set, current_train_list, i, j)
+                surrogate_data_set = update_surrogate_dataset(surrogate_data_set, sigma, new_train, i, j,
+                                                              use_uniform_jittering, jitter_range)
+                cdf_matrix = update_cdf_distance(cdf_matrix, surrogate_data_set, current_train_list, i, j)
         nstep += 1
     return merge_history, current_cluster
 
@@ -686,7 +736,8 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
                                                  labels,
                                                  activity_threshold,
                                                  fca_early_stop=True,
-                                                with_cells_in_cluster_seq_sorted=False):
+                                                 with_cells_in_cluster_seq_sorted=False,
+                                                 use_uniform_jittering=True):
     if with_cells_in_cluster_seq_sorted:
         data_descr = data_descr + "_seq"
 
@@ -694,11 +745,20 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
     # sigma = 4
     # n_surrogate_fca = 20
 
+    sce_durations = []
+    for sce_tuple in SCE_times:
+        sce_durations.append(sce_tuple[1] - sce_tuple[0])
+
+    # the jitter range is determined given the duration of the SCE detected
+    jitter_range = np.mean(sce_durations) + (2*np.std(sce_durations))
+
     merge_history, current_cluster = functional_clustering_algorithm(spike_trains,
                                                                      nsurrogate=n_surrogate_fca,
                                                                      sigma=sigma,
                                                                      early_stop=fca_early_stop,
-                                                                     rolling_surrogate=False)
+                                                                     rolling_surrogate=False,
+                                                                     use_uniform_jittering=use_uniform_jittering,
+                                                                     jitter_range=jitter_range)
     print(f"merge_history {merge_history}")
     print(f"current_cluster {current_cluster}")
     if fca_early_stop:
@@ -712,7 +772,7 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
     else:
         min_scale, max_scale = get_min_max_scale_from_merge_history(merge_history)
         cluster_tree = ClusterTree(clusters_lists=current_cluster[0], merge_history_list=merge_history, father=None,
-                                       n_cells=n_cells, max_scale_value=max_scale, non_significant_color="white")
+                                   n_cells=n_cells, max_scale_value=max_scale, non_significant_color="white")
 
         n_cluster = len(cluster_tree.cluster_nb_list)
 
@@ -807,10 +867,12 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
                        horizontal_lines_colors=['white'] * len(cluster_horizontal_thresholds),
                        horizontal_lines_sytle="dashed",
                        horizontal_lines_linewidth=[1] * len(cluster_horizontal_thresholds),
-                       vertical_lines=SCE_times,
-                       vertical_lines_colors=['white'] * len(SCE_times),
-                       vertical_lines_sytle="solid",
-                       vertical_lines_linewidth=[0.2] * len(SCE_times),
+                       # vertical_lines=SCE_times,
+                       # vertical_lines_colors=['white'] * len(SCE_times),
+                       # vertical_lines_sytle="solid",
+                       # vertical_lines_linewidth=[0.2] * len(SCE_times),
+                       span_area_coords=[SCE_times],
+                       span_area_colors=['white'],
                        cells_to_highlight=cells_to_highlight,
                        cells_to_highlight_colors=cells_to_highlight_colors,
                        sliding_window_duration=sliding_window_duration,
@@ -889,10 +951,12 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
                        horizontal_lines=np.array(cluster_horizontal_thresholds) - 0.5,
                        horizontal_lines_colors=['white'] * len(cluster_horizontal_thresholds),
                        horizontal_lines_sytle="dashed",
-                       vertical_lines=SCE_times,
-                       vertical_lines_colors=['white'] * len(SCE_times),
-                       vertical_lines_sytle="solid",
-                       vertical_lines_linewidth=[0.4] * len(SCE_times),
+                       # vertical_lines=SCE_times,
+                       # vertical_lines_colors=['white'] * len(SCE_times),
+                       # vertical_lines_sytle="solid",
+                       # vertical_lines_linewidth=[0.4] * len(SCE_times),
+                       span_area_coords=[SCE_times],
+                       span_area_colors=['white'],
                        cells_to_highlight=cells_to_highlight,
                        cells_to_highlight_colors=cells_to_highlight_colors,
                        sliding_window_duration=sliding_window_duration,
