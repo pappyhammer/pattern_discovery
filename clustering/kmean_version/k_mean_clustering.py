@@ -224,10 +224,14 @@ class CellAssembliesStruct:
             range_group = np.arange(start, start+group_size)
             for cell_id in range_group:
                 spikes_index = np.where(self.cellsinpeak_ordered[cell_id, :])[0]
+                # print(f"spikes_index {spikes_index}, self.n_sce_in_assembly[0] {self.n_sce_in_assembly[0]}")
                 # keeping only spikes that are part of sce belonging to cell assemblies
-                spikes_index = spikes_index[spikes_index > self.n_sce_in_assembly[0]]
-                # K +2 to avoid zero and one, and at the end we will substract 2
-                self.cellsinpeak_ordered[cell_id, spikes_index] = cell_group_id + 2
+                spikes_index = spikes_index[spikes_index >= self.n_sce_in_assembly[0]]
+                # print(f"spikes_index filtered {spikes_index}")
+                if len(spikes_index) > 0:
+                    # print("you shall not pass")
+                    # K +2 to avoid zero and one, and at the end we will substract 2
+                    self.cellsinpeak_ordered[cell_id, spikes_index] = cell_group_id + 2
 
             start += group_size
 
@@ -236,16 +240,22 @@ class CellAssembliesStruct:
 
         # print(f"np.min(ordered_n_cells_in_peak) {np.min(ordered_n_cells_in_peak)}")
         # value to one represent the cells spikes without assembly, then number 2 represent the cell assembly 0, etc...
-        self.cellsinpeak_ordered = self.cellsinpeak_ordered - 2
-        # print(f"self.cellsinpeak_ordered {self.cellsinpeak_ordered}")
-        # print(f"np.min(ordered_n_cells_in_peak) {np.min(ordered_n_cells_in_peak)}")
-        list_color = ['black', 'white']
-        bounds = [-2.5, -1.5, -0.5]
-        # bounds = [-1.5, 0.5, 1.5]
-        for i in np.arange(n_cell_assemblies):
-            color = cm.nipy_spectral(float(i + 1) / (n_cell_assemblies + 1))
-            list_color.append(color)
-            bounds.append(i + 0.5)
+        if np.max(self.cellsinpeak_ordered) <= 1:
+            # it means that no sce cluster is significant
+            list_color = ['black', 'white']
+            bounds = [-0.5, 0.5, 1.5]
+        else:
+            self.cellsinpeak_ordered = self.cellsinpeak_ordered - 2
+            # print(f"self.cellsinpeak_ordered {self.cellsinpeak_ordered}")
+            # print(f"np.min(ordered_n_cells_in_peak) {np.min(ordered_n_cells_in_peak)}")
+            list_color = ['black', 'white']
+            bounds = [-2.5, -1.5, -0.5]
+            # bounds = [-1.5, 0.5, 1.5]
+            for i in np.arange(n_cell_assemblies):
+                color = cm.nipy_spectral(float(i + 1) / (n_cell_assemblies + 1))
+                list_color.append(color)
+                bounds.append(i + 0.5)
+
         cmap = mpl.colors.ListedColormap(list_color)
         norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
         # rasterized=True used to remove the grid
@@ -304,13 +314,14 @@ class CellAssembliesStruct:
         # ax2.hlines(cluster_horizontal_thresholds, self.n_sce_in_assembly[0], self.n_sces,
         #            color="white", linewidth=1,
         #            linestyles="dashed")
-        ax2.vlines([self.n_sce_in_assembly[0], self.n_sce_in_assembly[0]+self.n_sce_in_assembly[1]], 0,
+        # put a line between sce with one single cell assembly and those with multiple
+        ax2.vlines([self.n_sce_in_assembly[0]+self.n_sce_in_assembly[1]], 0,
                    self.n_cells - self.n_cells_not_in_cell_assemblies, color="white", linewidth=2,
                    linestyles="dashed")
         start = 0
         for index, group_size in enumerate(self.n_cells_in_cell_assemblies_clusters):
             if index not in self.sces_in_cell_assemblies_clusters:
-                print(f"Something's wrong: {index} not in self.sces_in_cell_assemblies_clusters")
+                # then there is no significant sce cluster
                 continue
             sces_clusters_borders = self.sces_in_cell_assemblies_clusters[index]
             for sces_borders in sces_clusters_borders:
@@ -1158,7 +1169,7 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
             map_index_cluster_to_original_cluster_id[len(cell_assemblies_clusters)] = cluster_id
             cell_assemblies_clusters.append(cells_in_cluster)
 
-    print(f"c_0 {cell_assemblies_clusters}")
+    # print(f"c_0 {cell_assemblies_clusters}")
 
     # Participation rate to its own cluster
     cells_r_cl = np.max(cells_r[np.concatenate((cells_with_one_sce_cluster, cells_with_several_sce_cluster)), :],
@@ -1400,7 +1411,8 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                                                    with_shuffling=True,
                                                    sce_times_bool=None,
                                                    debug_mode=False, keep_only_the_best=True,
-                                                   with_cells_in_cluster_seq_sorted=False):
+                                                   with_cells_in_cluster_seq_sorted=False,
+                                                   fct_to_keep_best_silhouettes=np.mean):
     # perc_threshold is the number of percentile choosen to determine the threshold
     #
     # -------- clustering params ------ -----
@@ -1410,7 +1422,7 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
     results = compute_kmean(neurons_labels=labels, cellsinpeak=cellsinpeak,
                             n_surrogate=n_surrogate_k_mean, param=param,
                             range_n_clusters=range_n_clusters_k_mean,
-                            fct_to_keep_best_silhouettes=np.mean,
+                            fct_to_keep_best_silhouettes=fct_to_keep_best_silhouettes,
                             debug_mode=False, keep_only_the_best=keep_only_the_best,
                             sliding_window_duration=sliding_window_duration)
 
