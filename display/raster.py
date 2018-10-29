@@ -92,12 +92,15 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        vertical_lines_linewidth=None,
                        sliding_window_duration=1,
                        show_sum_spikes_as_percentage=False,
-                       span_cells_to_highlight=True,
+                       span_cells_to_highlight=None,
+                       span_cells_to_highlight_colors=None,
                        spike_shape="|",
                        spike_shape_size=10,
                        raster_face_color='black',
                        cell_spikes_color='white',
                        seq_times_to_color_dict=None,
+                       link_seq_color=None, min_len_links_seq=3,
+                       link_seq_line_width=1, link_seq_alpha=1, 
                        seq_colors=None, debug_mode=False,
                        axes_list=None,
                        SCE_times=None,
@@ -144,6 +147,9 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     be colored. It will be colored if there is indeed a spike at that time otherwise, the default color will be used.
     :param seq_colors: A dict, with key a tuple represening the indices of the seq and as value of colors,
     a color, should have the same keys as seq_times_to_color_dict
+    :param link_seq_color: if not None, give the color with which link the spikes from a sequence. If not None,
+    seq_colors will be ignored
+    :param min_len_links_seq: minimum len of a seq for the links to be drawn
     :param axes_list if not None, give a list of axes that will be used, and be filled, but no figure will be created
     or saved then. Doesn't work yet is show_amplitude is True
     :param SCE_times:  a list of tuple corresponding to the first and last index of each SCE,
@@ -239,8 +245,11 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                 ax1.vlines(neuron_times, y - .5, y + .5, color=color_neuron, linewidth=1, zorder=20)
 
     if seq_times_to_color_dict is not None:
+        seq_count = 0
         for seq_indices, seq_times_list in seq_times_to_color_dict.items():
             for times_list_index, times_list in enumerate(seq_times_list):
+                x_coord_to_link = []
+                y_coord_to_link = []
                 for time_index, t in enumerate(times_list):
                     cell_index = seq_indices[time_index]
                     # first we make sure the cell does spike at the given time
@@ -252,14 +261,28 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                             # print(f"Not there: seq {times_list_index} cell {cell_index}, time {t}")
                             continue
                         # print(f"## There: seq {times_list_index} cell {cell_index}, time {t}")
-                    # if so, we draw the spike
-                    if spike_shape != "|":
-                        ax1.scatter(t, cell_index, color=seq_colors[seq_indices],
-                                    marker=spike_shape,
-                                    s=spike_shape_size, zorder=20)
+                    if link_seq_color is not None:
+                        x_coord_to_link.append(t)
+                        y_coord_to_link.append(cell_index)
                     else:
-                        ax1.vlines(t, cell_index - .5, cell_index + .5, color=seq_colors[seq_indices],
-                                   linewidth=1, zorder=20)
+                        # if so, we draw the spike
+                        if spike_shape != "|":
+                            ax1.scatter(t, cell_index, color=seq_colors[seq_indices],
+                                        marker=spike_shape,
+                                        s=spike_shape_size, zorder=20)
+                        else:
+                            ax1.vlines(t, cell_index - .5, cell_index + .5, color=seq_colors[seq_indices],
+                                       linewidth=1, zorder=20)
+                if (link_seq_color is not None) and (len(x_coord_to_link) >= min_len_links_seq):
+                    if isinstance(link_seq_color, str):
+                        ax1.plot(x_coord_to_link, y_coord_to_link, color=link_seq_color,
+                                 linewidth=link_seq_line_width, zorder=30, alpha=link_seq_alpha)
+                    else:
+                        ax1.plot(x_coord_to_link, y_coord_to_link,
+                                 color=link_seq_color[seq_count % len(link_seq_color)],
+                                 linewidth=link_seq_line_width, zorder=30, alpha=link_seq_alpha)
+            seq_count += 1
+
     if spike_train_format:
         n_times = int(math.ceil(max_time - min_time))
     else:
@@ -277,9 +300,10 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                     color = "lightgrey"
                 ax1.axvspan(coord[0], coord[1], alpha=0.5, facecolor=color, zorder=1)
 
-    if (cells_to_highlight is not None) and span_cells_to_highlight:
-        for index, cell_to_span in enumerate(cells_to_highlight):
-            ax1.axhspan(cell_to_span - 0.5, cell_to_span + 0.5, alpha=0.4, facecolor=cells_to_highlight_colors[index])
+    if (span_cells_to_highlight is not None):
+        for index, cell_to_span in enumerate(span_cells_to_highlight):
+            ax1.axhspan(cell_to_span - 0.5, cell_to_span + 0.5, alpha=0.4,
+                        facecolor=span_cells_to_highlight_colors[index])
 
     if horizontal_lines is not None:
         line_beg_x = 0

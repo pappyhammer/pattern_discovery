@@ -167,7 +167,6 @@ class CellAssembliesStruct:
                            show_raster=False,
                            plot_with_amplitude=False,
                            activity_threshold=self.activity_threshold,
-                           span_cells_to_highlight=False,
                            raster_face_color='black',
                            cell_spikes_color='white',
                            horizontal_lines=np.array(cluster_horizontal_thresholds) - 0.5,
@@ -322,6 +321,7 @@ class CellAssembliesStruct:
         for index, group_size in enumerate(self.n_cells_in_cell_assemblies_clusters):
             if index not in self.sces_in_cell_assemblies_clusters:
                 # then there is no significant sce cluster
+                start += group_size
                 continue
             sces_clusters_borders = self.sces_in_cell_assemblies_clusters[index]
             for sces_borders in sces_clusters_borders:
@@ -1057,10 +1057,7 @@ def give_stat_one_sce(sce_id, spike_nums_to_use, SCE_times, sliding_window_durat
     time_tuple = SCE_times[sce_id]
     duration_in_frames = (time_tuple[1] - time_tuple[0]) + 1
     n_slidings = (duration_in_frames - sliding_window_duration) + 1
-    # print(f"duration_in_frames {duration_in_frames}")
-    # print(f"sliding_window_duration {sliding_window_duration}")
-    # print(f"time_tuple[1] {time_tuple[1]}, time_tuple[0] {time_tuple[0]}")
-    # print(f"n_slidings {n_slidings}")
+
     sum_activity_for_each_frame = np.zeros(n_slidings)
     for n in np.arange(n_slidings):
         # see to use window_duration to find the amount of participation
@@ -1521,7 +1518,6 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                            show_raster=False,
                            plot_with_amplitude=False,
                            activity_threshold=activity_threshold,
-                           span_cells_to_highlight=False,
                            raster_face_color='black',
                            cell_spikes_color='white',
                            horizontal_lines=np.array(cluster_horizontal_thresholds) - 0.5,
@@ -1628,7 +1624,6 @@ def do_cluster_activations_computing(cas):
                        save_raster=True,
                        show_raster=False,
                        plot_with_amplitude=False,
-                       span_cells_to_highlight=False,
                        raster_face_color='black',
                        cell_spikes_color='white',
                        horizontal_lines=np.array(cluster_horizontal_thresholds) - 0.5,

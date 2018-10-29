@@ -464,6 +464,109 @@ def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method
     return list_dict_result, dict_by_len_seq, max_seq_dict
 
 
+def find_sequences_in_ordered_spike_nums(spike_nums, param):
+    """
+    Find sequence in spike_nums starting from cell 0, with respect of param (such as len_seq, rep_seq etc..)
+    :param spike_nums:
+    :param param:
+    :return:
+    """
+    seq_dict = dict()
+    n_cells = len(spike_nums)
+    n_times = len(spike_nums[0, :])
+    # time_inter_seq, min_duration_intra_seq, min_len_seq, min_rep_nb, error_rate
+
+    for cell_id, cell_times in enumerate(spike_nums):
+        if (n_cells-1-cell_id) < param.min_len_seq:
+            break
+        current_seq_dict = dict()
+        cell_spikes = np.where(cell_times)[0]
+        for spike_id, spike_time in enumerate(cell_spikes):
+            # to avoid the same spike if using rasterdur
+            if spike_id > 0:
+                if spike_time == (cell_spikes[spike_id-1]+1):
+                    continue
+            last_spike_time = spike_time
+            nb_errors = 0
+            errors_index = []
+            index_seq = 0
+            current_seq_cells = [cell_id]
+            current_seq_times = [spike_time]
+            time_inter_seq = param.time_inter_seq
+            for next_cell_id in np.arange(cell_id+1, n_cells):
+                min_time = np.max((0, last_spike_time+param.min_duration_intra_seq))
+                max_time = np.min((n_times, last_spike_time+time_inter_seq))
+
+                spikes_next_cell = np.where(spike_nums[next_cell_id, min_time:max_time])[0]
+                if len(spikes_next_cell) > 0:
+                    current_seq_times.append(spikes_next_cell[0] + min_time)
+                    last_spike_time = spikes_next_cell[0] + min_time
+                    current_seq_cells.append(next_cell_id)
+                    time_inter_seq = param.time_inter_seq
+                else:
+                    if nb_errors < param.error_rate:
+                        nb_errors += 1
+                        errors_index.append(index_seq)
+                        current_seq_cells.append(next_cell_id)
+                        # put a fake time, where no spike exist for this cell
+                        current_seq_times.append(min_time)
+                        time_inter_seq += param.time_inter_seq
+                    else:
+                        break
+
+                index_seq += 1
+
+            # first if errors have been added at the end, we remove them
+            while len(errors_index) > 0:
+                if errors_index[-1] == (len(current_seq_cells)-1):
+                    current_seq_cells = current_seq_cells[:-1]
+                    current_seq_times = current_seq_times[:-1]
+                    errors_index = errors_index[:-1]
+                else:
+                    break
+            # then we check if the seq has the min length
+            if len(current_seq_cells) > param.min_len_seq:
+
+                tuple_seq = tuple(current_seq_cells)
+                if tuple_seq not in current_seq_dict:
+                    current_seq_dict[tuple_seq] = []
+                    current_seq_dict[tuple_seq].append(current_seq_times)
+                else:
+                    # first we check that the times of the new seq are no intersect with other one
+                    ok_to_add_it = True
+                    for times_seq_already_in in current_seq_dict[tuple_seq]:
+                        for time_id, time_value in enumerate(times_seq_already_in):
+                            # we can't use intersect of setdiff
+                            if time_value == current_seq_times[time_id]:
+                                ok_to_add_it = False
+                                break
+                        if not ok_to_add_it:
+                            break
+                    # print(f"ok_to_add_it {ok_to_add_it}")
+                    if ok_to_add_it:
+                        print(f"ok_to_add_it {current_seq_cells} / {current_seq_times}")
+                        current_seq_dict[tuple_seq].append(current_seq_times)
+
+
+        # we need to filter the dict to remove seq that don't repeat enough
+        seq_to_remove = []
+        for key, value in current_seq_dict.items():
+            if len(value) < param.min_rep_nb:
+                seq_to_remove.append(key)
+                continue
+            # check if there is no intersection with seq already in seq_dict
+            for valid_seq, valid_times in seq_dict.items():
+                unique_cells = np.setdiff1d(key, valid_seq)
+                if len(unique_cells) == 0:
+                    seq_to_remove.append(key)
+        for key in seq_to_remove:
+            if key in current_seq_dict:
+                del current_seq_dict[key]
+
+        seq_dict.update(current_seq_dict)
+
+    return seq_dict
+
 def removing_intersect_seq(set_seq_dict_result, min_len_seq, min_rep_nb, dict_by_len_seq):
     # set_seq_dict_result: each key represent a common seq (neurons tuple)
     # and each values represent a list of list of times

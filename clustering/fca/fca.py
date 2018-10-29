@@ -555,12 +555,16 @@ def create_surrogate_dataset(train_list, nsurrogate, sigma,
 
 def update_surrogate_dataset(surrogate_data_set, sigma, merged_train, idx_train1, idx_train2,
                              use_uniform_jittering,
-                             jitter_range):
+                             jitter_range, rolling_surrogate=False):
     nsurrogate = len(surrogate_data_set)
     for i in range(nsurrogate):
         train_list = surrogate_data_set[i]
         train_list.pop(idx_train2)
-        if use_uniform_jittering:
+        if rolling_surrogate:
+            min_time, max_time = trains_module.get_range_train_list(train_list)
+            train_list[idx_train1] = trains_module.shifted(merged_train,
+                                                           shift=(max_time - min_time), rng=(min_time, max_time))
+        elif use_uniform_jittering:
             train_list[idx_train1] = jitter_spike_train_with_uniform_distribution(merged_train, jitter_range)
         else:
             train_list[idx_train1] = jitter_spike_train_with_normal_distribution(merged_train, sigma)
@@ -687,7 +691,8 @@ def functional_clustering_algorithm(train_list, nsurrogate, sigma, early_stop=Tr
                 done = True
             else:
                 surrogate_data_set = update_surrogate_dataset(surrogate_data_set, sigma, new_train, i, j,
-                                                              use_uniform_jittering, jitter_range)
+                                                              use_uniform_jittering, jitter_range,
+                                                              rolling_surrogate=rolling_surrogate)
                 cdf_matrix = update_cdf_distance(cdf_matrix, surrogate_data_set, current_train_list, i, j)
         nstep += 1
     return merge_history, current_cluster
@@ -737,7 +742,8 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
                                                  activity_threshold,
                                                  fca_early_stop=True,
                                                  with_cells_in_cluster_seq_sorted=False,
-                                                 use_uniform_jittering=True):
+                                                 use_uniform_jittering=True,
+                                                 rolling_surrogate=False):
     if with_cells_in_cluster_seq_sorted:
         data_descr = data_descr + "_seq"
 
@@ -750,13 +756,13 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
         sce_durations.append(sce_tuple[1] - sce_tuple[0])
 
     # the jitter range is determined given the duration of the SCE detected
-    jitter_range = np.mean(sce_durations) + (2*np.std(sce_durations))
+    jitter_range = np.max(sce_durations) + np.mean(sce_durations)
 
     merge_history, current_cluster = functional_clustering_algorithm(spike_trains,
                                                                      nsurrogate=n_surrogate_fca,
                                                                      sigma=sigma,
                                                                      early_stop=fca_early_stop,
-                                                                     rolling_surrogate=False,
+                                                                     rolling_surrogate=rolling_surrogate,
                                                                      use_uniform_jittering=use_uniform_jittering,
                                                                      jitter_range=jitter_range)
     print(f"merge_history {merge_history}")
@@ -860,7 +866,6 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
                        show_raster=False,
                        plot_with_amplitude=False,
                        activity_threshold=activity_threshold,
-                       span_cells_to_highlight=False,
                        raster_face_color='black',
                        cell_spikes_color='white',
                        horizontal_lines=np.array(cluster_horizontal_thresholds) - 0.5,
@@ -945,7 +950,6 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
                        save_raster=True,
                        show_raster=False,
                        plot_with_amplitude=False,
-                       span_cells_to_highlight=False,
                        raster_face_color='black',
                        cell_spikes_color='white',
                        horizontal_lines=np.array(cluster_horizontal_thresholds) - 0.5,
