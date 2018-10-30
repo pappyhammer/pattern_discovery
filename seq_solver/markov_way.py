@@ -168,6 +168,116 @@ def build_mle_transition_dict(spike_nums, param, sce_times_bool=None,
     return transition_dict
 
 
+def give_me_stat_on_sorting_seq_results(results_dict, neurons_sorted, title, param,
+                                        use_sce_times_for_pattern_search, n_surrogate,
+                                        extra_file_name="",
+                                        results_dict_surrogate=None, neurons_sorted_surrogate=None,
+                                        use_only_uniformity_method=False,
+                                        use_loss_score_to_keep_the_best_from_tree=
+                                        False,
+                                        percentile_threshold=95):
+    """
+    Key will be the length of the sequence and value will be a list of int, representing the nb of rep
+    of the different lists
+    :param results_dict:
+    :return:
+    """
+    file_name = f'{param.path_results}/sorting_results{extra_file_name}_{param.time_str}.txt'
+    with open(file_name, "w", encoding='UTF-8') as file:
+        file.write(f"{title}" + '\n')
+        file.write("" + '\n')
+        file.write("Parameters" + '\n')
+        file.write("" + '\n')
+        file.write(f"n_surrogates {n_surrogate}" + '\n')
+        file.write(f"error_rate {param.error_rate}" + '\n')
+        file.write(f"max_branches {param.max_branches}" + '\n')
+        file.write(f"time_inter_seq {param.time_inter_seq}" + '\n')
+        file.write(f"min_duration_intra_seq {param.min_duration_intra_seq}" + '\n')
+        file.write(f"min_len_seq {param.min_len_seq}" + '\n')
+        file.write(f"min_rep_nb {param.min_rep_nb}" + '\n')
+        file.write(f"use_sce_times_for_pattern_search {use_sce_times_for_pattern_search}" + '\n')
+        file.write(f"use_only_uniformity_method {use_only_uniformity_method}" + '\n')
+        file.write(f"use_loss_score_to_keep_the_best_from_tree {use_loss_score_to_keep_the_best_from_tree}" + '\n')
+
+        file.write("" + '\n')
+        min_len = 1000
+        max_len = 0
+        for key in results_dict.keys():
+            min_len = np.min((key, min_len))
+            max_len = np.max((key, max_len))
+        if results_dict_surrogate is not None:
+            for key in results_dict_surrogate.keys():
+                min_len = np.min((key, min_len))
+                max_len = np.max((key, max_len))
+
+        # key reprensents the length of a seq
+        for key in np.arange(min_len, max_len + 1):
+            nb_rep_seq = None
+            nb_rep_seq_surrogate = None
+            if key in results_dict:
+                nb_rep_seq = results_dict[key]
+            if key in results_dict_surrogate:
+                nb_rep_seq_surrogate = results_dict_surrogate[key]
+            str_to_write = ""
+            str_to_write += f"### Length: {key} cells \n"
+            real_data_in = False
+            if nb_rep_seq is not None:
+                real_data_in = True
+                str_to_write += f"# Real data (nb seq: {len(nb_rep_seq)}), repetition: mean {np.round(np.mean(nb_rep_seq), 3)}"
+                if np.std(nb_rep_seq) > 0:
+                    str_to_write += f", std {np.round(np.std(nb_rep_seq), 3)}"
+            if nb_rep_seq_surrogate is not None:
+                if real_data_in:
+                    str_to_write += f"\n"
+                str_to_write += f"# Surrogate (nb seq: {np.round((len(nb_rep_seq_surrogate)/n_surrogate), 2)}), " \
+                                f"repetition: " \
+                                f"mean {np.round(np.mean(nb_rep_seq_surrogate), 3)}"
+                if np.std(nb_rep_seq_surrogate) > 0:
+                    str_to_write += f", std {np.round(np.std(nb_rep_seq_surrogate), 3)}"
+            else:
+                if not real_data_in:
+                    continue
+            if nb_rep_seq is not None:
+                if nb_rep_seq_surrogate is not None:
+                    significant_threshold = np.percentile(nb_rep_seq_surrogate, percentile_threshold)
+                    str_to_write += f"\n"
+                    str_to_write += f"Repetition threshold for {percentile_threshold}th " \
+                                    f"percentile: {np.round(significant_threshold, 2)}\n"
+                    significant_seq_id = np.where(nb_rep_seq >= significant_threshold)[0]
+                    if len(significant_seq_id) == 0:
+                        str_to_write += f"No significant sequences of {key} cells\n"
+                    else:
+                        str_to_write += f"!!!!!!!!! {len(significant_seq_id)} significant sequences of {key} cells " \
+                                        f"!!!!!!!!!\n"
+                else:
+                    str_to_write += f"\n!!!!!!!!! {len(nb_rep_seq)} significant sequences of {key} cells " \
+                                    f"!!!!!!!!!\n"
+
+            str_to_write += '\n'
+            file.write(f"{str_to_write}")
+        file.write("" + '\n')
+        file.write("///// Neurons sorted /////" + '\n')
+        file.write("" + '\n')
+
+        for index in np.arange(len(neurons_sorted)):
+            go_for = False
+            if neurons_sorted_surrogate is not None:
+                if neurons_sorted_surrogate[index] == 0:
+                    pass
+                else:
+                    go_for = True
+            if (not go_for) and neurons_sorted[index] == 0:
+                continue
+            str_to_write = f"Neuron {index}, x "
+            if neurons_sorted_surrogate is not None:
+                str_to_write += f"{neurons_sorted_surrogate[index]} / "
+            str_to_write += f"{neurons_sorted[index]}"
+            if neurons_sorted_surrogate is not None:
+                str_to_write += " (surrogate / real data)"
+            str_to_write += '\n'
+            file.write(f"{str_to_write}")
+
+
 def bfs(trans_dict, neuron_to_start, param, n_std_for_threshold=0):
     """
     Breadth First Search, build a Tree according to trans_dict, the first node being neuron_to_start
@@ -202,7 +312,7 @@ def bfs(trans_dict, neuron_to_start, param, n_std_for_threshold=0):
             prob = trans_dict_copy[current_neuron, next_neuron]
             trans_dict_copy[current_neuron, next_neuron] = -1
             # if the next best current_neuron probability is 0, then we end the for loop
-            threshold_prob =  (mean_trans_dict+(n_std_for_threshold*std_trans_dict))
+            threshold_prob = (mean_trans_dict + (n_std_for_threshold * std_trans_dict))
             # threshold_prob = mean_trans_dict
             if prob <= np.max((0, threshold_prob)):  # < (mean_trans_dict + std_trans_dict): #== 0:
                 break
@@ -249,7 +359,8 @@ def bfs(trans_dict, neuron_to_start, param, n_std_for_threshold=0):
     return tree_root
 
 
-def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method=False, debug_mode=False):
+def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method=False, debug_mode=False,
+                   use_loss_score_to_keep_the_best=False):
     """
 
     :param spike_nums:
@@ -304,6 +415,31 @@ def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method
         error_by_seq_dict = dict()
         # Give the max length among the sequence computed as the most probable
         max_len_prob_seq = 0
+        if use_loss_score_to_keep_the_best:
+            best_loss_score = 1
+            best_seq = None
+            for seq in sequences:
+                new_order = np.zeros(nb_neurons, dtype="uint16")
+                new_order[:len(seq)] = seq
+
+                non_ordered_neurons = np.setdiff1d(np.arange(nb_neurons),
+                                                   seq)
+                if len(non_ordered_neurons) > 0:
+                    ordered_neurons = order_cells_from_seq_dict(seq_dict=set_seq_dict_result,
+                                                                non_ordered_neurons=non_ordered_neurons,
+                                                                param=param, debug_mode=False)
+                    new_order[len(seq):] = ordered_neurons
+                    # new_order[len(seq):] = non_ordered_neurons
+                    # new_order[len(seq):] = not_ordered_neurons
+                tmp_spike_nums = spike_nums[new_order, :]
+                loss_score = loss_function_with_sliding_window(spike_nums=tmp_spike_nums[::-1, :],
+                                                               time_inter_seq=param.time_inter_seq,
+                                                               min_duration_intra_seq=param.min_duration_intra_seq)
+                if loss_score < best_loss_score:
+                    best_seq = seq
+                    best_loss_score = loss_score
+            max_seq_dict[y] = best_seq
+
         for seq in sequences:
             # print(f"Neuron {y}, tree seq: {seq}")
             # look for each spike of this neuron, if a seq is found on the following spikes of other neurons
@@ -417,12 +553,13 @@ def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method
                         if neurons_sequences not in error_by_seq_dict:
                             error_by_seq_dict[neurons_sequences] = []
                         error_by_seq_dict[neurons_sequences].append(nb_error)
-                        if len(seq) > max_len_prob_seq:
-                            # Keep the whole sequences, not just the segment that was actually on the plot
-                            # But only if at least one part of sequence was found on the plot, and a minimum
-                            # of time (set into param)
-                            max_len_prob_seq = len(seq)
-                            max_seq_dict[y] = seq
+                        if not use_loss_score_to_keep_the_best:
+                            if len(seq) > max_len_prob_seq:
+                                # Keep the whole sequences, not just the segment that was actually on the plot
+                                # But only if at least one part of sequence was found on the plot, and a minimum
+                                # of time (set into param)
+                                max_len_prob_seq = len(seq)
+                                max_seq_dict[y] = seq
                         # dict_by_len_seq will be return
                         if len_seq not in dict_by_len_seq:
                             dict_by_len_seq[len_seq] = dict()
@@ -435,6 +572,7 @@ def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method
 
                     # neurons_seq.append(neurons_sequences)
                     # time_neurons_seq.append(times_sequences)
+
         if debug_mode:
             print(f'Len max for neuron {y} prob seq: {max_len_prob_seq}')
         # print_save(f'Nb seq for neuron {y}: {len(seq_dict_result)}', file, no_print=True, to_write=write_on_file)
@@ -477,14 +615,14 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
     # time_inter_seq, min_duration_intra_seq, min_len_seq, min_rep_nb, error_rate
 
     for cell_id, cell_times in enumerate(spike_nums):
-        if (n_cells-1-cell_id) < param.min_len_seq:
+        if (n_cells - 1 - cell_id) < param.min_len_seq:
             break
         current_seq_dict = dict()
         cell_spikes = np.where(cell_times)[0]
         for spike_id, spike_time in enumerate(cell_spikes):
             # to avoid the same spike if using rasterdur
             if spike_id > 0:
-                if spike_time == (cell_spikes[spike_id-1]+1):
+                if spike_time == (cell_spikes[spike_id - 1] + 1):
                     continue
             last_spike_time = spike_time
             nb_errors = 0
@@ -493,9 +631,9 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
             current_seq_cells = [cell_id]
             current_seq_times = [spike_time]
             time_inter_seq = param.time_inter_seq
-            for next_cell_id in np.arange(cell_id+1, n_cells):
-                min_time = np.max((0, last_spike_time+param.min_duration_intra_seq))
-                max_time = np.min((n_times, last_spike_time+time_inter_seq))
+            for next_cell_id in np.arange(cell_id + 1, n_cells):
+                min_time = np.max((0, last_spike_time + param.min_duration_intra_seq))
+                max_time = np.min((n_times, last_spike_time + time_inter_seq))
 
                 spikes_next_cell = np.where(spike_nums[next_cell_id, min_time:max_time])[0]
                 if len(spikes_next_cell) > 0:
@@ -518,7 +656,7 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
 
             # first if errors have been added at the end, we remove them
             while len(errors_index) > 0:
-                if errors_index[-1] == (len(current_seq_cells)-1):
+                if errors_index[-1] == (len(current_seq_cells) - 1):
                     current_seq_cells = current_seq_cells[:-1]
                     current_seq_times = current_seq_times[:-1]
                     errors_index = errors_index[:-1]
@@ -526,46 +664,79 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
                     break
             # then we check if the seq has the min length
             if len(current_seq_cells) > param.min_len_seq:
+                # if we haven't reach the max errors, we check if by adding erros before we could add it
+                # to a seq already existing
+                not_added = True
+                current_seq_cells_backup = current_seq_cells[:]
+                current_seq_times_backup = current_seq_times[:]
+                nb_errors_to_add = param.error_rate - len(errors_index)
+                while not_added and (nb_errors_to_add >= 0):
+                    if nb_errors_to_add > 0:
+                        first_cell = current_seq_cells_backup[0]
+                        first_cell_time = current_seq_times_backup[0]
+                        current_seq_cells = list(np.arange(first_cell-nb_errors_to_add, first_cell)) + \
+                                            current_seq_cells_backup
+                        current_seq_times = ([first_cell_time]*nb_errors_to_add) + current_seq_times_backup
+                    nb_errors_to_add -= 1
 
-                tuple_seq = tuple(current_seq_cells)
-                if tuple_seq not in current_seq_dict:
-                    current_seq_dict[tuple_seq] = []
-                    current_seq_dict[tuple_seq].append(current_seq_times)
-                else:
-                    # first we check that the times of the new seq are no intersect with other one
-                    ok_to_add_it = True
-                    for times_seq_already_in in current_seq_dict[tuple_seq]:
-                        for time_id, time_value in enumerate(times_seq_already_in):
-                            # we can't use intersect of setdiff
-                            if time_value == current_seq_times[time_id]:
-                                ok_to_add_it = False
-                                break
-                        if not ok_to_add_it:
-                            break
-                    # print(f"ok_to_add_it {ok_to_add_it}")
-                    if ok_to_add_it:
-                        print(f"ok_to_add_it {current_seq_cells} / {current_seq_times}")
+                    tuple_seq = tuple(current_seq_cells)
+
+                    # we add errors before only in order to see if it match sequences already added with previous
+                    # cells
+                    if (tuple_seq not in current_seq_dict) and nb_errors_to_add >= 0:
+                        continue
+
+                    if tuple_seq not in current_seq_dict:
+                        current_seq_dict[tuple_seq] = []
                         current_seq_dict[tuple_seq].append(current_seq_times)
-
+                        not_added = False
+                    else:
+                        # first we check that the times of the new seq are no intersect with other one
+                        ok_to_add_it = True
+                        for times_seq_already_in in current_seq_dict[tuple_seq]:
+                            for time_id, time_value in enumerate(times_seq_already_in):
+                                # we can't use intersect of setdiff
+                                if time_value == current_seq_times[time_id]:
+                                    ok_to_add_it = False
+                                    break
+                            if not ok_to_add_it:
+                                break
+                        # print(f"ok_to_add_it {ok_to_add_it}")
+                        if ok_to_add_it:
+                            # print(f"ok_to_add_it {current_seq_cells} / {current_seq_times}")
+                            current_seq_dict[tuple_seq].append(current_seq_times)
+                            not_added = False
 
         # we need to filter the dict to remove seq that don't repeat enough
         seq_to_remove = []
+        seq_to_remove_from_valid_seq = []
         for key, value in current_seq_dict.items():
             if len(value) < param.min_rep_nb:
                 seq_to_remove.append(key)
                 continue
             # check if there is no intersection with seq already in seq_dict
             for valid_seq, valid_times in seq_dict.items():
-                unique_cells = np.setdiff1d(key, valid_seq)
-                if len(unique_cells) == 0:
-                    seq_to_remove.append(key)
+                if len(key) <= len(valid_seq):
+                    unique_cells = np.setdiff1d(key, valid_seq)
+                    if len(unique_cells) == 0:
+                        seq_to_remove.append(key)
+                else:
+                    unique_cells = np.setdiff1d(valid_seq, key)
+                    if len(unique_cells) == 0:
+                        seq_to_remove_from_valid_seq.append(valid_seq)
+
         for key in seq_to_remove:
             if key in current_seq_dict:
                 del current_seq_dict[key]
 
+        for key in seq_to_remove_from_valid_seq:
+            if key in seq_dict:
+                del seq_dict[key]
+
         seq_dict.update(current_seq_dict)
 
     return seq_dict
+
 
 def removing_intersect_seq(set_seq_dict_result, min_len_seq, min_rep_nb, dict_by_len_seq):
     # set_seq_dict_result: each key represent a common seq (neurons tuple)
@@ -805,12 +976,18 @@ def order_cells_from_seq_dict(seq_dict, non_ordered_neurons, param, debug_mode=F
     return ordered_neurons
 
 
-def order_spike_nums_by_seq(spike_nums, param, sce_times_bool=None, debug_mode=True, reverse_order=False):
+def order_spike_nums_by_seq(spike_nums, param, sce_times_bool=None, debug_mode=True, reverse_order=False,
+                            use_only_uniformity_method=False, just_keep_the_best=True,
+                            use_loss_score_to_keep_the_best_from_tree=False):
     """
 
     :param spike_nums:
     :param param: instance of MarkovParameters
     :param debug_mode:
+    :param just_keep_the_best: if True, then don't feel the seq_dict
+    :param just_keep_the_best: if True, doesn't return the dict with all sequences, just the best sequences
+    :param use_loss_score_to_keep_the_best_from_tree: if True, then we keep sequences from the Tree sequence with the
+    best lost_score, without looking at all sub-possibilities
     :return:
     """
     # ordered_spike_nums = spike_nums.copy()
@@ -822,21 +999,28 @@ def order_spike_nums_by_seq(spike_nums, param, sce_times_bool=None, debug_mode=T
         return [], []
 
     # list_seq_dict
-    list_seq_dict, dict_by_len_seq, max_seq_dict = find_sequences(spike_nums=spike_nums, param=param,
-                                                                  debug_mode=debug_mode,
-                                                                  sce_times_bool=sce_times_bool)
+
     list_seq_dict_uniform, dict_by_len_seq_uniform, max_seq_dict_uniform = \
         find_sequences(spike_nums=spike_nums, param=param,
                        try_uniformity_method=True, debug_mode=debug_mode,
-                       sce_times_bool=sce_times_bool)
+                       sce_times_bool=sce_times_bool,
+                       use_loss_score_to_keep_the_best=use_loss_score_to_keep_the_best_from_tree)
+
+    if not use_only_uniformity_method:
+        list_seq_dict, dict_by_len_seq, \
+        max_seq_dict = find_sequences(spike_nums=spike_nums, param=param,
+                                      debug_mode=debug_mode,
+                                      sce_times_bool=sce_times_bool,
+                                      use_loss_score_to_keep_the_best=use_loss_score_to_keep_the_best_from_tree)
 
     # list_seq_dict: list of length number of neurons, each elemeent represent a dictionnary containing
     # the sequences beginnning by this neuron
 
     # first we build a dictionnary from the dictionnary list
     seq_dict = dict()
-    for seq_dict_from_list in list_seq_dict:
-        seq_dict.update(seq_dict_from_list)
+    if not use_only_uniformity_method:
+        for seq_dict_from_list in list_seq_dict:
+            seq_dict.update(seq_dict_from_list)
 
     # adding sequences with algorithm taking into consideration un
     for seq_dict_from_list in list_seq_dict_uniform:
@@ -848,38 +1032,36 @@ def order_spike_nums_by_seq(spike_nums, param, sce_times_bool=None, debug_mode=T
     # keep seq for each cell
     all_best_seq = []
     best_loss_score = 1
-    use_max_seq_dict_uniform = True
-    if use_max_seq_dict_uniform:
-        max_seq_dict_to_use = max_seq_dict_uniform
-    else:
-        max_seq_dict_to_use = max_seq_dict
-    for k, seq in max_seq_dict_to_use.items():
-        seq = np.array(seq)
-        # print(f"{k} max_seq seq {seq}")
-        # seq has not negative numbers
-        new_order = np.zeros(nb_neurons, dtype="uint16")
-        new_order[:len(seq)] = seq
-        # print(f"{k} max_seq seq len {len(seq)}")
-        non_ordered_neurons = np.setdiff1d(np.arange(nb_neurons),
-                                           seq)
-        # print(f"{k} non_ordered_neurons {non_ordered_neurons}")
-        if len(non_ordered_neurons) > 0:
-            # will update seq_dict with new seq if necessary and give back an ordered_neurons list
-            ordered_neurons = order_cells_from_seq_dict(seq_dict=seq_dict, non_ordered_neurons=non_ordered_neurons,
-                                                        param=param)
-            new_order[len(seq):] = ordered_neurons
-            # new_order[len(seq):] = not_ordered_neurons
-        tmp_spike_nums = spike_nums[new_order, :]
-        loss_score = loss_function_with_sliding_window(spike_nums=tmp_spike_nums[::-1, :],
-                                                       time_inter_seq=param.time_inter_seq,
-                                                       min_duration_intra_seq=param.min_duration_intra_seq)
-        if debug_mode:
-            print(f'loss_score neuron {k}, len {len(seq)}: {np.round(loss_score, 4)}')
-        all_best_seq.append(np.array(new_order))
-        if loss_score < best_loss_score:
-            best_loss_score = loss_score
-            best_seq = np.array(new_order)
-            best_seq_cell = k
+    max_seq_dict_to_uses = [max_seq_dict_uniform]
+    if not use_only_uniformity_method:
+        max_seq_dict_to_uses.append(max_seq_dict)
+    for max_seq_dict_to_use in max_seq_dict_to_uses:
+        for k, seq in max_seq_dict_to_use.items():
+            seq = np.array(seq)
+            # print(f"{k} max_seq seq {seq}")
+            # seq has not negative numbers
+            new_order = np.zeros(nb_neurons, dtype="uint16")
+            new_order[:len(seq)] = seq
+
+            non_ordered_neurons = np.setdiff1d(np.arange(nb_neurons),
+                                               seq)
+            if len(non_ordered_neurons) > 0:
+                # will update seq_dict with new seq if necessary and give back an ordered_neurons list
+                ordered_neurons = order_cells_from_seq_dict(seq_dict=seq_dict, non_ordered_neurons=non_ordered_neurons,
+                                                            param=param, debug_mode=False)
+                new_order[len(seq):] = ordered_neurons
+                # new_order[len(seq):] = not_ordered_neurons
+            tmp_spike_nums = spike_nums[new_order, :]
+            loss_score = loss_function_with_sliding_window(spike_nums=tmp_spike_nums[::-1, :],
+                                                           time_inter_seq=param.time_inter_seq,
+                                                           min_duration_intra_seq=param.min_duration_intra_seq)
+            if debug_mode:
+                print(f'loss_score neuron {k}, len {len(seq)}: {np.round(loss_score, 4)}')
+            all_best_seq.append(np.array(new_order))
+            if loss_score < best_loss_score:
+                best_loss_score = loss_score
+                best_seq = np.array(new_order)
+                best_seq_cell = k
 
     if debug_mode:
         print(f'best loss_score neuron {best_seq_cell}: {np.round(best_loss_score, 4)}')
@@ -890,10 +1072,10 @@ def order_spike_nums_by_seq(spike_nums, param, sce_times_bool=None, debug_mode=T
     #         print(f"seq: {key}, rep: {len(value)}")
 
     result_seq_dict = dict()
-    if best_seq is not None:
+    if best_seq is not None and (not just_keep_the_best):
 
         selected_seq = get_seq_included_in(ref_seq=best_seq, seqs_to_test=list(seq_dict.keys()),
-                                           min_len=param.min_len_seq, param=param) # param.min_len_seq)
+                                           min_len=param.min_len_seq, param=param)  # param.min_len_seq)
         result_seq_dict = dict()
         for seq in selected_seq:
             result_seq_dict[seq] = seq_dict[seq]
@@ -941,6 +1123,8 @@ def order_spike_nums_by_seq(spike_nums, param, sce_times_bool=None, debug_mode=T
         # we are reversing best seq, so the seq will appear from top to bottom
         best_seq = best_seq[::-1]
 
+    if just_keep_the_best:
+        return None, best_seq, all_best_seq
     # if test_new_version:
     return ordered_result_seq_dict, best_seq, all_best_seq
     # else:
