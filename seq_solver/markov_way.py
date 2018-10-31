@@ -167,7 +167,7 @@ def build_mle_transition_dict(spike_nums, param, sce_times_bool=None,
         print(f'max transition: {np.max(transition_dict)}')
     return transition_dict
 
-
+# TODO: Print best_seq + info on data
 def give_me_stat_on_sorting_seq_results(results_dict, neurons_sorted, title, param,
                                         use_sce_times_for_pattern_search, n_surrogate,
                                         extra_file_name="",
@@ -671,12 +671,15 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
                 current_seq_times_backup = current_seq_times[:]
                 nb_errors_to_add = param.error_rate - len(errors_index)
                 while not_added and (nb_errors_to_add >= 0):
-                    if nb_errors_to_add > 0:
-                        first_cell = current_seq_cells_backup[0]
+                    first_cell = current_seq_cells_backup[0]
+                    if (nb_errors_to_add > 0) and ((first_cell-nb_errors_to_add) >= 0):
                         first_cell_time = current_seq_times_backup[0]
                         current_seq_cells = list(np.arange(first_cell-nb_errors_to_add, first_cell)) + \
                                             current_seq_cells_backup
                         current_seq_times = ([first_cell_time]*nb_errors_to_add) + current_seq_times_backup
+                    else:
+                        current_seq_cells = current_seq_cells_backup
+                        current_seq_times = current_seq_times_backup
                     nb_errors_to_add -= 1
 
                     tuple_seq = tuple(current_seq_cells)
@@ -703,7 +706,8 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
                                 break
                         # print(f"ok_to_add_it {ok_to_add_it}")
                         if ok_to_add_it:
-                            # print(f"ok_to_add_it {current_seq_cells} / {current_seq_times}")
+                            # print(f"nb_errors_to_add {nb_errors_to_add}, "
+                            #       f"ok_to_add_it {current_seq_cells} / {current_seq_times}")
                             current_seq_dict[tuple_seq].append(current_seq_times)
                             not_added = False
 
@@ -719,11 +723,15 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
                 if len(key) <= len(valid_seq):
                     unique_cells = np.setdiff1d(key, valid_seq)
                     if len(unique_cells) == 0:
-                        seq_to_remove.append(key)
+                        # we want to see if the shorter seq is always at the same time of the longer one
+                        # if not, then we keep it
+                        if not is_seq_independant(times_short_seq=value, times_long_seq=valid_times):
+                            seq_to_remove.append(key)
                 else:
                     unique_cells = np.setdiff1d(valid_seq, key)
                     if len(unique_cells) == 0:
-                        seq_to_remove_from_valid_seq.append(valid_seq)
+                        if not is_seq_independant(times_short_seq=valid_times, times_long_seq=value):
+                            seq_to_remove_from_valid_seq.append(valid_seq)
 
         for key in seq_to_remove:
             if key in current_seq_dict:
@@ -737,6 +745,24 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
 
     return seq_dict
 
+
+def is_seq_independant(times_short_seq, times_long_seq):
+    """
+
+    :param times_short_seq: list of list of int or float representing the timestamps of spikes of a seq
+    :param times_long_seq:
+    :return:
+    """
+
+    for times_short in times_short_seq:
+        not_in_any_long_times = True
+        for times_long in times_long_seq:
+            if (times_short[0] >= times_long[0]) and (times_short[-1] <= times_long[-1]):
+                not_in_any_long_times = False
+                break
+        if not_in_any_long_times:
+            return True
+    return False
 
 def removing_intersect_seq(set_seq_dict_result, min_len_seq, min_rep_nb, dict_by_len_seq):
     # set_seq_dict_result: each key represent a common seq (neurons tuple)
