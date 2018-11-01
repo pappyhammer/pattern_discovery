@@ -11,7 +11,7 @@ class MarkovParameters(p_disc_tools_param.Parameters):
     def __init__(self, time_inter_seq, min_duration_intra_seq, min_len_seq, min_rep_nb,
                  max_branches, stop_if_twin, error_rate, no_reverse_seq, spike_rate_weight,
                  path_results=None, time_str=None, bin_size=1,
-                 activity_threshold=None):
+                 activity_threshold=None, min_n_errors=1):
         """
 
         :param time_inter_seq: represent the maximum number of times between two elements of a sequences
@@ -19,6 +19,8 @@ class MarkovParameters(p_disc_tools_param.Parameters):
         :param path_results:
         :param time_str:
         :param bin_size:
+        :param min_n_errors: represent the minimum number of errors allowed for any sequence length, then added the
+        error_rate
         """
         super().__init__(path_results=path_results, time_str=time_str, bin_size=bin_size)
         self.time_inter_seq = time_inter_seq
@@ -29,6 +31,7 @@ class MarkovParameters(p_disc_tools_param.Parameters):
         self.no_reverse_seq = no_reverse_seq
         self.spike_rate_weight = spike_rate_weight
         self.activity_threshold = activity_threshold
+        self.min_n_errors = min_n_errors
 
         # Tree parameters
         self.max_branches = max_branches
@@ -171,6 +174,7 @@ def build_mle_transition_dict(spike_nums, param, sce_times_bool=None,
 
 # TODO: Print best_seq + info on data
 def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
+                                        significant_category_dict_by_len,
                                         significant_seq_dict,
                                         significant_category_dict,
                                         neurons_sorted, title, param,
@@ -294,7 +298,7 @@ def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
     file_name = f'{param.path_results}/significant_sorting_results{extra_file_name}.txt'
     with open(file_name, "w", encoding='UTF-8') as file:
         for key, value in significant_results_dict.items():
-            file.write(f"{key}:{value}" + '\n')
+            file.write(f"{key}:{value} {significant_category_dict_by_len[key]}" + '\n')
 
 
 def bfs(trans_dict, neuron_to_start, param, n_std_for_threshold=0):
@@ -524,7 +528,8 @@ def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method
                     else:
                         # the last neuron should be a neuron from the sequence, we just skip one, two neurons can't be
                         # skip one after the other one
-                        if (nb_error < param.error_rate) and (not last_is_error.all()):
+                        if (nb_error < (int(len(neurons_sequences) * param.error_rate) + param.min_n_errors)) and \
+                                (not last_is_error.all()):
                             nb_error += 1
                             if last_is_error.any():
                                 last_is_error[1] = 1
@@ -631,7 +636,6 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
     seq_dict = dict()
     n_cells = len(spike_nums)
     n_times = len(spike_nums[0, :])
-    # time_inter_seq, min_duration_intra_seq, min_len_seq, min_rep_nb, error_rate
 
     for cell_id, cell_times in enumerate(spike_nums):
         if (n_cells - 1 - cell_id) < param.min_len_seq:
@@ -661,7 +665,7 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
                     current_seq_cells.append(next_cell_id)
                     time_inter_seq = param.time_inter_seq
                 else:
-                    if nb_errors < param.error_rate:
+                    if nb_errors < (int(len(current_seq_cells) * param.error_rate) + param.min_n_errors):
                         nb_errors += 1
                         errors_index.append(index_seq)
                         current_seq_cells.append(next_cell_id)
@@ -681,14 +685,24 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
                     errors_index = errors_index[:-1]
                 else:
                     break
+
+            # if too many errors comparing to the length of the seq, we don't keep it
+            if len(errors_index) > (int(len(current_seq_cells) * param.error_rate) + param.min_n_errors):
+                # print(f"len(errors_index) > int(len(current_seq_cells) * param.error_rate) "
+                #       f"len(errors_index) {len(errors_index)}, "
+                #       f"int(len(current_seq_cells) * param.error_rate) "
+                #       f"{int(len(current_seq_cells) * param.error_rate)}")
+                continue
+
             # then we check if the seq has the min length
             if len(current_seq_cells) > param.min_len_seq:
-                # if we haven't reach the max errors, we check if by adding erros before we could add it
+                # if we haven't reach the max errors, we check if by adding errors before we could add it
                 # to a seq already existing
                 not_added = True
                 current_seq_cells_backup = current_seq_cells[:]
                 current_seq_times_backup = current_seq_times[:]
-                nb_errors_to_add = param.error_rate - len(errors_index)
+                nb_errors_to_add = int(len(current_seq_cells) * param.error_rate) + param.min_n_errors - \
+                                   len(errors_index)
                 while not_added and (nb_errors_to_add >= 0):
                     first_cell = current_seq_cells_backup[0]
                     if (nb_errors_to_add > 0) and ((first_cell - nb_errors_to_add) >= 0):
@@ -1184,6 +1198,7 @@ def get_seq_included_in(ref_seq, seqs_to_test, param, min_len=4):
     :param seq_to_test:
     :return:
     """
+
     result = []
     use_combinatory_without_errors_method = False
     if use_combinatory_without_errors_method:
@@ -1200,13 +1215,12 @@ def get_seq_included_in(ref_seq, seqs_to_test, param, min_len=4):
                 result.append(seq)
             # TODO: take in consideration an error rate
     else:
-        error_rate = param
         for seq_to_test in seqs_to_test:
             nb_errors_so_far = 0
             last_index_found = -1
             i = 0
             for cell in seq_to_test:
-                if nb_errors_so_far == error_rate:
+                if nb_errors_so_far == (int(len(seq_to_test) * param.error_rate) + param.min_n_errors):
                     break
                 i += 1
                 cell_index = np.where(ref_seq == cell)[0]
@@ -1240,14 +1254,6 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
                               False, spike_shape="|",
                               spike_shape_size=10,
                               jitter_links_range=5):
-    # around 250 ms
-    # param.time_inter_seq
-    # param.min_duration_intra_seq
-    # -(10 ** (6 - decrease_factor)) // 40
-    # a sequence should be composed of at least one third of the neurons
-    # param.min_len_seq = len(spike_nums_struct.spike_data) // 4
-    # param.min_len_seq = 5
-    # param.error_rate = param.min_len_seq // 4
     if labels is None:
         labels = np.arange(len(spike_nums))
 
@@ -1360,7 +1366,7 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
         mask = np.zeros(nb_cells, dtype="bool")
         if seq_dict_surrogate is not None:
             for key, value in seq_dict_surrogate.items():
-                print(f"len: {len(key)}, seq: {key}, rep: {len(value)}")
+                # print(f"len: {len(key)}, seq: {key}, rep: {len(value)}")
                 # counting the number of a given length for each surrogate
                 nb_seq_by_len_for_each_surrogate[len(key), surrogate_number] += 1
                 if len(key) not in surrogate_data_result_for_stat:
@@ -1407,17 +1413,21 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
     real_data_significant_result_for_stat = SortedDict()
     neurons_sorted_real_data = np.zeros(nb_cells, dtype="uint16")
 
+    significant_category_dict_by_len = dict()
     for key, value in significant_seq_dict.items():
         # print(f"len: {len(key)}, seq: {key}, rep: {len(value)}")
         if len(key) not in real_data_significant_result_for_stat:
             real_data_significant_result_for_stat[len(key)] = []
+            significant_category_dict_by_len[len(key)] = []
         real_data_significant_result_for_stat[len(key)].append(len(value))
+        significant_category_dict_by_len[len(key)].append(significant_category_dict[key])
         for cell in key:
             if neurons_sorted_real_data[cell] == 0:
                 neurons_sorted_real_data[cell] = 1
 
     give_me_stat_on_sorting_seq_results(results_dict=real_data_result_for_stat,
                                         significant_results_dict=real_data_significant_result_for_stat,
+                                        significant_category_dict_by_len=significant_category_dict_by_len,
                                         significant_seq_dict=significant_seq_dict,
                                         significant_category_dict=significant_category_dict,
                                         labels=ordered_labels_real_data,
@@ -1425,7 +1435,7 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
                                         title=f"%%%% DATA SET STAT {data_id} %%%%%", param=param,
                                         results_dict_surrogate=surrogate_data_result_for_stat,
                                         neurons_sorted_surrogate=neurons_sorted_surrogate_data,
-                                        extra_file_name=data_id+extra_file_name,
+                                        extra_file_name=data_id + extra_file_name,
                                         n_surrogate=n_surrogate,
                                         use_sce_times_for_pattern_search=(sce_times_bool is not None),
                                         use_only_uniformity_method=use_only_uniformity_method,
