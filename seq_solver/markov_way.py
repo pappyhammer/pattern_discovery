@@ -4,6 +4,7 @@ import pattern_discovery.tools.param as p_disc_tools_param
 import pattern_discovery.tools.misc as p_disc_tools_misc
 from pattern_discovery.structures.seq_tree_v1 import Tree
 from sortedcontainers import SortedList, SortedDict
+from pattern_discovery.display.raster import plot_spikes_raster
 
 
 class MarkovParameters(p_disc_tools_param.Parameters):
@@ -167,19 +168,27 @@ def build_mle_transition_dict(spike_nums, param, sce_times_bool=None,
         print(f'max transition: {np.max(transition_dict)}')
     return transition_dict
 
+
 # TODO: Print best_seq + info on data
-def give_me_stat_on_sorting_seq_results(results_dict, neurons_sorted, title, param,
+def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
+                                        significant_seq_dict,
+                                        significant_category_dict,
+                                        neurons_sorted, title, param,
                                         use_sce_times_for_pattern_search, n_surrogate,
+                                        labels,
                                         extra_file_name="",
                                         results_dict_surrogate=None, neurons_sorted_surrogate=None,
                                         use_only_uniformity_method=False,
                                         use_loss_score_to_keep_the_best_from_tree=
                                         False,
+                                        use_ordered_spike_nums_for_surrogate=False,
                                         percentile_threshold=95):
     """
     Key will be the length of the sequence and value will be a list of int, representing the nb of rep
     of the different lists
-    :param results_dict:
+    :param results_dict: Contains stats
+    :param significant_seq_dict: key is tuple of int representing a cells sequence, value is a list of list representing
+    timestamps of the spikes
     :return:
     """
     file_name = f'{param.path_results}/sorting_results{extra_file_name}_{param.time_str}.txt'
@@ -198,6 +207,7 @@ def give_me_stat_on_sorting_seq_results(results_dict, neurons_sorted, title, par
         file.write(f"use_sce_times_for_pattern_search {use_sce_times_for_pattern_search}" + '\n')
         file.write(f"use_only_uniformity_method {use_only_uniformity_method}" + '\n')
         file.write(f"use_loss_score_to_keep_the_best_from_tree {use_loss_score_to_keep_the_best_from_tree}" + '\n')
+        file.write(f"use_ordered_spike_nums_for_surrogate {use_ordered_spike_nums_for_surrogate}" + '\n')
 
         file.write("" + '\n')
         min_len = 1000
@@ -223,7 +233,8 @@ def give_me_stat_on_sorting_seq_results(results_dict, neurons_sorted, title, par
             real_data_in = False
             if nb_rep_seq is not None:
                 real_data_in = True
-                str_to_write += f"# Real data (nb seq: {len(nb_rep_seq)}), repetition: mean {np.round(np.mean(nb_rep_seq), 3)}"
+                str_to_write += f"# Real data (nb seq: {len(nb_rep_seq)}), " \
+                                f"repetition: mean {np.round(np.mean(nb_rep_seq), 3)}"
                 if np.std(nb_rep_seq) > 0:
                     str_to_write += f", std {np.round(np.std(nb_rep_seq), 3)}"
             if nb_rep_seq_surrogate is not None:
@@ -237,22 +248,25 @@ def give_me_stat_on_sorting_seq_results(results_dict, neurons_sorted, title, par
             else:
                 if not real_data_in:
                     continue
+            str_to_write += f"\n"
             if nb_rep_seq is not None:
-                if nb_rep_seq_surrogate is not None:
-                    significant_threshold = np.percentile(nb_rep_seq_surrogate, percentile_threshold)
-                    str_to_write += f"\n"
-                    str_to_write += f"Repetition threshold for {percentile_threshold}th " \
-                                    f"percentile: {np.round(significant_threshold, 2)}\n"
-                    significant_seq_id = np.where(nb_rep_seq >= significant_threshold)[0]
-                    if len(significant_seq_id) == 0:
-                        str_to_write += f"No significant sequences of {key} cells\n"
-                    else:
-                        str_to_write += f"!!!!!!!!! {len(significant_seq_id)} significant sequences of {key} cells " \
-                                        f"!!!!!!!!!\n"
-                else:
-                    str_to_write += f"\n!!!!!!!!! {len(nb_rep_seq)} significant sequences of {key} cells " \
+                if key in significant_results_dict:
+                    str_to_write += f"!!!!!!!!! {len(significant_results_dict[key])} significant sequences " \
+                                    f"of {key} cells, repetition : mean " \
+                                    f"{np.round(np.mean(significant_results_dict[key]), 2)}, " \
+                                    f"std {np.round(np.std(significant_results_dict[key]), 2)} " \
                                     f"!!!!!!!!!\n"
+                    for sig_seq, time_stamps in significant_seq_dict.items():
+                        if len(sig_seq) == key:
+                            labels_seq = []
+                            for cell in sig_seq:
+                                labels_seq.append(labels[cell])
+                            str_to_write += f"Cat {significant_category_dict[sig_seq]}: " \
+                                            f"{labels_seq} repeated {len(time_stamps)}\n"
+                else:
+                    str_to_write += f"No significant sequences of {key} cells\n"
 
+            str_to_write += '\n'
             str_to_write += '\n'
             file.write(f"{str_to_write}")
         file.write("" + '\n')
@@ -276,6 +290,11 @@ def give_me_stat_on_sorting_seq_results(results_dict, neurons_sorted, title, par
                 str_to_write += " (surrogate / real data)"
             str_to_write += '\n'
             file.write(f"{str_to_write}")
+
+    file_name = f'{param.path_results}/significant_sorting_results{extra_file_name}.txt'
+    with open(file_name, "w", encoding='UTF-8') as file:
+        for key, value in significant_results_dict.items():
+            file.write(f"{key}:{value}" + '\n')
 
 
 def bfs(trans_dict, neuron_to_start, param, n_std_for_threshold=0):
@@ -672,11 +691,11 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
                 nb_errors_to_add = param.error_rate - len(errors_index)
                 while not_added and (nb_errors_to_add >= 0):
                     first_cell = current_seq_cells_backup[0]
-                    if (nb_errors_to_add > 0) and ((first_cell-nb_errors_to_add) >= 0):
+                    if (nb_errors_to_add > 0) and ((first_cell - nb_errors_to_add) >= 0):
                         first_cell_time = current_seq_times_backup[0]
-                        current_seq_cells = list(np.arange(first_cell-nb_errors_to_add, first_cell)) + \
+                        current_seq_cells = list(np.arange(first_cell - nb_errors_to_add, first_cell)) + \
                                             current_seq_cells_backup
-                        current_seq_times = ([first_cell_time]*nb_errors_to_add) + current_seq_times_backup
+                        current_seq_times = ([first_cell_time] * nb_errors_to_add) + current_seq_times_backup
                     else:
                         current_seq_cells = current_seq_cells_backup
                         current_seq_times = current_seq_times_backup
@@ -763,6 +782,7 @@ def is_seq_independant(times_short_seq, times_long_seq):
         if not_in_any_long_times:
             return True
     return False
+
 
 def removing_intersect_seq(set_seq_dict_result, min_len_seq, min_rep_nb, dict_by_len_seq):
     # set_seq_dict_result: each key represent a common seq (neurons tuple)
@@ -1208,3 +1228,404 @@ def get_seq_included_in(ref_seq, seqs_to_test, param, min_len=4):
                 # then we keep it
                 result.append(seq_to_test)
     return result
+
+
+def find_significant_patterns(spike_nums, param, activity_threshold, sliding_window_duration,
+                              data_id, n_surrogate=2, extra_file_name="", debug_mode=False, without_raw_plot=True,
+                              sce_times_bool=None,
+                              use_ordered_spike_nums_for_surrogate=False,
+                              use_only_uniformity_method=False,
+                              labels=None,
+                              use_loss_score_to_keep_the_best_from_tree=
+                              False, spike_shape="|",
+                              spike_shape_size=10,
+                              jitter_links_range=5):
+    # around 250 ms
+    # param.time_inter_seq
+    # param.min_duration_intra_seq
+    # -(10 ** (6 - decrease_factor)) // 40
+    # a sequence should be composed of at least one third of the neurons
+    # param.min_len_seq = len(spike_nums_struct.spike_data) // 4
+    # param.min_len_seq = 5
+    # param.error_rate = param.min_len_seq // 4
+    if labels is None:
+        labels = np.arange(len(spike_nums))
+
+    if not without_raw_plot:
+        plot_spikes_raster(spike_nums=spike_nums, param=param,
+                           spike_train_format=False,
+                           title=f"raster plot {data_id}",
+                           file_name=f"raw_spike_nums_{data_id}{extra_file_name}",
+                           y_ticks_labels=labels,
+                           save_raster=True,
+                           show_raster=False,
+                           plot_with_amplitude=False,
+                           activity_threshold=activity_threshold,
+                           # 500 ms window
+                           sliding_window_duration=sliding_window_duration,
+                           show_sum_spikes_as_percentage=True,
+                           spike_shape=spike_shape,
+                           spike_shape_size=spike_shape_size,
+                           save_formats="pdf")
+    # continue
+
+    # 2128885
+    loss_score = loss_function_with_sliding_window(spike_nums=spike_nums,
+                                                   time_inter_seq=param.time_inter_seq,
+                                                   spike_train_mode=False,
+                                                   min_duration_intra_seq=param.min_duration_intra_seq,
+                                                   debug_mode=debug_mode)
+
+    print(f'raw loss_score: {np.round(loss_score, 4)}')
+
+    # spike_struct.spike_data = trains_module.from_spike_trains_to_spike_nums(spike_struct.spike_data)
+
+    best_seq_real_data, seq_dict_real_data = sort_it_and_plot_it(spike_nums=spike_nums, param=param,
+                                                                 sliding_window_duration=sliding_window_duration,
+                                                                 activity_threshold=activity_threshold,
+                                                                 title_option=f"{data_id}{extra_file_name}",
+                                                                 spike_train_format=False,
+                                                                 debug_mode=debug_mode,
+                                                                 labels=labels,
+                                                                 sce_times_bool=sce_times_bool,
+                                                                 use_only_uniformity_method=use_only_uniformity_method,
+                                                                 use_loss_score_to_keep_the_best_from_tree=
+                                                                 use_loss_score_to_keep_the_best_from_tree,
+                                                                 spike_shape=spike_shape,
+                                                                 spike_shape_size=spike_shape_size, )
+
+    nb_cells = len(spike_nums)
+
+    print("#### REAL DATA ####")
+    if debug_mode:
+        print(f"best_seq {best_seq_real_data}")
+
+    ordered_labels_real_data = []
+    for old_cell_index in best_seq_real_data:
+        ordered_labels_real_data.append(labels[old_cell_index])
+
+    real_data_result_for_stat = SortedDict()
+    neurons_sorted_real_data = np.zeros(nb_cells, dtype="uint16")
+    if seq_dict_real_data is not None:
+        for key, value in seq_dict_real_data.items():
+            # print(f"len: {len(key)}, seq: {key}, rep: {len(value)}")
+            if len(key) not in real_data_result_for_stat:
+                real_data_result_for_stat[len(key)] = []
+            real_data_result_for_stat[len(key)].append(len(value))
+            for cell in key:
+                if neurons_sorted_real_data[cell] == 0:
+                    neurons_sorted_real_data[cell] = 1
+
+    n_times = len(spike_nums[0, :])
+
+    print("#### SURROGATE DATA ####")
+    # n_surrogate = 2
+    surrogate_data_result_for_stat = SortedDict()
+    neurons_sorted_surrogate_data = np.zeros(nb_cells, dtype="uint16")
+    nb_seq_by_len_for_each_surrogate = np.zeros((nb_cells + 1, n_surrogate), dtype="uint16")
+    for surrogate_number in np.arange(n_surrogate):
+        print(f"#### SURROGATE n° {surrogate_number} ####")
+        copy_spike_nums = np.copy(spike_nums)
+        for n, neuron_spikes in enumerate(copy_spike_nums):
+            # roll the data to a random displace number
+            copy_spike_nums[n, :] = np.roll(neuron_spikes, np.random.randint(1, n_times))
+        if use_ordered_spike_nums_for_surrogate:
+            # using ordered spike_nums that we will surrogate
+            copy_spike_nums = np.copy(spike_nums[best_seq_real_data, :])
+            for n, neuron_spikes in enumerate(copy_spike_nums):
+                # roll the data to a random displace number
+                copy_spike_nums[n, :] = np.roll(neuron_spikes, np.random.randint(1, n_times))
+            seq_dict_surrogate = find_sequences_in_ordered_spike_nums(spike_nums=copy_spike_nums, param=param)
+        else:
+            tmp_spike_nums = copy_spike_nums
+            save_plots = False if (surrogate_number > 0) else True
+            best_seq_surrogate, seq_dict_surrogate = \
+                sort_it_and_plot_it(spike_nums=tmp_spike_nums, param=param,
+                                    sliding_window_duration=sliding_window_duration,
+                                    activity_threshold=activity_threshold,
+                                    title_option=f"surrogate_{surrogate_number}_"
+                                                 f"{data_id}{extra_file_name}",
+                                    spike_train_format=False,
+                                    debug_mode=False,
+                                    use_only_uniformity_method=use_only_uniformity_method,
+                                    use_loss_score_to_keep_the_best_from_tree=
+                                    use_loss_score_to_keep_the_best_from_tree,
+                                    save_plots=save_plots,
+                                    spike_shape=spike_shape,
+                                    spike_shape_size=spike_shape_size,
+                                    )
+
+        # print(f"best_seq {best_seq_surrogate}")
+
+        mask = np.zeros(nb_cells, dtype="bool")
+        if seq_dict_surrogate is not None:
+            for key, value in seq_dict_surrogate.items():
+                print(f"len: {len(key)}, seq: {key}, rep: {len(value)}")
+                # counting the number of a given length for each surrogate
+                nb_seq_by_len_for_each_surrogate[len(key), surrogate_number] += 1
+                if len(key) not in surrogate_data_result_for_stat:
+                    surrogate_data_result_for_stat[len(key)] = []
+                surrogate_data_result_for_stat[len(key)].append(len(value))
+                for cell in key:
+                    mask[cell] = True
+            neurons_sorted_surrogate_data[mask] += 1
+    # min_time, max_time = trains_module.get_range_train_list(spike_nums)
+    # surrogate_data_set = create_surrogate_dataset(train_list=spike_nums, nsurrogate=n_surrogate,
+    #                                               min_value=min_time, max_value=max_time)
+    print("")
+    print("")
+
+    significant_threshold_by_seq_len_and_rep = dict()
+
+    for key, repetitions in surrogate_data_result_for_stat.items():
+        significant_threshold_by_seq_len_and_rep[key] = np.percentile(repetitions, 95)
+
+    # filtering seq to keep only the significant one
+    significant_seq_dict = dict()
+    # for each sequence gives its significance level
+    # 1 if significant due the number of seq of this length in the dataset
+    # 2 if significant due the number of repetition of this sequence in comparison of same length seq from surrogate
+    # 3 if significant for the both previous reason
+    # 4 if significant because no seq of this length found in the surrogate
+    significant_category_dict = dict()
+    for cells, times in seq_dict_real_data.items():
+        category = 0
+
+        if len(cells) not in significant_threshold_by_seq_len_and_rep:
+            category = 4
+        else:
+            threshold_len = np.percentile(nb_seq_by_len_for_each_surrogate[len(cells), :], 95)
+            if len(real_data_result_for_stat[len(cells)]) > threshold_len:
+                category += 1
+
+            if len(times) > significant_threshold_by_seq_len_and_rep[len(cells)]:
+                category += 2
+        if category > 0:
+            significant_seq_dict[cells] = times
+            significant_category_dict[cells] = category
+
+    real_data_significant_result_for_stat = SortedDict()
+    neurons_sorted_real_data = np.zeros(nb_cells, dtype="uint16")
+
+    for key, value in significant_seq_dict.items():
+        # print(f"len: {len(key)}, seq: {key}, rep: {len(value)}")
+        if len(key) not in real_data_significant_result_for_stat:
+            real_data_significant_result_for_stat[len(key)] = []
+        real_data_significant_result_for_stat[len(key)].append(len(value))
+        for cell in key:
+            if neurons_sorted_real_data[cell] == 0:
+                neurons_sorted_real_data[cell] = 1
+
+    give_me_stat_on_sorting_seq_results(results_dict=real_data_result_for_stat,
+                                        significant_results_dict=real_data_significant_result_for_stat,
+                                        significant_seq_dict=significant_seq_dict,
+                                        significant_category_dict=significant_category_dict,
+                                        labels=ordered_labels_real_data,
+                                        neurons_sorted=neurons_sorted_real_data,
+                                        title=f"%%%% DATA SET STAT {data_id} %%%%%", param=param,
+                                        results_dict_surrogate=surrogate_data_result_for_stat,
+                                        neurons_sorted_surrogate=neurons_sorted_surrogate_data,
+                                        extra_file_name=data_id+extra_file_name,
+                                        n_surrogate=n_surrogate,
+                                        use_sce_times_for_pattern_search=(sce_times_bool is not None),
+                                        use_only_uniformity_method=use_only_uniformity_method,
+                                        use_loss_score_to_keep_the_best_from_tree=
+                                        use_loss_score_to_keep_the_best_from_tree,
+                                        use_ordered_spike_nums_for_surrogate=use_ordered_spike_nums_for_surrogate
+                                        )
+
+    # seq_dict_real_data_backup = dict()
+    # seq_dict_real_data_backup.update(seq_dict_real_data)
+
+    title_option = f"{extra_file_name}_significant_seq"
+    colors_for_seq_list = ["blue", "red", "limegreen", "grey", "orange", "cornflowerblue", "yellow", "seagreen",
+                           "magenta"]
+    spike_nums_ordered = spike_nums[best_seq_real_data, :]
+
+    plot_spikes_raster(spike_nums=spike_nums_ordered, param=param,
+                       title=f"raster plot ordered {data_id} {extra_file_name} {title_option}",
+                       spike_train_format=False,
+                       file_name=f"{data_id}_{extra_file_name}spike_nums_ordered_seq_{title_option}",
+                       y_ticks_labels=ordered_labels_real_data,
+                       save_raster=True,
+                       show_raster=False,
+                       sliding_window_duration=sliding_window_duration,
+                       show_sum_spikes_as_percentage=True,
+                       plot_with_amplitude=False,
+                       activity_threshold=activity_threshold,
+                       save_formats="pdf",
+                       seq_times_to_color_dict=significant_seq_dict,
+                       link_seq_categories=significant_category_dict,
+                       link_seq_color=colors_for_seq_list,
+                       link_seq_line_width=0.8,
+                       link_seq_alpha=0.9,
+                       jitter_links_range=jitter_links_range,
+                       min_len_links_seq=3,
+                       spike_shape=spike_shape,
+                       spike_shape_size=spike_shape_size)
+
+
+def sort_it_and_plot_it(spike_nums, param,
+                        sliding_window_duration, activity_threshold, title_option="",
+                        sce_times_bool=None,
+                        spike_train_format=False,
+                        debug_mode=False,
+                        plot_all_best_seq_by_cell=False,
+                        use_only_uniformity_method=False,
+                        use_loss_score_to_keep_the_best_from_tree=
+                        False,
+                        labels=None,
+                        save_plots=True, spike_shape="|",
+                        spike_shape_size=10
+                        ):
+    if spike_train_format:
+        return
+    # if sce_times_bool is not None, then we don't take in consideration SCE_time to do the pair-wise correlation
+    result = order_spike_nums_by_seq(spike_nums,
+                                     param, sce_times_bool=sce_times_bool,
+                                     debug_mode=debug_mode,
+                                     use_only_uniformity_method=use_only_uniformity_method,
+                                     use_loss_score_to_keep_the_best_from_tree=
+                                     use_loss_score_to_keep_the_best_from_tree)
+    seq_dict_tmp, best_seq, all_best_seq = result
+
+    if labels is None:
+        labels = np.arange(len(spike_nums))
+    ordered_labels = []
+    for old_cell_index in best_seq:
+        ordered_labels.append(labels[old_cell_index])
+
+    if plot_all_best_seq_by_cell:
+        for cell, each_best_seq in enumerate(all_best_seq):
+            spike_nums_ordered = np.copy(spike_nums[each_best_seq, :])
+
+            loss_score = loss_function_with_sliding_window(spike_nums=spike_nums_ordered[::-1, :],
+                                                           time_inter_seq=param.time_inter_seq,
+                                                           min_duration_intra_seq=param.min_duration_intra_seq,
+                                                           spike_train_mode=False,
+                                                           debug_mode=True
+                                                           )
+            if debug_mode:
+                print(f'Cell {cell} loss_score ordered: {np.round(loss_score, 4)}')
+            # saving the ordered spike_nums
+            # micro_wires_ordered = micro_wires[best_seq]
+            # np.savez(f'{param.path_results}/{channels_selection}_spike_nums_ordered_{patient_id}.npz',
+            #          spike_nums_ordered=spike_nums_ordered, micro_wires_ordered=micro_wires_ordered)
+
+            plot_spikes_raster(spike_nums=spike_nums_ordered, param=param,
+                               title=f"cell {cell} raster plot ordered {title_option}",
+                               spike_train_format=False,
+                               file_name=f"cell_{cell}_spike_nums_ordered_{title_option}",
+                               y_ticks_labels=ordered_labels,
+                               save_raster=True,
+                               show_raster=False,
+                               sliding_window_duration=sliding_window_duration,
+                               show_sum_spikes_as_percentage=True,
+                               plot_with_amplitude=False,
+                               spike_shape=spike_shape,
+                               spike_shape_size=spike_shape_size,
+                               activity_threshold=activity_threshold,
+                               save_formats="pdf")
+    else:
+        spike_nums_ordered = np.copy(spike_nums[best_seq, :])
+
+        if save_plots:
+            plot_spikes_raster(spike_nums=spike_nums_ordered, param=param,
+                               title=f"raster plot ordered {title_option}",
+                               spike_train_format=False,
+                               file_name=f"spike_nums_ordered_{title_option}",
+                               y_ticks_labels=ordered_labels,
+                               save_raster=True,
+                               show_raster=False,
+                               sliding_window_duration=sliding_window_duration,
+                               show_sum_spikes_as_percentage=True,
+                               plot_with_amplitude=False,
+                               spike_shape=spike_shape,
+                               spike_shape_size=spike_shape_size,
+                               activity_threshold=activity_threshold,
+                               save_formats="pdf")
+
+    spike_nums_ordered = np.copy(spike_nums[best_seq, :])
+    if debug_mode:
+        print(f"starting finding sequences in orderered spike nums")
+    seq_dict = find_sequences_in_ordered_spike_nums(spike_nums=spike_nums_ordered, param=param)
+    if debug_mode:
+        print(f"Sequences in orderered spike nums found")
+    if not save_plots:
+        return best_seq, seq_dict
+    # if debug_mode:
+    #     print(f"best_seq {best_seq}")
+    # if seq_dict_tmp is not None:
+    #     if debug_mode:
+    #         for key, value in seq_dict_tmp.items():
+    #             print(f"seq: {key}, rep: {len(value)}")
+    #
+    #     best_seq_mapping_index = dict()
+    #     for i, cell in enumerate(best_seq):
+    #         best_seq_mapping_index[cell] = i
+    #     # we need to replace the index by the corresponding one in best_seq
+    #     seq_dict = dict()
+    #     for key, value in seq_dict_tmp.items():
+    #         new_key = []
+    #         for cell in key:
+    #             new_key.append(best_seq_mapping_index[cell])
+    #         # checking if the list of cell is in the same order in best_seq
+    #         # if the diff is only composed of one, this means all indices are following each other
+    #         in_order = len(np.where(np.diff(new_key) != 1)[0]) == 0
+    #         if in_order:
+    #             print(f"in_order {new_key}")
+    #             seq_dict[tuple(new_key)] = value
+    #
+    #     seq_colors = dict()
+    #     len_seq = len(seq_dict)
+    #     if debug_mode:
+    #         print(f"nb seq to colors: {len_seq}")
+    #     for index, key in enumerate(seq_dict.keys()):
+    #         seq_colors[key] = cm.nipy_spectral(float(index + 1) / (len_seq + 1))
+    #         if debug_mode:
+    #             print(f"color {seq_colors[key]}, len(seq) {len(key)}")
+    # else:
+    #     seq_dict = None
+    #     seq_colors = None
+    # ordered_spike_nums = ordered_spike_data
+    # spike_struct.ordered_spike_data = \
+    #     trains_module.from_spike_nums_to_spike_trains(spike_struct.ordered_spike_data)
+
+    loss_score = loss_function_with_sliding_window(spike_nums=spike_nums_ordered,
+                                                   time_inter_seq=param.time_inter_seq,
+                                                   min_duration_intra_seq=param.min_duration_intra_seq,
+                                                   spike_train_mode=False,
+                                                   debug_mode=True
+                                                   )
+    if debug_mode:
+        print(f'total loss_score ordered: {np.round(loss_score, 4)}')
+    # saving the ordered spike_nums
+    # micro_wires_ordered = micro_wires[best_seq]
+    # np.savez(f'{param.path_results}/{channels_selection}_spike_nums_ordered_{patient_id}.npz',
+    #          spike_nums_ordered=spike_nums_ordered, micro_wires_ordered=micro_wires_ordered)
+
+    colors_for_seq_list = ["blue", "red", "limegreen", "grey", "orange", "cornflowerblue", "yellow", "seagreen",
+                           "magenta"]
+    plot_spikes_raster(spike_nums=spike_nums_ordered, param=param,
+                       title=f"raster plot ordered {title_option}",
+                       spike_train_format=False,
+                       file_name=f"spike_nums_ordered_seq_{title_option}",
+                       y_ticks_labels=ordered_labels,
+                       save_raster=True,
+                       show_raster=False,
+                       spike_shape=spike_shape,
+                       spike_shape_size=spike_shape_size,
+                       sliding_window_duration=sliding_window_duration,
+                       show_sum_spikes_as_percentage=True,
+                       plot_with_amplitude=False,
+                       activity_threshold=activity_threshold,
+                       save_formats="pdf",
+                       seq_times_to_color_dict=seq_dict,
+                       link_seq_color=colors_for_seq_list,
+                       link_seq_line_width=0.8,
+                       link_seq_alpha=0.9,
+                       jitter_links_range=5,
+                       min_len_links_seq=3)
+    # seq_colors=seq_colors)
+
+    return best_seq, seq_dict

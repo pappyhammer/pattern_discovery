@@ -99,8 +99,10 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        raster_face_color='black',
                        cell_spikes_color='white',
                        seq_times_to_color_dict=None,
+                       link_seq_categories=None,
                        link_seq_color=None, min_len_links_seq=3,
                        link_seq_line_width=1, link_seq_alpha=1,
+                       jitter_links_range=1,
                        display_link_features=True,
                        seq_colors=None, debug_mode=False,
                        axes_list=None,
@@ -250,6 +252,9 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         links_labels = []
         links_labels_color = []
         links_labels_y_coord = []
+        nb_jitters = 10
+        indices_rand_x = np.linspace(-jitter_links_range, jitter_links_range, nb_jitters)
+        np.random.shuffle(indices_rand_x)
         for seq_indices, seq_times_list in seq_times_to_color_dict.items():
             nb_seq_times = 0
             for times_list_index, times_list in enumerate(seq_times_list):
@@ -283,16 +288,39 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                         color_to_use = link_seq_color
                     else:
                         color_to_use = link_seq_color[seq_count % len(link_seq_color)]
-
-                    ax1.plot(x_coord_to_link, y_coord_to_link,
-                                 color=color_to_use,
-                                 linewidth=link_seq_line_width, zorder=30, alpha=link_seq_alpha)
+                    x_coord_to_link = np.array(x_coord_to_link)
+                    ax1.plot(x_coord_to_link + indices_rand_x[seq_count % nb_jitters], y_coord_to_link,
+                             color=color_to_use,
+                             linewidth=link_seq_line_width, zorder=30, alpha=link_seq_alpha)
                     nb_seq_times += 1
             if nb_seq_times > 0:
-                links_labels.append(f"l{len(seq_indices)}, r{nb_seq_times}")
+                category = ""
+                if link_seq_categories is not None:
+                    category = "*" * link_seq_categories[seq_indices]
+                links_labels.append(f"l{len(seq_indices)}, r{nb_seq_times} {category}")
                 links_labels_color.append(color_to_use)
-                links_labels_y_coord.append((seq_indices[0] + seq_indices[-1])/2)
+                links_labels_y_coord.append((seq_indices[0] + seq_indices[-1]) / 2)
             seq_count += 1
+
+    ax1.set_ylim(-1, len(spike_nums))
+    if y_ticks_labels is not None:
+        ax1.set_yticks(np.arange(len(spike_nums)))
+        ax1.set_yticklabels(y_ticks_labels)
+    if y_ticks_labels_size is not None:
+        ax1.yaxis.set_tick_params(labelsize=y_ticks_labels_size)
+    else:
+        if len(spike_nums) < 50:
+            y_ticks_labels_size = 5
+        elif len(spike_nums) < 100:
+            y_ticks_labels_size = 4
+        elif len(spike_nums) < 200:
+            y_ticks_labels_size = 3
+        elif len(spike_nums) < 400:
+            y_ticks_labels_size = 2
+        else:
+            y_ticks_labels_size = 1
+        ax1.yaxis.set_tick_params(labelsize=y_ticks_labels_size)
+
     if seq_times_to_color_dict is not None:
         if link_seq_color is not None:
             ax_right = ax1.twinx()
@@ -302,7 +330,8 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
             # clusters labels
             ax_right.set_yticklabels(links_labels)
             ax_right.yaxis.set_ticks_position('none')
-            ax_right.yaxis.set_tick_params(labelsize=2)
+            ax_right.yaxis.set_tick_params(labelsize=y_ticks_labels_size)
+            # ax_right.yaxis.set_tick_params(labelsize=2)
             for index in np.arange(len(links_labels)):
                 ax_right.get_yticklabels()[index].set_color(links_labels_color[index])
 
@@ -351,13 +380,6 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         ax1.vlines(vertical_lines, line_beg_y, line_end_y, color=vertical_lines_colors,
                    linewidth=vertical_lines_linewidth,
                    linestyles=vertical_lines_sytle)
-
-    ax1.set_ylim(-1, len(spike_nums))
-    if y_ticks_labels is not None:
-        ax1.set_yticks(np.arange(len(spike_nums)))
-        ax1.set_yticklabels(y_ticks_labels)
-    if y_ticks_labels_size is not None:
-        ax1.yaxis.set_tick_params(labelsize=y_ticks_labels_size)
 
     if spike_train_format:
         ax1.set_xlim(min_time - 1, max_time + 1)
