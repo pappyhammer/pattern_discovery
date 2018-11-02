@@ -177,6 +177,7 @@ def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
                                         significant_category_dict_by_len,
                                         significant_seq_dict,
                                         significant_category_dict,
+                                        best_cells_order,
                                         neurons_sorted, title, param,
                                         use_sce_times_for_pattern_search, n_surrogate,
                                         labels,
@@ -227,21 +228,33 @@ def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
         # key reprensents the length of a seq
         for key in np.arange(min_len, max_len + 1):
             nb_rep_seq = None
+            durations = None
+            flat_durations = None
+            durations_surrogate = None
+            flat_durations_surrogate = None
             nb_rep_seq_surrogate = None
             if key in results_dict:
-                nb_rep_seq = results_dict[key]
+                nb_rep_seq = results_dict[key]["rep"]
+                durations = results_dict[key]["duration"]
+                flat_durations = [item for sublist in durations for item in sublist]
             if key in results_dict_surrogate:
-                nb_rep_seq_surrogate = results_dict_surrogate[key]
+                nb_rep_seq_surrogate = results_dict_surrogate[key]["rep"]
+                durations_surrogate = results_dict_surrogate[key]["duration"]
+                flat_durations_surrogate = [item for sublist in durations_surrogate for item in sublist]
             str_to_write = ""
             str_to_write += f"### Length: {key} cells \n"
             real_data_in = False
-            if nb_rep_seq is not None:
+            if (nb_rep_seq is not None) and (len(nb_rep_seq) > 0):
                 real_data_in = True
                 str_to_write += f"# Real data (nb seq: {len(nb_rep_seq)}), " \
                                 f"repetition: mean {np.round(np.mean(nb_rep_seq), 3)}"
                 if np.std(nb_rep_seq) > 0:
                     str_to_write += f", std {np.round(np.std(nb_rep_seq), 3)}"
-            if nb_rep_seq_surrogate is not None:
+                str_to_write += f"#, duration: " \
+                                f": mean {np.round(np.mean(flat_durations), 3)}"
+                if np.std(flat_durations) > 0:
+                    str_to_write += f", std {np.round(np.std(flat_durations), 3)}"
+            if (nb_rep_seq_surrogate is not None) and (len(nb_rep_seq_surrogate) > 0):
                 if real_data_in:
                     str_to_write += f"\n"
                 str_to_write += f"# Surrogate (nb seq: {np.round((len(nb_rep_seq_surrogate)/n_surrogate), 2)}), " \
@@ -249,11 +262,15 @@ def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
                                 f"mean {np.round(np.mean(nb_rep_seq_surrogate), 3)}"
                 if np.std(nb_rep_seq_surrogate) > 0:
                     str_to_write += f", std {np.round(np.std(nb_rep_seq_surrogate), 3)}"
+                str_to_write += f"#, duration: " \
+                                f": mean {np.round(np.mean(flat_durations_surrogate), 3)}"
+                if np.std(flat_durations_surrogate) > 0:
+                    str_to_write += f", std {np.round(np.std(flat_durations_surrogate), 3)}"
             else:
                 if not real_data_in:
                     continue
             str_to_write += f"\n"
-            if nb_rep_seq is not None:
+            if (nb_rep_seq is not None) and (len(nb_rep_seq) > 0):
                 if key in significant_results_dict:
                     str_to_write += f"!!!!!!!!! {len(significant_results_dict[key])} significant sequences " \
                                     f"of {key} cells, repetition : mean " \
@@ -299,6 +316,31 @@ def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
     with open(file_name, "w", encoding='UTF-8') as file:
         for key, value in significant_results_dict.items():
             file.write(f"{key}:{value} {significant_category_dict_by_len[key]}" + '\n')
+
+    file_name = f'{param.path_results}/significant_sorting_results_with_timestamps{extra_file_name}.txt'
+    with open(file_name, "w", encoding='UTF-8') as file:
+        file.write("best_order:")
+        for cell_id, cell in enumerate(best_cells_order):
+            file.write(f"{cell}")
+            if cell_id < (len(best_cells_order) - 1):
+                file.write(" ")
+        file.write("\n")
+        for cells, value in significant_seq_dict.items():
+            for cell_id, cell in enumerate(cells):
+                file.write(f"{cell}")
+                if cell_id < (len(cells) - 1):
+                    file.write(" ")
+            file.write(f":")
+            for time_stamps_id, time_stamps in enumerate(value):
+                for t_id, t in enumerate(time_stamps):
+                    file.write(f"{t}")
+                    if t_id < (len(time_stamps) - 1):
+                        file.write(" ")
+                if time_stamps_id < (len(value) - 1):
+                    file.write("#")
+            file.write("/")
+            file.write(f"{significant_category_dict[cells]}")
+            file.write("\n")
 
 
 def bfs(trans_dict, neuron_to_start, param, n_std_for_threshold=0):
@@ -1316,8 +1358,15 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
         for key, value in seq_dict_real_data.items():
             # print(f"len: {len(key)}, seq: {key}, rep: {len(value)}")
             if len(key) not in real_data_result_for_stat:
-                real_data_result_for_stat[len(key)] = []
-            real_data_result_for_stat[len(key)].append(len(value))
+                real_data_result_for_stat[len(key)] = dict()
+                real_data_result_for_stat[len(key)]["rep"] = []
+                real_data_result_for_stat[len(key)]["duration"] = []
+            real_data_result_for_stat[len(key)]["rep"].append(len(value))
+            list_of_durations = []
+            # keeping the duration of each repetition
+            for time_stamps in value:
+                list_of_durations.append(time_stamps[-1] - time_stamps[0])
+            real_data_result_for_stat[len(key)]["duration"].append(list_of_durations)
             for cell in key:
                 if neurons_sorted_real_data[cell] == 0:
                     neurons_sorted_real_data[cell] = 1
@@ -1370,8 +1419,10 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
                 # counting the number of a given length for each surrogate
                 nb_seq_by_len_for_each_surrogate[len(key), surrogate_number] += 1
                 if len(key) not in surrogate_data_result_for_stat:
-                    surrogate_data_result_for_stat[len(key)] = []
-                surrogate_data_result_for_stat[len(key)].append(len(value))
+                    surrogate_data_result_for_stat[len(key)] = dict()
+                    surrogate_data_result_for_stat[len(key)]["rep"] = []
+                    surrogate_data_result_for_stat[len(key)]["duration"] = []
+                surrogate_data_result_for_stat[len(key)]["rep"].append(len(value))
                 for cell in key:
                     mask[cell] = True
             neurons_sorted_surrogate_data[mask] += 1
@@ -1383,8 +1434,8 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
 
     significant_threshold_by_seq_len_and_rep = dict()
 
-    for key, repetitions in surrogate_data_result_for_stat.items():
-        significant_threshold_by_seq_len_and_rep[key] = np.percentile(repetitions, 95)
+    for key in surrogate_data_result_for_stat.keys():
+        significant_threshold_by_seq_len_and_rep[key] = np.percentile(surrogate_data_result_for_stat[key]["rep"], 95)
 
     # filtering seq to keep only the significant one
     significant_seq_dict = dict()
@@ -1401,7 +1452,7 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
             category = 4
         else:
             threshold_len = np.percentile(nb_seq_by_len_for_each_surrogate[len(cells), :], 95)
-            if len(real_data_result_for_stat[len(cells)]) > threshold_len:
+            if len(real_data_result_for_stat[len(cells)]["rep"]) > threshold_len:
                 category += 1
 
             if len(times) > significant_threshold_by_seq_len_and_rep[len(cells)]:
@@ -1431,6 +1482,7 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
                                         significant_seq_dict=significant_seq_dict,
                                         significant_category_dict=significant_category_dict,
                                         labels=ordered_labels_real_data,
+                                        best_cells_order=best_seq_real_data,
                                         neurons_sorted=neurons_sorted_real_data,
                                         title=f"%%%% DATA SET STAT {data_id} %%%%%", param=param,
                                         results_dict_surrogate=surrogate_data_result_for_stat,
