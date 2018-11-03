@@ -257,7 +257,7 @@ def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
             if (nb_rep_seq_surrogate is not None) and (len(nb_rep_seq_surrogate) > 0):
                 if real_data_in:
                     str_to_write += f"\n"
-                str_to_write += f"# Surrogate (nb seq: {np.round((len(nb_rep_seq_surrogate)/n_surrogate), 2)}), " \
+                str_to_write += f"# Surrogate (nb seq: {np.round((len(nb_rep_seq_surrogate)/n_surrogate), 4)}), " \
                                 f"repetition: " \
                                 f"mean {np.round(np.mean(nb_rep_seq_surrogate), 3)}"
                 if np.std(nb_rep_seq_surrogate) > 0:
@@ -1327,7 +1327,7 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
     print(f'raw loss_score: {np.round(loss_score, 4)}')
 
     # spike_struct.spike_data = trains_module.from_spike_trains_to_spike_nums(spike_struct.spike_data)
-
+# [:, :8000]
     best_seq_real_data, seq_dict_real_data = sort_it_and_plot_it(spike_nums=spike_nums, param=param,
                                                                  sliding_window_duration=sliding_window_duration,
                                                                  activity_threshold=activity_threshold,
@@ -1380,18 +1380,28 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
     nb_seq_by_len_for_each_surrogate = np.zeros((nb_cells + 1, n_surrogate), dtype="uint16")
     for surrogate_number in np.arange(n_surrogate):
         print(f"#### SURROGATE n° {surrogate_number} ####")
-        copy_spike_nums = np.copy(spike_nums)
-        for n, neuron_spikes in enumerate(copy_spike_nums):
-            # roll the data to a random displace number
-            copy_spike_nums[n, :] = np.roll(neuron_spikes, np.random.randint(1, n_times))
         if use_ordered_spike_nums_for_surrogate:
-            # using ordered spike_nums that we will surrogate
-            copy_spike_nums = np.copy(spike_nums[best_seq_real_data, :])
+            #
+            do_roll_option = False
+            if do_roll_option:
+                # using ordered spike_nums that we will surrogate
+                copy_spike_nums = np.copy(spike_nums[best_seq_real_data, :])
+                for n, neuron_spikes in enumerate(copy_spike_nums):
+                    # roll the data to a random displace number
+                    copy_spike_nums[n, :] = np.roll(neuron_spikes, np.random.randint(1, n_times))
+            else:
+                # we shuffle cells instead
+                best_seq_copy = np.copy(best_seq_real_data)
+                np.random.shuffle(best_seq_copy)
+                copy_spike_nums = np.copy(spike_nums[best_seq_copy, :])
+            # [:, :8000]
+            seq_dict_surrogate = find_sequences_in_ordered_spike_nums(spike_nums=copy_spike_nums,
+                                                                      param=param)
+        else:
+            copy_spike_nums = np.copy(spike_nums)
             for n, neuron_spikes in enumerate(copy_spike_nums):
                 # roll the data to a random displace number
                 copy_spike_nums[n, :] = np.roll(neuron_spikes, np.random.randint(1, n_times))
-            seq_dict_surrogate = find_sequences_in_ordered_spike_nums(spike_nums=copy_spike_nums, param=param)
-        else:
             tmp_spike_nums = copy_spike_nums
             save_plots = False if (surrogate_number > 0) else True
             best_seq_surrogate, seq_dict_surrogate = \
@@ -1423,8 +1433,14 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
                     surrogate_data_result_for_stat[len(key)]["rep"] = []
                     surrogate_data_result_for_stat[len(key)]["duration"] = []
                 surrogate_data_result_for_stat[len(key)]["rep"].append(len(value))
+                # keeping the duration of each repetition
+                list_of_durations = []
+                for time_stamps in value:
+                    list_of_durations.append(time_stamps[-1] - time_stamps[0])
+                surrogate_data_result_for_stat[len(key)]["duration"].append(list_of_durations)
                 for cell in key:
                     mask[cell] = True
+
             neurons_sorted_surrogate_data[mask] += 1
     # min_time, max_time = trains_module.get_range_train_list(spike_nums)
     # surrogate_data_set = create_surrogate_dataset(train_list=spike_nums, nsurrogate=n_surrogate,

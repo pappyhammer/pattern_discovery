@@ -330,6 +330,10 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
             # clusters labels
             ax_right.set_yticklabels(links_labels)
             ax_right.yaxis.set_ticks_position('none')
+            if y_ticks_labels_size > 1:
+                y_ticks_labels_size -= 1
+            else:
+                y_ticks_labels_size -= 0.5
             ax_right.yaxis.set_tick_params(labelsize=y_ticks_labels_size)
             # ax_right.yaxis.set_tick_params(labelsize=2)
             for index in np.arange(len(links_labels)):

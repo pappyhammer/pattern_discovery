@@ -917,7 +917,7 @@ def find_cluster_labels_for_neurons(cells_in_peak, cluster_labels, m_sces, signi
     # going neuron by neuron,
 
     for n, events in enumerate(cells_in_peak):
-        if len(significant_clusters) == 0 :
+        if len(significant_clusters) == 0:
             cluster_labels_for_neurons[n] = -1
             continue
         pos_events = np.where(events)[0]
@@ -1090,48 +1090,58 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
     If a cell was significantly active in more than one SCE cluster, 
     it was associated to the one in which it participated the most (percentage wise).
     """
-
     # Count number of participation to each cluster
     # CellP means cell positives, and R means ratio (CellR gives for each cell the
     # percentage of sce during which it's active inside a cluster of SCE.
     cas = cell_assemblies_struct
+    if debug_mode:
+        for n_id, neuron_label in enumerate(cas.neurons_labels):
+            print(f"{n_id} -> {neuron_label}")
     sce_clusters_id = cas.sce_clusters_id
     sce_clusters_labels = cas.sce_clusters_labels
     cellsinpeak = cas.cellsinpeak
     n_cells = cas.n_cells
-    n_clusters = cas.n_clusters
+    n_sce_clusters = cas.n_clusters
     n_sces = cas.n_sces
-    cells_p = np.zeros((n_cells, n_clusters))
-    cells_r = np.zeros((n_cells, n_clusters))
+    cells_p = np.zeros((n_cells, n_sce_clusters))
+    cells_r = np.zeros((n_cells, n_sce_clusters))
     for i, cluster_id in enumerate(sce_clusters_id):
         cells_p[:, i] = np.sum(cellsinpeak[:, np.equal(sce_clusters_labels, cluster_id)], axis=1)
         cells_r[:, i] = cells_p[:, i] / np.sum(np.equal(sce_clusters_labels, cluster_id))
 
+    # if debug_mode:
+    #     print(f"cells_p {cells_p}")
+    #     for cell_id, cell_p in enumerate(cells_p):
+    #         print(f"{cell_id}: cas.neurons_labels {cas.neurons_labels[cell_id]} {cells_p}")
+    #     print(f"cells_r {cells_r}")
+
     # Test for statistical significance
-    cells_cl = np.zeros((n_clusters, n_cells), dtype="uint8")  # Binary matrix of cell associated to clusters
+    cells_cl = np.zeros((n_sce_clusters, n_cells), dtype="uint8")  # Binary matrix of cell associated to clusters
 
-    for j in np.arange(n_cells):
+    for cell in np.arange(n_cells):
+        # print(f"cell {cell} {cas.neurons_labels[cell]}:")
         # Random distribution among Clusters
-        r_clr = np.zeros((n_clusters, n_surrogate))
+        r_clr = np.zeros((n_sce_clusters, n_surrogate))
         # number of random values to apply, look at how many times the cell spikes in a SCE
-        n_rnd = np.sum(cellsinpeak[j, :])
+        n_rnd = np.sum(cellsinpeak[cell, :])
 
-        for l in np.arange(n_surrogate):
+        for surrogate in np.arange(n_surrogate):
             rand_perm = np.random.permutation(n_sces)
             rand_perm = rand_perm[:n_rnd]
             racer = np.zeros(n_sces, dtype="uint8")
             racer[rand_perm] = 1
             for i, cluster_id in enumerate(sce_clusters_id):
-                r_clr[i, l] = np.sum(racer[np.equal(sce_clusters_labels, cluster_id)])
+                r_clr[i, surrogate] = np.sum(racer[np.equal(sce_clusters_labels, cluster_id)])
         # sorting r_clr, for each cluster, will sort by ascending number of spikes in a surrogate SCE
-        r_clr = np.sort(r_clr)
-        # / n_clusters must be for the bonferroni correction
-        th_max = r_clr[:, int(n_surrogate * (1 - 0.05 / n_clusters))]
-        # print(f"int(n_surrogate * (1 - 0.05 / n_clusters)) {int(n_surrogate * (1 - 0.05 / n_clusters))}")
-        # print(f"th_max {th_max}")
-        # print(f"cells_p[j, :] {cells_p[j, :]}")
+        r_clr = np.sort(r_clr, axis=1)
+        # / n_sce_clusters is to account for the inter- dependence of the comparisons (Bonferroni correction)
+        th_max = r_clr[:, int(n_surrogate * (1 - (0.05 / n_sce_clusters)))]
+        # if debug_mode:
+            # print(f"int(n_surrogate * (1 - 0.05 / n_sce_clusters)) {int(n_surrogate * (1 - 0.05 / n_sce_clusters))}")
+            # print(f"th_max {th_max}")
+            # print(f"cells_p[cell, :] {cells_p[cell, :]}")
         for i, cluster_id in enumerate(sce_clusters_id):
-            cells_cl[i, j] = int(cells_p[j, i] > th_max[i])
+            cells_cl[i, cell] = int(cells_p[cell, i] > th_max[i])
 
     cells_with_no_sce_cluster = np.where(np.sum(cells_cl, axis=0) == 0)[0]  # Cells not in any cluster
     cells_with_one_sce_cluster = np.where(np.sum(cells_cl, axis=0) == 1)[0]
@@ -1151,6 +1161,18 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
         cells_cl[:, cell_id] = 0
         cells_cl[index_cl, cell_id] = 1
 
+    if debug_mode:
+        print(f"cells_cl {cells_cl}")
+
+    """
+    The overlap between assemblies was quantified by calculating the silhouette value of each cell 
+    (with the normalized hamming distance between each cell pair as a dissimilarity metric). 
+    A cell was significantly involved in a single assembly if its silhouette value was higher 
+    than expected by chance (95th percentile after reshuffling). SCE were finally sorted with respect 
+    to their projection onto cell assemblies. A SCE was activating a given neuronal assembly 
+    if the number of cells recruited in that assembly was higher than expected by chance (95th percentile after reshuffling)
+    """
+
     # list of list of int representing cell indices that
     # belong to this cluster
     # cell_assemblies_clusters represents the cell assemblies clusters
@@ -1169,52 +1191,53 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
     # print(f"c_0 {cell_assemblies_clusters}")
 
     # Participation rate to its own cluster
+    # not used
     cells_r_cl = np.max(cells_r[np.concatenate((cells_with_one_sce_cluster, cells_with_several_sce_cluster)), :],
                         axis=1)
 
     # Assign sce to groups of cells
 
-    # NCl is the number of significant clusters with more than x cells
+    # n_assemblies_cl (NCl) is the number of significant clusters with more than x cells
     # C0 is a dict, key represent cluster number, and value is an array
     # of cells index belonging to the cluster
-    n_cl = len(cell_assemblies_clusters)
+    n_assemblies_cl = len(cell_assemblies_clusters)
     if debug_mode:
-        print(f"n_cl {n_cl}")
+        print(f"n_assemblies_cl {n_assemblies_cl}")
     # Cell count in each cluster
-    r_cl = np.zeros((n_cl, n_sces))
-    p_cl = np.zeros((n_cl, n_sces), dtype="uint8")  # binary matrix of sce associated to cell assembly clusters
+    r_cl = np.zeros((n_assemblies_cl, n_sces))
+    p_cl = np.zeros((n_assemblies_cl, n_sces), dtype="uint8")  # binary matrix of sce associated to cell assembly clusters
 
     for i, cells in enumerate(cell_assemblies_clusters):
         r_cl[i, :] = np.sum(cellsinpeak[cells, :], axis=0)
 
     # print(f"r_cl {r_cl}")
 
-    r_cln = np.zeros((n_cl, n_sces))
+    r_cln = np.zeros((n_assemblies_cl, n_sces))
 
-    for j in np.arange(n_sces):
+    for sce_id in np.arange(n_sces):
         # Random distribution among Clusters
-        r_clr = np.zeros((n_cl, n_surrogate))
-        n_rnd = np.sum(cellsinpeak[:, j])
+        r_clr = np.zeros((n_assemblies_cl, n_surrogate))
+        n_rnd = np.sum(cellsinpeak[:, sce_id])
 
-        for l in np.arange(n_surrogate):
+        for surrogate_id in np.arange(n_surrogate):
             rand_perm = np.random.permutation(n_cells)
             rand_perm = rand_perm[:n_rnd]
             racer = np.zeros(n_cells, dtype="uint8")
             racer[rand_perm] = 1
-            for i, cells in enumerate(cell_assemblies_clusters):
-                r_clr[i, l] = np.sum(racer[cells])
+            for cell_assembly_id, cells in enumerate(cell_assemblies_clusters):
+                r_clr[cell_assembly_id, surrogate_id] = np.sum(racer[cells])
 
         # sorting r_clr, for each cluster, will sort by ascending number of spikes in a surrogate SCE
-        r_clr = np.sort(r_clr)
-        # / n_clusters must be for the bonferroni correction
-        th_max = r_clr[:, int(n_surrogate * (1 - 0.05 / n_clusters))]
-        # print(f"int(n_surrogate * (1 - 0.05 / n_clusters)) {int(n_surrogate * (1 - 0.05 / n_clusters))}")
+        r_clr = np.sort(r_clr, axis=1)
+        # / n_sce_clusters is for the bonferroni correction
+        th_max = r_clr[:, int(n_surrogate * (1 - (0.05 / n_sce_clusters)))]
+        # print(f"int(n_surrogate * (1 - 0.05 / n_sce_clusters)) {int(n_surrogate * (1 - 0.05 / n_sce_clusters))}")
         # print(f"th_max {th_max}")
         # print(f"cells_p[j, :] {cells_p[j, :]}")
-        for i, cells in enumerate(cell_assemblies_clusters):
-            p_cl[i, j] = int(r_cl[i, j] > th_max[i])
+        for cell_assembly_id, cells in enumerate(cell_assemblies_clusters):
+            p_cl[cell_assembly_id, sce_id] = int(r_cl[cell_assembly_id, sce_id] > th_max[cell_assembly_id])
         # Normalize (probability)
-        r_cln[:, j] = r_cl[:, j] / np.sum(cellsinpeak[:, j])
+        r_cln[:, sce_id] = r_cl[:, sce_id] / np.sum(cellsinpeak[:, sce_id])
     if debug_mode:
         print(f"np.sum(p_cl, axis=1) {np.sum(p_cl, axis=1)}")
 
@@ -1237,21 +1260,23 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
     # last sce index of each sce cluster part of this assembly)
     sces_in_cell_assemblies_clusters = dict()
 
-    cellsinpeak_ordered = np.zeros((n_cells, n_sces), dtype="int16")
+    cellsinpeak_just_cells_ordered = np.zeros((n_cells, n_sces), dtype="int16")
 
     # #### ordering cells first   #####
     all_cells = np.arange(n_cells)
     cells_ordered = np.zeros(0, dtype="int16")
     start = 0
     for cells in cell_assemblies_clusters:
-        cellsinpeak_ordered[start:(start + len(cells)), :] = cellsinpeak[cells, :]
+        cellsinpeak_just_cells_ordered[start:(start + len(cells)), :] = cellsinpeak[cells, :]
         cells_indices[start:(start + len(cells))] = cells
         n_cells_in_cell_assemblies_clusters.append(len(cells))
         start += len(cells)
         cells_ordered = np.concatenate((cells_ordered, cells))
     cells_left = np.setdiff1d(all_cells, cells_ordered)
-    cellsinpeak_ordered[start:, :] = cellsinpeak[cells_left, :]
+    cellsinpeak_just_cells_ordered[start:, :] = cellsinpeak[cells_left, :]
     cells_indices[start:] = cells_left
+
+    cellsinpeak_ordered = np.zeros((n_cells, n_sces), dtype="int16")
 
     # now ordering sce
     # p_cl = np.zeros((n_cl, n_sces))
@@ -1262,7 +1287,8 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
     if debug_mode:
         print(f"len(no_assembly_sce) {len(no_assembly_sce)}, "
               f"no_assembly_sce {no_assembly_sce}")
-    cellsinpeak_ordered[:, start:(start + len(no_assembly_sce))] = cellsinpeak[:, no_assembly_sce]
+    # toto error
+    cellsinpeak_ordered[:, start:(start + len(no_assembly_sce))] = cellsinpeak_just_cells_ordered[:, no_assembly_sce]
     sce_indices[start:(start + len(no_assembly_sce))] = no_assembly_sce
     start += len(no_assembly_sce)
     n_sce_in_assembly[0] = len(no_assembly_sce)
@@ -1279,19 +1305,21 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
     if len(single_assembly_sce) > 0:
         # putting them in the same order as cell assemblies
         sce_already_organized = np.zeros(0, dtype="uint16")
-        for cluster_id in np.arange(len(cell_assemblies_clusters)):
+        for cell_assembly_cluster_id in np.arange(len(cell_assemblies_clusters)):
             # sce index that are part of this cluster
-            sces_in_cluster = np.where(p_cl[cluster_id, :])[0]
+            sces_in_cluster = np.where(p_cl[cell_assembly_cluster_id, :])[0]
             # now we check which ones are indeed in the single_assembly_sce group
             sces_in_cluster = (np.intersect1d(sces_in_cluster, single_assembly_sce)).astype(int)
             # print(f"np.intersect1d(sces_in_cluster, sce_already_organized) "
             #       f"{np.intersect1d(sces_in_cluster, sce_already_organized)}")
             if len(sces_in_cluster) > 0:
-                cellsinpeak_ordered[:, start:(start + len(sces_in_cluster))] = cellsinpeak[:, sces_in_cluster]
+                cellsinpeak_ordered[:, start:(start + len(sces_in_cluster))] = \
+                    cellsinpeak_just_cells_ordered[:, sces_in_cluster]
                 sce_indices[start:(start + len(sces_in_cluster))] = sces_in_cluster
-                if cluster_id not in sces_in_cell_assemblies_clusters:
-                    sces_in_cell_assemblies_clusters[cluster_id] = []
-                sces_in_cell_assemblies_clusters[cluster_id].append((start, (start + len(sces_in_cluster))))
+                if cell_assembly_cluster_id not in sces_in_cell_assemblies_clusters:
+                    sces_in_cell_assemblies_clusters[cell_assembly_cluster_id] = []
+                sces_in_cell_assemblies_clusters[cell_assembly_cluster_id].\
+                    append((start, (start + len(sces_in_cluster))))
 
                 start += len(sces_in_cluster)
                 n_sce_in_assembly[1] += len(sces_in_cluster)
@@ -1320,7 +1348,8 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
             # print(f"np.intersect1d(sces_in_cluster, sce_already_organized) "
             #       f"{np.intersect1d(sces_in_cluster, sce_already_organized)}")
             if len(sces_in_cluster) > 0:
-                cellsinpeak_ordered[:, start:(start + len(sces_in_cluster))] = cellsinpeak[:, sces_in_cluster]
+                cellsinpeak_ordered[:, start:(start + len(sces_in_cluster))] = \
+                    cellsinpeak_just_cells_ordered[:, sces_in_cluster]
                 sce_indices[start:(start + len(sces_in_cluster))] = sces_in_cluster
                 # if cluster_id not in sces_in_cell_assemblies_clusters:
                 #     sces_in_cell_assemblies_clusters[cluster_id] = []
@@ -1378,7 +1407,7 @@ def compute_kmean(neurons_labels, cellsinpeak, n_surrogate, range_n_clusters, pa
                                    cluster_with_best_silhouette_score=cluster_with_best_silhouette_score,
                                    param=param, neurons_labels=neurons_labels,
                                    sliding_window_duration=sliding_window_duration)
-        statistical_cell_assemblies_def(cell_assemblies_struct=cas)
+        statistical_cell_assemblies_def(cell_assemblies_struct=cas, debug_mode=debug_mode)
         cell_assemblies_struct_dict[n_cluster] = cas
 
     # will contains as value list of int (corresponding to sce cluster label, -1 if no sce cluster), the len of
@@ -1420,7 +1449,7 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                             n_surrogate=n_surrogate_k_mean, param=param,
                             range_n_clusters=range_n_clusters_k_mean,
                             fct_to_keep_best_silhouettes=fct_to_keep_best_silhouettes,
-                            debug_mode=False, keep_only_the_best=keep_only_the_best,
+                            debug_mode=debug_mode, keep_only_the_best=keep_only_the_best,
                             sliding_window_duration=sliding_window_duration)
 
     best_kmeans_by_cluster, m_cov_sces, \
@@ -1434,7 +1463,9 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
         print(f"best number of clusters: {cluster_with_best_silhouette_score}")
         range_n_clusters_k_mean = [cluster_with_best_silhouette_score]
 
+    data_descr_backup = data_descr
     for n_cluster in range_n_clusters_k_mean:
+        data_descr = data_descr_backup
         if n_cluster == cluster_with_best_silhouette_score:
             data_descr += "_best_cluster"
         cas = cas_dict[n_cluster]
