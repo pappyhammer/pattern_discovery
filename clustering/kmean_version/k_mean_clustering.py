@@ -386,7 +386,7 @@ def surrogate_clustering(m_sces, n_clusters, n_surrogate, n_trials, perc_thresho
         m_sces[i] = np.random.permutation(s)
 
     for surrogate_index in np.arange(n_surrogate):
-        best_silhouettes_clusters_avg = None
+        best_silhouettes_clusters_avg = np.zeros(n_clusters)
         best_median_silhouettes = 0
         for trial in np.arange(n_trials):
             # co_var = np.cov(m_sces)
@@ -411,6 +411,7 @@ def surrogate_clustering(m_sces, n_clusters, n_surrogate, n_trials, perc_thresho
         surrogate_silhouettes[index:index + n_clusters] = best_silhouettes_clusters_avg
     if debug_mode:
         print(f'end shuffling for {n_clusters} clusters and {n_surrogate} surrogates')
+        # print(f"surrogate_silhouettes {surrogate_silhouettes}, perc_threshold {perc_threshold}")
     percentile_result = np.percentile(surrogate_silhouettes, perc_threshold)
     return percentile_result
 
@@ -479,6 +480,8 @@ def clusters_on_sce_from_covnorm(cells_in_sce, range_n_clusters, fct_to_keep_bes
 
         best_kmeans_by_cluster[n_clusters] = best_kmeans
         surrogate_percentiles_by_n_cluster[n_clusters] = surrogate_percentile
+
+        print(f"best avg silh: {best_silhouette_score_by_n_cluster[n_clusters]}, surr: {surrogate_percentile}")
 
     return best_kmeans_by_cluster, m_sces, surrogate_percentiles_by_n_cluster, \
            np.argmax(best_silhouette_score_by_n_cluster)
@@ -1455,6 +1458,15 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
     best_kmeans_by_cluster, m_cov_sces, \
     cluster_labels_for_neurons, surrogate_percentiles, significant_sce_clusters, \
     cluster_with_best_silhouette_score, cas_dict = results
+
+
+    # printing values
+    # for n_cluster in range_n_clusters_k_mean:
+    #     kmeans = best_kmeans_by_cluster[n_cluster]
+    #     surrogate_percentile = surrogate_percentiles[n_cluster]
+    #     cluster_labels = kmeans.labels_
+    #     silhouette_avg = metrics.silhouette_score(m_cov_sces, cluster_labels, metric='euclidean')
+    #     print(f"{data_descr}, {n_cluster} clusters, avg silh: {silhouette_avg}, surr: {surrogate_percentile}")
 
     if with_cells_in_cluster_seq_sorted:
         data_descr = data_descr + "_seq"
