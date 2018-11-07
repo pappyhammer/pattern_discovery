@@ -286,6 +286,8 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                 if (link_seq_color is not None) and (len(x_coord_to_link) >= min_len_links_seq):
                     if isinstance(link_seq_color, str):
                         color_to_use = link_seq_color
+                    elif isinstance(link_seq_color, dict):
+                        color_to_use = link_seq_color[seq_indices]
                     else:
                         color_to_use = link_seq_color[seq_count % len(link_seq_color)]
                     x_coord_to_link = np.array(x_coord_to_link)

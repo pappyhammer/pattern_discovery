@@ -13,6 +13,45 @@ def get_spike_rates(spike_nums):
     return spike_rates
 
 
+def get_spikes_duration_from_raster_dur(spike_nums_dur):
+    spike_durations = []
+    for cell_id, spikes_time in enumerate(spike_nums_dur):
+        if len(spikes_time) == 0:
+            spike_durations.append([])
+            continue
+        n_times = len(spikes_time)
+        d_times = np.diff(spikes_time)
+        # show the +1 and -1 edges
+        pos = np.where(d_times == 1)[0] + 1
+        neg = np.where(d_times == -1)[0] + 1
+
+        if (pos.size == 0) and (neg.size == 0):
+            if len(np.nonzero(spikes_time)[0]) > 0:
+                spike_durations.append([n_times])
+            else:
+                spike_durations.append([])
+        elif pos.size == 0:
+            # i.e., starts on an spike, then stops
+            spike_durations.append([neg[0]])
+        elif neg.size == 0:
+            # starts, then ends on a spike.
+            spike_durations.append([n_times - neg[0]])
+        else:
+            if pos[0] > neg[0]:
+                # we start with a spike
+                pos = np.insert(pos, 0, 0)
+            if neg[-1] < pos[-1]:
+                #  we end with aspike
+                neg = np.append(neg, n_times - 1)
+            # NOTE: by this time, length(pos)==length(neg), necessarily
+            h = np.matrix([pos, neg])
+            if np.any(h):
+                goodep = np.array(h[1, :] - h[0, :]).flatten()
+                spike_durations.append(list(goodep))
+
+    return spike_durations
+
+
 def get_isi(spike_data, spike_trains_format=False):
     """
 

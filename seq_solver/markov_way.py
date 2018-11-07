@@ -1382,7 +1382,7 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
         print(f"#### SURROGATE n° {surrogate_number} ####")
         if use_ordered_spike_nums_for_surrogate:
             #
-            do_roll_option = False
+            do_roll_option = True
             if do_roll_option:
                 # using ordered spike_nums that we will surrogate
                 copy_spike_nums = np.copy(spike_nums[best_seq_real_data, :])
@@ -1535,7 +1535,7 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
                        seq_times_to_color_dict=significant_seq_dict,
                        link_seq_categories=significant_category_dict,
                        link_seq_color=colors_for_seq_list,
-                       link_seq_line_width=0.8,
+                       link_seq_line_width=0.6,
                        link_seq_alpha=0.9,
                        jitter_links_range=jitter_links_range,
                        min_len_links_seq=3,
