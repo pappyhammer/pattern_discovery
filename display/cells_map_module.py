@@ -2,6 +2,7 @@ import numpy as np
 import scipy.ndimage.morphology as morphology
 import scipy.ndimage as ndimage
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import matplotlib as mpl
 from matplotlib import patches
 
@@ -55,14 +56,16 @@ class CoordClass:
                     # c = signal.medfilt(c)
                     special_cell_img[c_filtered[1, :], c_filtered[0, :]] = 1
                     # test_img = morphology.binary_dilation(test_img)
-                    special_cell_img = morphology.binary_fill_holes(special_cell_img)
+                    morphology.binary_fill_holes(special_cell_img, output=special_cell_img)
                     # green value is -1
                     special_cell_img[c_filtered[1, :], c_filtered[0, :]] = 0
                     if group_id not in special_cell_imgs:
                         special_cell_imgs[group_id] = []
                     special_cell_imgs[group_id].append(special_cell_img)
+
         cells_in_groups = np.array(cells_in_groups)
         cells_not_in_groups = np.setdiff1d(np.arange(n_cells), cells_in_groups)
+        # print(f"cells_not_in_groups {cells_not_in_groups}")
         for cell in cells_not_in_groups:
             non_special_cell_img = np.zeros((self.nb_lines, self.nb_col), dtype="int8")
 
@@ -71,12 +74,12 @@ class CoordClass:
             c = c - 1
             c_filtered = c.astype(int)
             # c = signal.medfilt(c)
-            non_special_cell_img[c_filtered[1, :], c_filtered[0, :]] = 2
+            non_special_cell_img[c_filtered[1, :], c_filtered[0, :]] = 1
             # test_img = morphology.binary_dilation(test_img)
-            non_special_cell_img = morphology.binary_fill_holes(non_special_cell_img)
+            morphology.binary_fill_holes(non_special_cell_img, output=non_special_cell_img)
             # green value is -1
             non_special_cell_img[c_filtered[1, :], c_filtered[0, :]] = 0
-            non_special_cell_imgs.append(special_cell_img)
+            non_special_cell_imgs.append(non_special_cell_img)
         # print(f"self.coord {self.coord}")
 
         for i, c in enumerate(self.coord):
@@ -97,18 +100,19 @@ class CoordClass:
             # morphology.binary_fill_holes(input
             bw[c_filtered[1, :], c_filtered[0, :]] = 1
             # early born as been drawn earlier, but we need to update center_coord
-            test_img[c_filtered[1, :], c_filtered[0, :]] = 2
+            test_img[c_filtered[1, :], c_filtered[0, :]] = 1
             c_x, c_y = ndimage.center_of_mass(bw)
             self.center_coord.append((c_y, c_x))
 
         self.img_filled = np.zeros((self.nb_lines, self.nb_col), dtype="int8")
         # specifying output, otherwise binary_fill_holes return a boolean array
         morphology.binary_fill_holes(test_img, output=self.img_filled)
+        self.img_filled = self.img_filled * 2
         # self.img_filled[self.img_filled>0] = 2
 
         with_borders = False
 
-        # now putting contour to value 2
+        # now putting contour to value 0
         for i, c in enumerate(self.coord):
             if i in cells_to_hide:
                 continue
@@ -130,13 +134,17 @@ class CoordClass:
                 # filling special cell with value to -1
                 for special_cell_img in special_cell_img_list:
                     for n, pixels in enumerate(special_cell_img):
-                        # print(f"pixels > 0 {np.where(pixels > 0)}")
-                        self.img_filled[n, np.where(pixels > 0)[0]] = 3 + group_id
+                        filled_pixels = np.where(pixels > 0)[0]
+                        if len(filled_pixels) > 0:
+                            # print(f"n {n}, filled_pixels {pixels[filled_pixels]}")
+                            self.img_filled[n, filled_pixels] = 4 + (2*group_id)
 
         for non_special_cell_img in non_special_cell_imgs:
             for n, pixels in enumerate(non_special_cell_img):
-                # print(f"pixels > 0 {np.where(pixels > 0)}")
-                self.img_filled[n, np.where(pixels > 0)[0]] = 2
+                filled_pixels = np.where(pixels > 0)[0]
+                if len(filled_pixels) > 0:
+                    # print(f"n {n}, filled_pixels {filled_pixels}")
+                    self.img_filled[n, np.where(pixels > 0)[0]] = 2
 
         # if we dilate, some cells will fusion
         dilatation_version = False
@@ -146,7 +154,8 @@ class CoordClass:
         self.img_contours = test_img
 
     def plot_cells_map(self, param, data_id, title_option="", connections_dict=None,
-                       background_color="black", default_cells_color="white",
+                       background_color=(0, 0, 0, 1), default_cells_color=(1, 1, 1, 1.0),
+                       link_connect_color="white", link_line_width=1,
                        cell_numbers_color="black", show_polygons=False,
                        with_cell_numbers=False, save_formats="png"):
         """
@@ -169,28 +178,64 @@ class CoordClass:
 
         # blue = "cornflowerblue"
         # cmap.set_over('red')
-        # cmap.set_under('blue')
         list_colors = [background_color, default_cells_color]
-        bounds = [-0.5, 0.5, 2.5]
+        bounds = [-1, 1, 3]
         if self.cells_groups is not None:
             for cells_groups_color in self.cells_groups_colors:
                 list_colors.append(cells_groups_color)
-                bounds.append(bounds[-1] + 1)
-
+                bounds.append(bounds[-1] + 2)
+        # print(f"list_colors {list_colors}")
         cmap = mpl.colors.ListedColormap(list_colors)
+        cmap.set_under('black')
         norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
-
+        # norm = cm.colors.Normalize(vmax=abs(self.img_filled).max(), vmin=0)
+        # print(f"self.img_filled: len {len(self.img_filled)}")
+        # for n, pixels in enumerate(self.img_filled):
+        #     if n == 75:
+        #         print(f"n {n}: {list(self.img_filled[n , :])}")
         for neuron, (c_x, c_y) in enumerate(cells_center):
             with_cells_img = True
             if with_cells_img:
-                plt.imshow(self.img_filled, cmap=cmap, norm=norm)
-                x, y = np.meshgrid(np.arange(0, len(self.img_filled)),
-                                   np.arange(0, len(self.img_filled)))
-                plt.contour(x, y,
-                            self.img_filled, colors=[background_color], origin='image', linewidths=0.5)
+                x, y = np.meshgrid(np.arange(0, len(self.img_filled), 1),
+                                   np.arange(0, len(self.img_filled), 1))
+
+                # for help: https://matplotlib.org/gallery/
+                # images_contours_and_fields/
+                # scontour_image.html#sphx-glr-gallery-images-contours-and-fields-contour-image-py
+                cset1 = ax.contourf(x, y, self.img_filled, norm=norm,
+                                    cmap=cm.get_cmap(cmap, len(bounds)-1)) # levels=bounds
+                # for c in cset1.collections:
+                #     c.set_edgecolor((0,0,0,0))
+                # It is not necessary, but for the colormap, we need only the
+                # number of levels minus 1.  To avoid discretization error, use
+                # either this number or a large number such as the default (256).
+
+                # If we want lines as well as filled regions, we need to call
+                # contour separately; don't try to change the edgecolor or edgewidth
+                # of the polygons in the collections returned by contourf.
+                # Use levels output from previous call to guarantee they are the same.
+
+                add_contours = False
+                if add_contours:
+                    cset2 = ax.contour(x, y, self.img_filled, levels=cset1.levels, colors="white")
+                    for c in cset2.collections:
+                        c.set_linewidth(0.5)
+
+                # cset2 = ax.contour(x, y, self.img_filled, norm=norm,
+                #                     cmap=cmap)
+
+                # im1 = plt.imshow(self.img_filled, cmap=cmap, norm=norm)
+                # # im1.set_zorder(5)
+
+                # plt.contour(x, y,
+                #             self.img_filled, colors=["white"],  linewidths=1,
+                #             antialiased=True, zorder=1) # origin='image',
             else:
                 color = "white"
                 plt.scatter(x=c_x, y=c_y, marker='o', c=color, edgecolor="black", s=100, zorder=20)
+
+            ylim = ax.get_ylim()
+            ax.set_ylim(ylim[::-1])
 
             fontsize = 6
             if neuron >= 100:
@@ -198,7 +243,7 @@ class CoordClass:
             elif neuron >= 10:
                 fontsize = 5
 
-            zorder_lines = 25
+            zorder_lines = 15
 
             if with_cell_numbers:
                 if with_cells_img:
@@ -213,12 +258,12 @@ class CoordClass:
             if (connections_dict is not None) and (neuron in connections_dict):
                 # plot a line to all out of the neuron
                 for connected_neuron, nb_connexion in connections_dict[neuron].items():
-                    line_width = 1 + np.log(nb_connexion)
+                    line_width = link_line_width + np.log(nb_connexion)
 
                     c_x_c = cells_center[connected_neuron][0]
                     c_y_c = cells_center[connected_neuron][1]
 
-                    line = plt.plot((c_x, c_x_c), (c_y, c_y_c), linewidth=line_width, c="white",
+                    line = plt.plot((c_x, c_x_c), (c_y, c_y_c), linewidth=line_width, c=link_connect_color,
                                     zorder=zorder_lines)[0]
 
         if (self.cells_groups is not None) and show_polygons:
@@ -240,9 +285,9 @@ class CoordClass:
                 face_color = tuple(face_color)
                 # edge alpha will be 1
                 poly_gon = patches.Polygon(xy=xy,
-                                       fill=True, linewidth=0, facecolor=face_color,
-                                       edgecolor=self.cells_groups_colors[group_id],
-                                       zorder=15, lw=3)
+                                           fill=True, linewidth=0, facecolor=face_color,
+                                           edgecolor=self.cells_groups_colors[group_id],
+                                           zorder=15, lw=3)
                 ax.add_patch(poly_gon)
 
         plt.title(f"Cells map {data_id} {title_option}")
@@ -270,7 +315,7 @@ def _angle_to_point(point, centre):
 
 def area_of_triangle(p1, p2, p3):
     '''calculate area of any triangle given co-ordinates of the corners'''
-    return np.linalg.norm(np.cross((p2 - p1), (p3 - p1)))/2.
+    return np.linalg.norm(np.cross((p2 - p1), (p3 - p1))) / 2.
 
 
 def convex_hull(points, smidgen=0.0075):
@@ -306,11 +351,11 @@ def convex_hull(points, smidgen=0.0075):
         n_pts = len(pts)
         i = -2
         while i < (n_pts - 2):
-            Aij = area_of_triangle(centre, pts[i],     pts[(i + 1) % n_pts])
+            Aij = area_of_triangle(centre, pts[i], pts[(i + 1) % n_pts])
             Ajk = area_of_triangle(centre, pts[(i + 1) % n_pts], pts[(i + 2) % n_pts])
-            Aik = area_of_triangle(centre, pts[i],     pts[(i + 2) % n_pts])
+            Aik = area_of_triangle(centre, pts[i], pts[(i + 2) % n_pts])
             if Aij + Ajk < Aik:
-                del pts[i+1]
+                del pts[i + 1]
             i += 1
             n_pts = len(pts)
         k += 1
