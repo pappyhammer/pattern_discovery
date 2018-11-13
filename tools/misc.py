@@ -52,6 +52,91 @@ def get_spikes_duration_from_raster_dur(spike_nums_dur):
     return spike_durations
 
 
+def get_time_correlation_data(spike_nums, events_times):
+    """
+       Will compute data that will be use in order to plot the time-correlation graph
+       :return:
+    """
+    # ms_scale represents the space between each tick
+    nb_neurons = len(spike_nums)
+    n_times = len(spike_nums[0, :])
+    # values for each cell
+    time_lags_dict = dict()
+    correlation_dict = dict()
+    # for ploting
+    time_lags_list = []
+    correlation_list = []
+
+    # first determining what is the maximum duration of an event, for array dimension purpose
+    max_duration_event = 0
+    for times in events_times:
+        max_duration_event = np.max((max_duration_event, times[1]-times[0]))
+
+    time_window = int(np.ceil(max_duration_event / 2))
+
+    for neuron in np.arange(nb_neurons):
+        # look at onsets
+        neuron_spikes, = np.where(spike_nums[neuron, :])
+
+        if len(neuron_spikes) == 0:
+            continue
+
+        spike_nums_to_use = spike_nums
+
+        # time_window by 4
+        distribution_array_2_d = np.zeros((nb_neurons, ((time_window * 4) + 1)),
+                                          dtype="int16")
+
+        mask = np.ones(nb_neurons, dtype="bool")
+        mask[neuron] = False
+
+        # event_index = time_window
+        # looping on each spike of the main neuron
+        for n, event_times in enumerate(events_times):
+            # only taking in consideration events that are not too close from bottom range or upper range
+            min_limit = event_times[0]
+            max_limit = min(event_times[1]+1, (n_times - 1)) # min((peak_time + time_window), (n_times - 1))
+            if np.sum(spike_nums[neuron, min_limit:max_limit]) == 0:
+                continue
+            # see to consider the case in which the cell spikes 2 times around a peak during the tim_window
+            neuron_spike_time = np.where(spike_nums[neuron, min_limit:max_limit])[0][0]
+            spikes_indices = np.where(spike_nums_to_use[:, min_limit:max_limit])
+            conn_cells_indices = spikes_indices[0]
+            spikes_indices = neuron_spike_time - spikes_indices[1]
+            spikes_indices += time_window*2
+            # print(f"spikes_indices {spikes_indices}")
+            # copy_of_neuron_distrib = np.copy(distribution_array_2_d[neuron, :])
+            distribution_array_2_d[conn_cells_indices, spikes_indices] += 1
+            # distribution_array_2_d[neuron, :] = copy_of_neuron_distrib
+
+        # sum of spikes at each times lag
+        distribution_array = np.sum(distribution_array_2_d[mask, :], axis=0)
+        # print(f"distribution_array {distribution_array}")
+        total_spikes = np.sum(distribution_array)
+        # adding the cell only if it has at least a spike around peak times
+        if total_spikes > 0:
+            correlation_value = np.max(distribution_array) / total_spikes
+            # array_to_average = np.zeros(np.sum(distribution_array))
+            # start = 0
+            # for index, time_lag in enumerate(np.arange(-time_window * 2, time_window * 2 + 1)):
+            #     n_spike_for_this_time_lag = distribution_array[index]
+            #     array_to_average[start:(start+n_spike_for_this_time_lag)] = time_lag
+            #     start += n_spike_for_this_time_lag
+            # avg_time_lag = np.mean(array_to_average)
+            # other way:
+            time_lags_range = np.arange(-time_window * 2, time_window * 2 + 1)
+            distribution_array = distribution_array * time_lags_range
+            avg_time_lag = np.sum(distribution_array)/total_spikes
+            time_lags_dict[neuron] = avg_time_lag
+            correlation_dict[neuron] = correlation_value
+
+    for cell, time_lag in time_lags_dict.items():
+        time_lags_list.append(time_lag)
+        correlation_list.append(correlation_dict[cell])
+
+    return time_lags_list, correlation_list, time_lags_dict, correlation_dict, time_window
+
+
 def get_isi(spike_data, spike_trains_format=False):
     """
 
