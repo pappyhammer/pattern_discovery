@@ -52,7 +52,7 @@ def get_spikes_duration_from_raster_dur(spike_nums_dur):
     return spike_durations
 
 
-def get_time_correlation_data(spike_nums, events_times):
+def get_time_correlation_data(spike_nums, events_times, time_around_events=5):
     """
        Will compute data that will be use in order to plot the time-correlation graph
        :return:
@@ -66,13 +66,14 @@ def get_time_correlation_data(spike_nums, events_times):
     # for ploting
     time_lags_list = []
     correlation_list = []
+    cells_list = []
 
     # first determining what is the maximum duration of an event, for array dimension purpose
     max_duration_event = 0
     for times in events_times:
         max_duration_event = np.max((max_duration_event, times[1]-times[0]))
 
-    time_window = int(np.ceil(max_duration_event / 2))
+    time_window = int(np.ceil((max_duration_event + (time_around_events * 2)) / 2))
 
     for neuron in np.arange(nb_neurons):
         # look at onsets
@@ -94,8 +95,9 @@ def get_time_correlation_data(spike_nums, events_times):
         # looping on each spike of the main neuron
         for n, event_times in enumerate(events_times):
             # only taking in consideration events that are not too close from bottom range or upper range
-            min_limit = event_times[0]
-            max_limit = min(event_times[1]+1, (n_times - 1)) # min((peak_time + time_window), (n_times - 1))
+            min_limit = max(0, (event_times[0] - time_around_events))
+            max_limit = min(event_times[1]+1 + time_around_events, (n_times - 1))
+            # min((peak_time + time_window), (n_times - 1))
             if np.sum(spike_nums[neuron, min_limit:max_limit]) == 0:
                 continue
             # see to consider the case in which the cell spikes 2 times around a peak during the tim_window
@@ -133,8 +135,9 @@ def get_time_correlation_data(spike_nums, events_times):
     for cell, time_lag in time_lags_dict.items():
         time_lags_list.append(time_lag)
         correlation_list.append(correlation_dict[cell])
+        cells_list.append(cell)
 
-    return time_lags_list, correlation_list, time_lags_dict, correlation_dict, time_window
+    return time_lags_list, correlation_list, time_lags_dict, correlation_dict, time_window, cells_list
 
 
 def get_isi(spike_data, spike_trains_format=False):

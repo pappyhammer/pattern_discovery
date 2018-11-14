@@ -138,8 +138,9 @@ def time_correlation_graph(time_lags_list, correlation_list, time_lags_dict, cor
                            data_id, param, plot_cell_numbers=False,
                            title_option="",
                            cells_groups=None, groups_colors=None, set_y_limit_to_max=True,
-                           set_x_limit_to_max=True,
-                           time_stamps_by_ms=0.01, ms_scale=200, save_formats="pdf"):
+                           set_x_limit_to_max=True, xlabel=None,
+                           time_stamps_by_ms=0.01, ms_scale=200, save_formats="pdf",
+                           show_percentiles=None):
     # ms_scale represents the space between each tick
 
     default_cell_color = "grey"
@@ -198,10 +199,25 @@ def time_correlation_graph(time_lags_list, correlation_list, time_lags_dict, cor
         ax.set_xlim(-time_window * 2, (time_window * 2) + 1)
     else:
         ax.set_xlim(pos_range[min_range_index], pos_range[max_range_index])
+
+    if show_percentiles is not None:
+        for perc_value in show_percentiles:
+            correlation_threshold = np.percentile(correlation_list, perc_value)
+            if set_x_limit_to_max:
+                start_x = -time_window * 2
+                end_x =  (time_window * 2) + 1
+            else:
+                start_x = pos_range[min_range_index]
+                end_x = pos_range[max_range_index]
+            ax.hlines(correlation_threshold, start_x, end_x, color="white", linewidth=1, linestyles="dashed")
+
     if set_y_limit_to_max:
         ax.set_ylim(0, 1.1)
 
-    ax.set_xlabel("Time lag (s)")
+    if xlabel is None:
+        ax.set_xlabel("Time lag (s)")
+    else:
+        ax.set_xlabel(xlabel)
     ax.set_ylabel("Correlation")
 
     plt.title(f"Time-correlation graph {data_id} {title_option}")
