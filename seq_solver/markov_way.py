@@ -737,7 +737,7 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
                 continue
 
             # then we check if the seq has the min length
-            if len(current_seq_cells) > param.min_len_seq:
+            if len(current_seq_cells) >= param.min_len_seq:
                 # if we haven't reach the max errors, we check if by adding errors before we could add it
                 # to a seq already existing
                 not_added = True

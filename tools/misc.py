@@ -13,6 +13,51 @@ def get_spike_rates(spike_nums):
     return spike_rates
 
 
+def get_continous_time_periods(binary_array):
+    """
+    take a binary array and return a list of tuples representing the first and last position(included) of continuous
+    positive period
+    :param binary_array:
+    :return:
+    """
+
+    n_times = len(binary_array)
+    d_times = np.diff(binary_array)
+    # show the +1 and -1 edges
+    pos = np.where(d_times == 1)[0] + 1
+    neg = np.where(d_times == -1)[0] + 1
+
+    if (pos.size == 0) and (neg.size == 0):
+        if len(np.nonzero(binary_array)[0]) > 0:
+            return [(0, n_times-1)]
+        else:
+            return []
+    elif pos.size == 0:
+        # i.e., starts on an spike, then stops
+        return [(0, neg[0])]
+    elif neg.size == 0:
+        # starts, then ends on a spike.
+        return [(neg[0], n_times-1)]
+    else:
+        if pos[0] > neg[0]:
+            # we start with a spike
+            pos = np.insert(pos, 0, 0)
+        if neg[-1] < pos[-1]:
+            #  we end with aspike
+            neg = np.append(neg, n_times - 1)
+        # NOTE: by this time, length(pos)==length(neg), necessarily
+        h = np.matrix([pos, neg])
+        # print(f"len(h[1][0]) {len(h[1][0])} h[1][0] {h[1][0]} h.size {h.size}")
+        if np.any(h):
+            result = []
+            for i in np.arange(h.shape[1]):
+                if h[1, i] == n_times-1:
+                    result.append((h[0, i], h[1, i]))
+                else:
+                    result.append((h[0, i], h[1, i]-1))
+            return result
+    return []
+
 def get_spikes_duration_from_raster_dur(spike_nums_dur):
     spike_durations = []
     for cell_id, spikes_time in enumerate(spike_nums_dur):

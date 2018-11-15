@@ -2,6 +2,7 @@ import numpy as np
 import numpy.random as rnd
 import pattern_discovery.tools.trains as trains_module
 import math
+from pattern_discovery.tools.misc import get_continous_time_periods
 
 
 # TODO: create dithered method for list of spike_trains, using code and book from Drun
@@ -157,7 +158,10 @@ def get_sce_detection_threshold(spike_nums, window_duration, n_surrogate, use_ma
     if use_max_of_each_surrogate:
         n_rand_sum = np.zeros(n_surrogate)
     else:
-        n_rand_sum = np.zeros(n_surrogate * (n_times- window_duration))
+        if window_duration == 1:
+            n_rand_sum = np.zeros(n_surrogate * n_times )
+        else:
+            n_rand_sum = np.zeros(n_surrogate * (n_times-window_duration))
     for i in np.arange(n_surrogate):
         if debug_mode:
             print(f"surrogate n°: {i}")
@@ -165,7 +169,9 @@ def get_sce_detection_threshold(spike_nums, window_duration, n_surrogate, use_ma
         for n, neuron_spikes in enumerate(copy_spike_nums):
             # roll the data to a random displace number
             copy_spike_nums[n, :] = np.roll(neuron_spikes, np.random.randint(1, n_times))
-
+        if window_duration == 1:
+            n_rand_sum[i*n_times:(i+1)*n_times] = np.sum(copy_spike_nums, axis=0)
+            continue
         max_sum = 0
         for t in np.arange(0, (n_times - window_duration)):
             sum_value = np.sum(copy_spike_nums[:, t:(t + window_duration)])
@@ -352,81 +358,95 @@ def detect_sce_with_sliding_window(spike_nums, window_duration, perc_threshold=9
         spike_nums = binary_spikes
 
     if activity_threshold is None:
-        activity_threshold = get_sce_detection_threshold(spike_nums=spike_nums, n_surrogate=100,
+        activity_threshold = get_sce_detection_threshold(spike_nums=spike_nums, n_surrogate=1000,
                                                          window_duration=window_duration,
                                                          perc_threshold=perc_threshold,
                                                          non_binary=False)
 
     n_cells = len(spike_nums)
     n_times = len(spike_nums[0, :])
-    start_sce = -1
-    # keep a trace of which cells have been added to an SCE
-    cells_in_sce_so_far = np.zeros(n_cells, dtype="bool")
-    sce_bool = np.zeros(n_times, dtype="bool")
-    sce_tuples = []
-    sce_times_numbers = np.ones(n_times, dtype="int16")
-    sce_times_numbers *= -1
-    if debug_mode:
-        print(f"n_times {n_times}")
-    for t in np.arange(0, (n_times - window_duration)):
+
+    if window_duration == 1:
+        # using a diff method
+        sum_spike_nums = np.sum(spike_nums, axis=0)
+        binary_sum = np.zeros(n_times, dtype="int8")
+        binary_sum[sum_spike_nums >= activity_threshold] = 1
+        sce_tuples = get_continous_time_periods(binary_sum)
+        sce_bool = np.zeros(n_times, dtype="bool")
+        sce_times_numbers = np.ones(n_times, dtype="int16")
+        sce_times_numbers *= -1
+        for sce_index, sce_tuple in enumerate(sce_tuples):
+            sce_bool[sce_tuple[0]:sce_tuple[1]+1] = True
+            sce_times_numbers[sce_tuple[0]:sce_tuple[1]+1] = sce_index
+
+    else:
+        start_sce = -1
+        # keep a trace of which cells have been added to an SCE
+        cells_in_sce_so_far = np.zeros(n_cells, dtype="bool")
+        sce_bool = np.zeros(n_times, dtype="bool")
+        sce_tuples = []
+        sce_times_numbers = np.ones(n_times, dtype="int16")
+        sce_times_numbers *= -1
         if debug_mode:
-            if t % 10**6 == 0:
-                print(f"t {t}")
-        cells_has_been_removed_due_to_redundancy = False
-        sum_value_test = np.sum(spike_nums[:, t:(t + window_duration)])
-        sum_spikes = np.sum(spike_nums[:, t:(t + window_duration)], axis = 1)
-        pos_cells = np.where(sum_spikes)[0]
-        # neurons with sum > 1 are active during a SCE
-        sum_value = len(pos_cells)
-        if no_redundancy and (start_sce > -1):
-            # removing from the count the cell that are in the previous SCE
-            nb_cells_already_in_sce = np.sum(cells_in_sce_so_far[pos_cells])
-            sum_value -= nb_cells_already_in_sce
-            if nb_cells_already_in_sce > 0:
-                cells_has_been_removed_due_to_redundancy = True
-        # print(f"Sum value, test {sum_value_test}, rxeal {sum_value}")
-        if sum_value > activity_threshold:
-            if start_sce == -1:
-                start_sce = t
-                if no_redundancy:
-                    # keeping only cells spiking at time t, as we're gonna shift of one on the next step
-                    sum_spikes = np.sum(spike_nums[:, t])
-                    pos_cells = np.where(sum_spikes)[0]
-                    cells_in_sce_so_far[pos_cells] = True
-            else:
-                if no_redundancy:
-                    # updating which cells are already in the SCE
-                    # keeping only cells spiking at time t, as we're gonna shift of one on the next step
-                    sum_spikes = np.sum(spike_nums[:, t])
-                    pos_cells = np.where(sum_spikes)[0]
-                    cells_in_sce_so_far[pos_cells] = True
-                else:
-                    pass
-        else:
-            if start_sce > -1:
-                # then a new SCE is detected
-                sce_bool[start_sce:t] = True
-                sce_tuples.append((start_sce, (t + window_duration) - 2))
-                # sce_tuples.append((start_sce, t-1))
-                sce_times_numbers[start_sce:t] = len(sce_tuples) - 1
-                start_sce = -1
-                cells_in_sce_so_far = np.zeros(n_cells, dtype="bool")
-            if no_redundancy and cells_has_been_removed_due_to_redundancy:
-                sum_value += nb_cells_already_in_sce
-                if sum_value > activity_threshold:
-                    # then a new SCE start right after the old one
+            print(f"n_times {n_times}")
+        for t in np.arange(0, (n_times - window_duration)):
+            if debug_mode:
+                if t % 10**6 == 0:
+                    print(f"t {t}")
+            cells_has_been_removed_due_to_redundancy = False
+            sum_value_test = np.sum(spike_nums[:, t:(t + window_duration)])
+            sum_spikes = np.sum(spike_nums[:, t:(t + window_duration)], axis = 1)
+            pos_cells = np.where(sum_spikes)[0]
+            # neurons with sum > 1 are active during a SCE
+            sum_value = len(pos_cells)
+            if no_redundancy and (start_sce > -1):
+                # removing from the count the cell that are in the previous SCE
+                nb_cells_already_in_sce = np.sum(cells_in_sce_so_far[pos_cells])
+                sum_value -= nb_cells_already_in_sce
+                if nb_cells_already_in_sce > 0:
+                    cells_has_been_removed_due_to_redundancy = True
+            # print(f"Sum value, test {sum_value_test}, rxeal {sum_value}")
+            if sum_value >= activity_threshold:
+                if start_sce == -1:
                     start_sce = t
-                    cells_in_sce_so_far = np.zeros(n_cells, dtype="bool")
                     if no_redundancy:
                         # keeping only cells spiking at time t, as we're gonna shift of one on the next step
                         sum_spikes = np.sum(spike_nums[:, t])
                         pos_cells = np.where(sum_spikes)[0]
                         cells_in_sce_so_far[pos_cells] = True
+                else:
+                    if no_redundancy:
+                        # updating which cells are already in the SCE
+                        # keeping only cells spiking at time t, as we're gonna shift of one on the next step
+                        sum_spikes = np.sum(spike_nums[:, t])
+                        pos_cells = np.where(sum_spikes)[0]
+                        cells_in_sce_so_far[pos_cells] = True
+                    else:
+                        pass
+            else:
+                if start_sce > -1:
+                    # then a new SCE is detected
+                    sce_bool[start_sce:t] = True
+                    sce_tuples.append((start_sce, (t + window_duration) - 2))
+                    # sce_tuples.append((start_sce, t-1))
+                    sce_times_numbers[start_sce:t] = len(sce_tuples) - 1
+                    start_sce = -1
+                    cells_in_sce_so_far = np.zeros(n_cells, dtype="bool")
+                if no_redundancy and cells_has_been_removed_due_to_redundancy:
+                    sum_value += nb_cells_already_in_sce
+                    if sum_value >= activity_threshold:
+                        # then a new SCE start right after the old one
+                        start_sce = t
+                        cells_in_sce_so_far = np.zeros(n_cells, dtype="bool")
+                        if no_redundancy:
+                            # keeping only cells spiking at time t, as we're gonna shift of one on the next step
+                            sum_spikes = np.sum(spike_nums[:, t])
+                            pos_cells = np.where(sum_spikes)[0]
+                            cells_in_sce_so_far[pos_cells] = True
 
     n_sces = len(sce_tuples)
     sce_nums = np.zeros((n_cells, n_sces), dtype="int16")
     for sce_index, sce_tuple in enumerate(sce_tuples):
-        cells_spikes = np.zeros(n_cells, dtype="int8")
         sum_spikes = np.sum(spike_nums[:, sce_tuple[0]:(sce_tuple[1] + 1)], axis=1)
         # neurons with sum > 1 are active during a SCE
         active_cells = np.where(sum_spikes)[0]
