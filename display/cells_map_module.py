@@ -38,7 +38,7 @@ class CoordClass:
         self.cells_groups = cells_groups
         self.cells_groups_colors = cells_groups_colors
 
-        test_img = np.zeros((self.nb_lines, self.nb_col), dtype="int8")
+        img_contours = np.zeros((self.nb_lines, self.nb_col), dtype="int8")
         # key is the group, value a list of img
         special_cell_imgs = dict()
         non_special_cell_imgs = list()
@@ -55,7 +55,6 @@ class CoordClass:
                     c_filtered = c.astype(int)
                     # c = signal.medfilt(c)
                     special_cell_img[c_filtered[1, :], c_filtered[0, :]] = 1
-                    # test_img = morphology.binary_dilation(test_img)
                     morphology.binary_fill_holes(special_cell_img, output=special_cell_img)
                     # green value is -1
                     special_cell_img[c_filtered[1, :], c_filtered[0, :]] = 0
@@ -75,7 +74,6 @@ class CoordClass:
             c_filtered = c.astype(int)
             # c = signal.medfilt(c)
             non_special_cell_img[c_filtered[1, :], c_filtered[0, :]] = 1
-            # test_img = morphology.binary_dilation(test_img)
             morphology.binary_fill_holes(non_special_cell_img, output=non_special_cell_img)
             # green value is -1
             non_special_cell_img[c_filtered[1, :], c_filtered[0, :]] = 0
@@ -100,14 +98,14 @@ class CoordClass:
             # morphology.binary_fill_holes(input
             bw[c_filtered[1, :], c_filtered[0, :]] = 1
             # early born as been drawn earlier, but we need to update center_coord
-            test_img[c_filtered[1, :], c_filtered[0, :]] = 1
+            img_contours[c_filtered[1, :], c_filtered[0, :]] = 1
             c_x, c_y = ndimage.center_of_mass(bw)
             self.center_coord.append((c_y, c_x))
 
         self.img_filled = np.zeros((self.nb_lines, self.nb_col), dtype="int8")
         # specifying output, otherwise binary_fill_holes return a boolean array
-        morphology.binary_fill_holes(test_img, output=self.img_filled)
-        self.img_filled = self.img_filled * 2
+        # morphology.binary_fill_holes(img_contours, output=self.img_filled)
+        # self.img_filled = self.img_filled * 2
         # self.img_filled[self.img_filled>0] = 2
 
         with_borders = False
@@ -151,12 +149,12 @@ class CoordClass:
         if (not with_borders) and dilatation_version:
             self.img_filled = morphology.binary_dilation(self.img_filled)
 
-        self.img_contours = test_img
+        self.img_contours = img_contours
 
     def plot_cells_map(self, param, data_id, title_option="", connections_dict=None,
                        background_color=(0, 0, 0, 1), default_cells_color=(1, 1, 1, 1.0),
                        link_connect_color="white", link_line_width=1,
-                       cell_numbers_color="black", show_polygons=False,
+                       cell_numbers_color="dimgray", show_polygons=False,
                        with_cell_numbers=False, save_formats="png"):
         """
 

@@ -60,8 +60,8 @@ class CellAssembliesStruct:
         # key is a int representing a sce, and value a list representing the id of cell assemblies cluster
         self.cell_assemblies_cluster_of_multiple_ca_sce = None
 
-    def save_data_on_file(self):
-        file_name = f'{self.param.path_results}/{self.data_id}_cell_assemblies_data_{self.param.time_str}.txt'
+    def save_data_on_file(self, n_clusters):
+        file_name = f'{self.param.path_results}/{self.data_id}_{n_clusters}_clusters_cell_assemblies_data_{self.param.time_str}.txt'
 
         with open(file_name, "w", encoding='UTF-8') as file:
             # first saving params
@@ -1606,17 +1606,21 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
         cas = cas_dict[n_cluster]
         cas.neurons_labels = labels
         cas.sliding_window_duration = sliding_window_duration
+
+        cas.plot_cell_assemblies(data_descr=data_descr, spike_nums=spike_nums_to_use,
+                                 SCE_times=SCE_times, activity_threshold=activity_threshold,
+                                 with_cells_in_cluster_seq_sorted=False,
+                                 sce_times_bool=sce_times_bool)
+
+        cas.save_data_on_file(n_clusters=n_cluster)
+
+        # TODO: see while plotting twice cell_assemblies make it bug
         if with_cells_in_cluster_seq_sorted:
             cas.plot_cell_assemblies(data_descr=data_descr + "_seq", spike_nums=spike_nums_to_use,
                                      SCE_times=SCE_times, activity_threshold=activity_threshold,
                                      with_cells_in_cluster_seq_sorted=True,
                                      sce_times_bool=sce_times_bool)
 
-        cas.plot_cell_assemblies(data_descr=data_descr, spike_nums=spike_nums_to_use,
-                                 SCE_times=SCE_times, activity_threshold=activity_threshold,
-                                 with_cells_in_cluster_seq_sorted=False,
-                                 sce_times_bool=sce_times_bool)
-        cas.save_data_on_file()
         # this section will order the spike_nums for display purpose
         clustered_spike_nums = np.copy(spike_nums_to_use)
         cell_labels = []
