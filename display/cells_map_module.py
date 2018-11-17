@@ -155,6 +155,7 @@ class CoordClass:
                        background_color=(0, 0, 0, 1), default_cells_color=(1, 1, 1, 1.0),
                        link_connect_color="white", link_line_width=1,
                        cell_numbers_color="dimgray", show_polygons=False,
+                       fill_polygons=True,
                        with_cell_numbers=False, save_formats="png"):
         """
 
@@ -233,6 +234,7 @@ class CoordClass:
                 plt.scatter(x=c_x, y=c_y, marker='o', c=color, edgecolor="black", s=100, zorder=20)
 
             ylim = ax.get_ylim()
+            # TODO: invert Y
             ax.set_ylim(ylim[::-1])
 
             fontsize = 6
@@ -283,7 +285,7 @@ class CoordClass:
                 face_color = tuple(face_color)
                 # edge alpha will be 1
                 poly_gon = patches.Polygon(xy=xy,
-                                           fill=True, linewidth=0, facecolor=face_color,
+                                           fill=fill_polygons, linewidth=0, facecolor=face_color,
                                            edgecolor=self.cells_groups_colors[group_id],
                                            zorder=15, lw=3)
                 ax.add_patch(poly_gon)
