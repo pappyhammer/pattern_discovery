@@ -187,7 +187,7 @@ def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
                                         use_loss_score_to_keep_the_best_from_tree=
                                         False,
                                         use_ordered_spike_nums_for_surrogate=False,
-                                        percentile_threshold=95):
+                                        percentile_threshold=95, keep_the_longest_seq=False):
     """
     Key will be the length of the sequence and value will be a list of int, representing the nb of rep
     of the different lists
@@ -213,6 +213,8 @@ def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
         file.write(f"use_only_uniformity_method {use_only_uniformity_method}" + '\n')
         file.write(f"use_loss_score_to_keep_the_best_from_tree {use_loss_score_to_keep_the_best_from_tree}" + '\n')
         file.write(f"use_ordered_spike_nums_for_surrogate {use_ordered_spike_nums_for_surrogate}" + '\n')
+        file.write(f"keep_the_longest_seq {keep_the_longest_seq}" + '\n')
+
 
         file.write("" + '\n')
         min_len = 1000
@@ -317,15 +319,21 @@ def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
         for key, value in significant_results_dict.items():
             file.write(f"{key}:{value} {significant_category_dict_by_len[key]}" + '\n')
 
-    file_name = f'{param.path_results}/significant_sorting_results_with_timestamps{extra_file_name}.txt'
-    with open(file_name, "w", encoding='UTF-8') as file:
+    save_on_file_seq_detection_results(best_cells_order=best_cells_order, seq_dict=significant_seq_dict,
+                                       file_name=f"significant_sorting_results_with_timestamps{extra_file_name}.txt",
+                                       param=param,
+                                       significant_category_dict=significant_seq_dict)
+
+def save_on_file_seq_detection_results(best_cells_order, seq_dict, file_name, param, significant_category_dict=None):
+    complete_file_name = f'{param.path_results}/{file_name}'
+    with open(complete_file_name, "w", encoding='UTF-8') as file:
         file.write("best_order:")
         for cell_id, cell in enumerate(best_cells_order):
             file.write(f"{cell}")
             if cell_id < (len(best_cells_order) - 1):
                 file.write(" ")
         file.write("\n")
-        for cells, value in significant_seq_dict.items():
+        for cells, value in seq_dict.items():
             for cell_id, cell in enumerate(cells):
                 file.write(f"{cell}")
                 if cell_id < (len(cells) - 1):
@@ -338,10 +346,10 @@ def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
                         file.write(" ")
                 if time_stamps_id < (len(value) - 1):
                     file.write("#")
-            file.write("/")
-            file.write(f"{significant_category_dict[cells]}")
+            if significant_category_dict is not None:
+                file.write("/")
+                file.write(f"{significant_category_dict[cells]}")
             file.write("\n")
-
 
 def bfs(trans_dict, neuron_to_start, param, n_std_for_threshold=0):
     """
@@ -441,7 +449,7 @@ def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method
     max_len_non_prob = 0
     # a dict of dict, with each key of the first dict representing the length
     # of the sequences. The 2nd dict will have as key sequences of neurons and as value the time of the neurons spikes
-    dict_by_len_seq = dict()
+    dict_by_len_seq = SortedDict()
 
     # print(f'nb spikes neuron 1: {len(np.where(spike_nums[1,:])[0])}')
 
@@ -678,26 +686,31 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
     seq_dict = dict()
     n_cells = len(spike_nums)
     n_times = len(spike_nums[0, :])
+    # used to merge seq
+    intersec_coeff = 0.2
 
     for cell_id, cell_times in enumerate(spike_nums):
         if (n_cells - 1 - cell_id) < param.min_len_seq:
             break
         current_seq_dict = dict()
-        cell_spikes = np.where(cell_times)[0]
-        for spike_id, spike_time in enumerate(cell_spikes):
+        cell_spikes = p_disc_tools_misc.get_continous_time_periods(cell_times)
+        # cell_spikes = np.where(cell_times)[0]
+        for spike_id, spike_times in enumerate(cell_spikes):
             # to avoid the same spike if using rasterdur
-            if spike_id > 0:
-                if spike_time == (cell_spikes[spike_id - 1] + 1):
-                    continue
-            last_spike_time = spike_time
+            # no need anymore thanks to get_continous_time_periods
+            # if spike_id > 0:
+            #     if spike_time == (cell_spikes[spike_id - 1] + 1):
+            #         continue
+            last_spike_time = spike_times[0]
             nb_errors = 0
             errors_index = []
-            index_seq = 0
+            index_seq = 1
             current_seq_cells = [cell_id]
-            current_seq_times = [spike_time]
+            current_seq_times = [spike_times[0]]
             time_inter_seq = param.time_inter_seq
+            min_duration_intra_seq = param.min_duration_intra_seq
             for next_cell_id in np.arange(cell_id + 1, n_cells):
-                min_time = np.max((0, last_spike_time + param.min_duration_intra_seq))
+                min_time = np.max((0, last_spike_time + min_duration_intra_seq))
                 max_time = np.min((n_times, last_spike_time + time_inter_seq))
 
                 spikes_next_cell = np.where(spike_nums[next_cell_id, min_time:max_time])[0]
@@ -706,6 +719,7 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
                     last_spike_time = spikes_next_cell[0] + min_time
                     current_seq_cells.append(next_cell_id)
                     time_inter_seq = param.time_inter_seq
+                    min_duration_intra_seq = param.min_duration_intra_seq
                 else:
                     if nb_errors < (int(len(current_seq_cells) * param.error_rate) + param.min_n_errors):
                         nb_errors += 1
@@ -713,7 +727,9 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
                         current_seq_cells.append(next_cell_id)
                         # put a fake time, where no spike exist for this cell
                         current_seq_times.append(min_time)
-                        time_inter_seq += param.time_inter_seq
+                        time_inter_seq += (param.time_inter_seq // 2)
+                        min_duration_intra_seq += (param.min_duration_intra_seq // 2)
+
                     else:
                         break
 
@@ -721,6 +737,7 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
 
             # first if errors have been added at the end, we remove them
             while len(errors_index) > 0:
+                # print(f"errors_index {errors_index}, len(current_seq_cells) {len(current_seq_cells)}")
                 if errors_index[-1] == (len(current_seq_cells) - 1):
                     current_seq_cells = current_seq_cells[:-1]
                     current_seq_times = current_seq_times[:-1]
@@ -729,94 +746,340 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
                     break
 
             # if too many errors comparing to the length of the seq, we don't keep it
+            # not used normally
             if len(errors_index) > (int(len(current_seq_cells) * param.error_rate) + param.min_n_errors):
-                # print(f"len(errors_index) > int(len(current_seq_cells) * param.error_rate) "
-                #       f"len(errors_index) {len(errors_index)}, "
-                #       f"int(len(current_seq_cells) * param.error_rate) "
-                #       f"{int(len(current_seq_cells) * param.error_rate)}")
+                print(f"len(errors_index) > int(len(current_seq_cells) * param.error_rate) "
+                      f"len(errors_index) {len(errors_index)}, "
+                      f"int(len(current_seq_cells) * param.error_rate) "
+                      f"{int(len(current_seq_cells) * param.error_rate)}")
                 continue
 
             # then we check if the seq has the min length
             if len(current_seq_cells) >= param.min_len_seq:
-                # if we haven't reach the max errors, we check if by adding errors before we could add it
-                # to a seq already existing
-                not_added = True
+                # print(f"current_seq_cells {current_seq_cells}")
                 current_seq_cells_backup = current_seq_cells[:]
                 current_seq_times_backup = current_seq_times[:]
                 nb_errors_to_add = int(len(current_seq_cells) * param.error_rate) + param.min_n_errors - \
                                    len(errors_index)
-                while not_added and (nb_errors_to_add >= 0):
-                    first_cell = current_seq_cells_backup[0]
-                    if (nb_errors_to_add > 0) and ((first_cell - nb_errors_to_add) >= 0):
-                        first_cell_time = current_seq_times_backup[0]
-                        current_seq_cells = list(np.arange(first_cell - nb_errors_to_add, first_cell)) + \
-                                            current_seq_cells_backup
-                        current_seq_times = ([first_cell_time] * nb_errors_to_add) + current_seq_times_backup
-                    else:
-                        current_seq_cells = current_seq_cells_backup
-                        current_seq_times = current_seq_times_backup
-                    nb_errors_to_add -= 1
 
-                    tuple_seq = tuple(current_seq_cells)
+                # new version
+                first_cell = current_seq_cells_backup[0]
 
-                    # we add errors before only in order to see if it match sequences already added with previous
-                    # cells
-                    if (tuple_seq not in current_seq_dict) and nb_errors_to_add >= 0:
+                current_seq_cells = current_seq_cells_backup
+                current_seq_times = current_seq_times_backup
+                # nb_errors_to_add -= 1
+
+                tuple_seq = tuple(current_seq_cells)
+
+                # we add errors before only in order to see if it match sequences already added with previous
+                # cells
+                # if (tuple_seq not in current_seq_dict) and nb_errors_to_add >= 0 and ((first_cell - 1) >= 0):
+                #     continue
+
+                if tuple_seq not in current_seq_dict:
+                    # first we want to check if a seq already in current_seq_dict that will be longer could be
+                    # considered the same
+                    seq_added = False
+                    seq_to_remove = []
+                    for seq_in, seq_times_in in current_seq_dict.items():
+                        if len(seq_in) > len(tuple_seq):
+                            cells_diff = np.setdiff1d(seq_in, tuple_seq)
+                            if len(cells_diff) < len(tuple_seq) * intersec_coeff:
+                                current_seq_times = current_seq_times + ([current_seq_times[-1]] * len(cells_diff))
+                                # print(f"len(current_seq_times) {len(current_seq_times)}, len(seq_in) {len(seq_in)}")
+                                current_seq_dict[seq_in].append(current_seq_times)
+                                seq_added = True
+                                break
+                        elif len(seq_in) < len(tuple_seq):
+                            cells_diff = np.setdiff1d(tuple_seq, seq_in)
+                            if len(cells_diff) < len(seq_in) * intersec_coeff:
+                                seq_to_remove.append(seq_in)
+                                new_seq_times_in = []
+                                for seq_times in seq_times_in:
+                                    new_seq_times_in.append(list(seq_times) + ([seq_times[-1]] * len(cells_diff)))
+                                # print(f"new_seq_times_in {new_seq_times_in}")
+                                current_seq_dict[tuple_seq] = [current_seq_times]
+                                current_seq_dict[tuple_seq].extend(new_seq_times_in)
+                                seq_added = True
+                                break
+                    if seq_added:
+                        if len(seq_to_remove) > 0:
+                            for key in seq_to_remove:
+                                if key in current_seq_dict:
+                                    del current_seq_dict[key]
                         continue
 
-                    if tuple_seq not in current_seq_dict:
-                        current_seq_dict[tuple_seq] = []
-                        current_seq_dict[tuple_seq].append(current_seq_times)
-                        not_added = False
-                    else:
-                        # first we check that the times of the new seq are no intersect with other one
-                        ok_to_add_it = True
-                        for times_seq_already_in in current_seq_dict[tuple_seq]:
-                            for time_id, time_value in enumerate(times_seq_already_in):
-                                # we can't use intersect of setdiff
-                                if time_value == current_seq_times[time_id]:
-                                    ok_to_add_it = False
-                                    break
-                            if not ok_to_add_it:
-                                break
-                        # print(f"ok_to_add_it {ok_to_add_it}")
-                        if ok_to_add_it:
-                            # print(f"nb_errors_to_add {nb_errors_to_add}, "
-                            #       f"ok_to_add_it {current_seq_cells} / {current_seq_times}")
-                            current_seq_dict[tuple_seq].append(current_seq_times)
-                            not_added = False
-
-        # we need to filter the dict to remove seq that don't repeat enough
-        seq_to_remove = []
-        seq_to_remove_from_valid_seq = []
-        for key, value in current_seq_dict.items():
-            if len(value) < param.min_rep_nb:
-                seq_to_remove.append(key)
-                continue
-            # check if there is no intersection with seq already in seq_dict
-            for valid_seq, valid_times in seq_dict.items():
-                if len(key) <= len(valid_seq):
-                    unique_cells = np.setdiff1d(key, valid_seq)
-                    if len(unique_cells) == 0:
-                        # we want to see if the shorter seq is always at the same time of the longer one
-                        # if not, then we keep it
-                        if not is_seq_independant(times_short_seq=value, times_long_seq=valid_times):
-                            seq_to_remove.append(key)
+                    current_seq_dict[tuple_seq] = []
+                    current_seq_dict[tuple_seq].append(current_seq_times)
                 else:
-                    unique_cells = np.setdiff1d(valid_seq, key)
-                    if len(unique_cells) == 0:
-                        if not is_seq_independant(times_short_seq=valid_times, times_long_seq=value):
-                            seq_to_remove_from_valid_seq.append(valid_seq)
+                    # first we check that the times of the new seq are no intersect with other one
+                    ok_to_add_it = True
+                    for times_seq_already_in in current_seq_dict[tuple_seq]:
+                        for time_id, time_value in enumerate(times_seq_already_in):
+                            # we can't use intersect of setdiff
+                            # print(f"time_value {time_value}, current_seq_times[time_id] {current_seq_times[time_id]}")
+                            if time_value == current_seq_times[time_id]:
+                                ok_to_add_it = False
+                                break
+                        if not ok_to_add_it:
+                            break
+                    # print(f"ok_to_add_it {ok_to_add_it}")
+                    if ok_to_add_it:
+                        # print(f"nb_errors_to_add {nb_errors_to_add}, "
+                        #       f"ok_to_add_it {current_seq_cells} / {current_seq_times}")
+                        current_seq_dict[tuple_seq].append(current_seq_times)
 
-        for key in seq_to_remove:
-            if key in current_seq_dict:
-                del current_seq_dict[key]
 
-        for key in seq_to_remove_from_valid_seq:
-            if key in seq_dict:
-                del seq_dict[key]
+                # while not_added and (nb_errors_to_add >= 0):
+                #     first_cell = current_seq_cells_backup[0]
+                #     if (nb_errors_to_add > 0) and ((first_cell - 1) >= 0):
+                #         first_cell_time = current_seq_times_backup[0]
+                #         current_seq_cells = [first_cell - 1] + current_seq_cells_backup
+                #         current_seq_times = [first_cell_time] + current_seq_times_backup
+                #     else:
+                #         current_seq_cells = current_seq_cells_backup
+                #         current_seq_times = current_seq_times_backup
+                #     nb_errors_to_add -= 1
+                #
+                #     tuple_seq = tuple(current_seq_cells)
+                #
+                #     # we add errors before only in order to see if it match sequences already added with previous
+                #     # cells
+                #     if (tuple_seq not in current_seq_dict) and nb_errors_to_add >= 0 and ((first_cell - 1) >= 0):
+                #         continue
+                #
+                #     if tuple_seq not in current_seq_dict:
+                #         current_seq_dict[tuple_seq] = []
+                #         current_seq_dict[tuple_seq].append(current_seq_times)
+                #         not_added = False
+                #     else:
+                #         # first we check that the times of the new seq are no intersect with other one
+                #         ok_to_add_it = True
+                #         for times_seq_already_in in current_seq_dict[tuple_seq]:
+                #             for time_id, time_value in enumerate(times_seq_already_in):
+                #                 # we can't use intersect of setdiff
+                #                 if time_value == current_seq_times[time_id]:
+                #                     ok_to_add_it = False
+                #                     break
+                #             if not ok_to_add_it:
+                #                 break
+                #         # print(f"ok_to_add_it {ok_to_add_it}")
+                #         if ok_to_add_it:
+                #             # print(f"nb_errors_to_add {nb_errors_to_add}, "
+                #             #       f"ok_to_add_it {current_seq_cells} / {current_seq_times}")
+                #             current_seq_dict[tuple_seq].append(current_seq_times)
+                #             not_added = False
+        # print(f"current_seq_dict.keys() {list(current_seq_dict.keys())}")
+        # seq_to_remove = []
+        # seq_to_remove_from_valid_seq = []
+        keys_current_seq_dict = list(current_seq_dict.keys())
+        index_key = 0
+        # if cell_id <= 5:
+        #     print("")
+        #     print(f"###### cell_id {cell_id} ##########")
+        #     print(f"keys_current_seq_dict {len(keys_current_seq_dict)}:{keys_current_seq_dict}")
+        #     print(f"nb_rep current: {[len(x) for x in (list(current_seq_dict.values()))]}")
+        #     print(f"keys seq_dict {len(list(seq_dict.keys()))}: {list(seq_dict.keys())}")
+        #     print(f"nb_rep {[len(x) for x in (list(seq_dict.values()))]}")
+
+        already_checked_seq = dict()
+        # for key in keys_current_seq_dict:
+        while True:
+            go_out = True
+            for key in current_seq_dict.keys():
+                if key not in already_checked_seq:
+                    already_checked_seq[key] = 1
+                    go_out = False
+                    break
+            if go_out:
+                break
+
+
+            value = current_seq_dict[key]
+            # if len(value) < param.min_rep_nb:
+            #     seq_to_remove.append(key)
+            #     continue
+            # check if there is no intersection with seq already in seq_dict
+            valid_seqs = list(seq_dict.keys())
+            for valid_seq in valid_seqs:
+                valid_times = seq_dict[valid_seq]
+                if len(key) <= len(valid_seq):
+                    long_dict = seq_dict
+                    short_dict = current_seq_dict
+                    long_seq = valid_seq
+                    short_seq = key
+                    long_times = valid_times
+                    short_times = value
+                else:
+                    long_dict = current_seq_dict
+                    short_dict = seq_dict
+                    long_seq = key
+                    short_seq = valid_seq
+                    long_times = value
+                    short_times = valid_times
+
+                unique_cells = np.setdiff1d(short_seq, long_seq)
+                to_remove = False
+                if len(unique_cells) == 0:
+                    # mean that short_seq is included in long_seq
+                    # we want to see if the shorter seq is always at the same time of the longer one
+                    # if not, then we keep it
+                    if not is_seq_independant(times_short_seq=short_times, times_long_seq=long_times):
+                        # seq_to_remove.append(short_seq)
+                        del short_dict[short_seq]
+                        break
+                        to_remove = True
+                    if not to_remove:
+                        # if cell_id <= 5:
+                        #     print(f"step1")
+                        #     print(f"short_seq :{short_seq}")
+                        #     print(f"long_seq: {long_seq}")
+                        # if two seq have the same end, we increase the size of the short one to make them one
+                        if (short_seq[-1] == long_seq[-1]) and ((len(long_seq) - len(short_seq)) < len(short_seq) * intersec_coeff):
+                            # print("new condition")
+                            new_seq_times = []
+                            for short_seq_times in short_times:
+                                alread_in = False
+                                # Add this short_seq_times if not intersecting will another seq_time
+                                for long_time in long_times:
+                                    if (short_seq_times[0] >= long_time[0]) and (short_seq_times[-1] <= long_time[-1]):
+                                        alread_in = True
+                                        break
+                                    if len(np.intersect1d(np.array(short_seq_times), np.array(long_time))):
+                                        alread_in = True
+                                        break
+                                if not alread_in:
+                                    short_seq_times = ([short_seq_times[0]] *
+                                                           (len(long_seq) - len(short_seq))) + short_seq_times
+                                    new_seq_times.append(short_seq_times)
+                            if len(new_seq_times) > 0:
+                                long_dict[long_seq].extend(new_seq_times)
+                            del short_dict[short_seq]
+                            break
+
+                        cells_diff = np.setdiff1d(long_seq, short_seq)
+                        # print(f"cells_diff {cells_diff}")
+                        if len(cells_diff) < (len(short_seq) * intersec_coeff):
+                            index_beg = np.where(np.array(long_seq) == short_seq[0])[0]
+                            if len(index_beg) > 0:
+                                # print(f"len(index_beg) > 0 {len(index_beg) > 0}")
+                                # print(f"long_seq {long_seq}, short_seq {short_seq}")
+                                index_beg = index_beg[0]
+                                to_add_at_the_end = len(cells_diff) - index_beg
+                                new_seq_times = []
+                                for short_seq_times in short_times:
+                                    alread_in = False
+                                    # Add this short_seq_times if not intersecting will another seq_time
+                                    for long_time in long_times:
+                                        if (short_seq_times[0] >= long_time[0]) and (
+                                                short_seq_times[-1] <= long_time[-1]):
+                                            alread_in = True
+                                            break
+                                        if len(np.intersect1d(np.array(short_seq_times), np.array(long_time))):
+                                            alread_in = True
+                                            break
+                                    if not alread_in:
+                                        short_seq_times = ([short_seq_times[0]] * index_beg) + short_seq_times
+                                        if to_add_at_the_end > 0:
+                                            short_seq_times = short_seq_times + (
+                                                    [short_seq_times[-1]] * to_add_at_the_end)
+                                        new_seq_times.append(short_seq_times)
+                                if len(new_seq_times) > 0:
+                                    long_dict[long_seq].extend(new_seq_times)
+                                del short_dict[short_seq]
+                                break
+                else:
+                    if len(unique_cells) < len(short_seq) * intersec_coeff:
+                        new_seq = []
+                        # to_add_beg_long = 0
+                        # to_add_beg_short = 0
+                        # to_add_end_long = 0
+                        # to_add_end_short = 0
+                        # then we merge both
+                        diff_beg_long_short = np.abs(long_seq[0]-short_seq[0])
+                        diff_end_long_short = np.abs(long_seq[-1]-short_seq[-1])
+                        if short_seq[0] <= long_seq[0]:
+                            new_seq.extend(list(short_seq[:diff_beg_long_short]))
+                            new_seq.extend(list(long_seq))
+                            to_add_beg_long = diff_beg_long_short
+                            to_add_end_long = 0
+                            to_add_beg_short = 0
+                            to_add_end_short = diff_end_long_short
+                        else:
+                            new_seq.extend(list(long_seq))
+                            new_seq.extend(list(short_seq[-diff_end_long_short:]))
+                            to_add_beg_long = 0
+                            to_add_end_long = diff_end_long_short
+                            to_add_beg_short = diff_beg_long_short
+                            to_add_end_short = 0
+
+                        new_seq_times = []
+                        for short_seq_times in short_times:
+                            alread_in = False
+                            # Add this short_seq_times if not intersecting will another seq_time
+                            for long_seq_time in long_times:
+                                if (short_seq_times[0] >= long_seq_time[0]) and (
+                                        short_seq_times[-1] <= long_seq_time[-1]):
+                                    alread_in = True
+                                    break
+                                if len(np.intersect1d(np.array(short_seq_times), np.array(long_seq_time))):
+                                    alread_in = True
+                                    break
+                            if not alread_in:
+                                short_seq_times = ([short_seq_times[0]] * to_add_beg_short) + short_seq_times
+                                if to_add_end_short > 0:
+                                    short_seq_times = short_seq_times + (
+                                            [short_seq_times[-1]] * to_add_end_short)
+                                new_seq_times.append(short_seq_times)
+                        for long_seq_time in long_times:
+                            long_seq_time = ([long_seq_time[0]] * to_add_beg_long) + long_seq_time
+                            if to_add_end_long > 0:
+                                long_seq_time = long_seq_time + (
+                                        [long_seq_time[-1]] * to_add_end_long)
+                            new_seq_times.append(long_seq_time)
+                        del short_dict[short_seq]
+                        del long_dict[long_seq]
+                        # adding it to current_seq_dict_dict so we can check the new seq with seq already in seq_dict
+                        # seq_dict[tuple(new_seq)] = new_seq_times
+                        current_seq_dict[tuple(new_seq)] = new_seq_times
+                        break
+            # keys_current_seq_dict = list(current_seq_dict.keys())
+            # index_key += 1
+
+
+        # for key in seq_to_remove:
+        #     if key in current_seq_dict:
+        #         del current_seq_dict[key]
+
+        # for key in seq_to_remove_from_valid_seq:
+        #     if key in seq_dict:
+        #         del seq_dict[key]
 
         seq_dict.update(current_seq_dict)
+
+        # if cell_id <= 5:
+        #     print(f"## keys current_seq_dict {len(list(current_seq_dict.keys()))}: {list(current_seq_dict.keys())}")
+        #     print(f"## keys seq_dict {len(list(seq_dict.keys()))}: {list(seq_dict.keys())}")
+        #     print(f"nb_rep {[len(x) for x in (list(seq_dict.values()))]}")
+
+        # if cell_id > 5:
+        #     raise Exception("> 5")
+
+    # we need to filter the dict to remove seq that don't repeat enough
+    seq_to_remove_from_valid_seq = []
+    for key, value in seq_dict.items():
+        if len(value) < param.min_rep_nb:
+            seq_to_remove_from_valid_seq.append(key)
+            continue
+
+    for key in seq_to_remove_from_valid_seq:
+        if key in seq_dict:
+            del seq_dict[key]
+
+    print("")
+    print("seq_dict")
+    for key, times in seq_dict.items():
+        print(f"## key rep {len(times)} len {len(key)}: {key}")
 
     return seq_dict
 
@@ -831,8 +1094,12 @@ def is_seq_independant(times_short_seq, times_long_seq):
 
     for times_short in times_short_seq:
         not_in_any_long_times = True
+        times_short = np.array(times_short)
         for times_long in times_long_seq:
             if (times_short[0] >= times_long[0]) and (times_short[-1] <= times_long[-1]):
+                not_in_any_long_times = False
+                break
+            if len(np.intersect1d(times_short, np.array(times_long))):
                 not_in_any_long_times = False
                 break
         if not_in_any_long_times:
@@ -1080,7 +1347,8 @@ def order_cells_from_seq_dict(seq_dict, non_ordered_neurons, param, debug_mode=F
 
 def order_spike_nums_by_seq(spike_nums, param, sce_times_bool=None, debug_mode=True, reverse_order=False,
                             use_only_uniformity_method=False, just_keep_the_best=True,
-                            use_loss_score_to_keep_the_best_from_tree=False):
+                            use_loss_score_to_keep_the_best_from_tree=False,
+                            keep_the_longest_seq=False):
     """
 
     :param spike_nums:
@@ -1127,6 +1395,37 @@ def order_spike_nums_by_seq(spike_nums, param, sce_times_bool=None, debug_mode=T
     # adding sequences with algorithm taking into consideration un
     for seq_dict_from_list in list_seq_dict_uniform:
         seq_dict.update(seq_dict_from_list)
+
+    if keep_the_longest_seq:
+        max_len = np.max(list(dict_by_len_seq_uniform.keys()))
+        if not use_only_uniformity_method:
+            max_len = np.max((max_len, np.max(list(dict_by_len_seq.keys()))))
+        best_seq = None
+        best_seq_n_rep = 0
+        if max_len in dict_by_len_seq_uniform:
+            for seq, seq_times in dict_by_len_seq_uniform[max_len].items():
+                if len(seq_times) > best_seq_n_rep:
+                    best_seq = seq
+                    best_seq_n_rep = len(seq_times)
+        if (not use_only_uniformity_method) and (max_len in dict_by_len_seq_uniform):
+            for seq, seq_times in dict_by_len_seq_uniform[max_len].items():
+                if len(seq_times) > best_seq_n_rep:
+                    best_seq = seq
+                    best_seq_n_rep = len(seq_times)
+
+        print(f"len(best_seq) {len(best_seq)}")
+        new_order = np.zeros(nb_neurons, dtype="uint16")
+        new_order[:len(best_seq)] = np.array(best_seq)
+
+        non_ordered_neurons = np.setdiff1d(np.arange(nb_neurons),
+                                           best_seq)
+        if len(non_ordered_neurons) > 0:
+            # will update seq_dict with new seq if necessary and give back an ordered_neurons list
+            ordered_neurons = order_cells_from_seq_dict(seq_dict=seq_dict, non_ordered_neurons=non_ordered_neurons,
+                                                        param=param, debug_mode=False)
+            new_order[len(best_seq):] = ordered_neurons
+            # new_order[len(seq):] = not_ordered_neurons
+        return None, new_order, []
 
     # temporary code to test if taking the longest sequence is good option
     best_seq = None
@@ -1295,7 +1594,8 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
                               use_loss_score_to_keep_the_best_from_tree=
                               False, spike_shape="|",
                               spike_shape_size=10,
-                              jitter_links_range=5):
+                              jitter_links_range=5,
+                              keep_the_longest_seq=False):
     if labels is None:
         labels = np.arange(len(spike_nums))
 
@@ -1340,7 +1640,8 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
                                                                  use_loss_score_to_keep_the_best_from_tree=
                                                                  use_loss_score_to_keep_the_best_from_tree,
                                                                  spike_shape=spike_shape,
-                                                                 spike_shape_size=spike_shape_size, )
+                                                                 spike_shape_size=spike_shape_size,
+                                                                 keep_the_longest_seq=keep_the_longest_seq)
 
     nb_cells = len(spike_nums)
 
@@ -1509,7 +1810,8 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
                                         use_only_uniformity_method=use_only_uniformity_method,
                                         use_loss_score_to_keep_the_best_from_tree=
                                         use_loss_score_to_keep_the_best_from_tree,
-                                        use_ordered_spike_nums_for_surrogate=use_ordered_spike_nums_for_surrogate
+                                        use_ordered_spike_nums_for_surrogate=use_ordered_spike_nums_for_surrogate,
+                                        keep_the_longest_seq=keep_the_longest_seq
                                         )
 
     # seq_dict_real_data_backup = dict()
@@ -1554,7 +1856,7 @@ def sort_it_and_plot_it(spike_nums, param,
                         False,
                         labels=None,
                         save_plots=True, spike_shape="|",
-                        spike_shape_size=10
+                        spike_shape_size=10, keep_the_longest_seq=False
                         ):
     if spike_train_format:
         return
@@ -1564,7 +1866,8 @@ def sort_it_and_plot_it(spike_nums, param,
                                      debug_mode=debug_mode,
                                      use_only_uniformity_method=use_only_uniformity_method,
                                      use_loss_score_to_keep_the_best_from_tree=
-                                     use_loss_score_to_keep_the_best_from_tree)
+                                     use_loss_score_to_keep_the_best_from_tree,
+                                     keep_the_longest_seq=keep_the_longest_seq)
     seq_dict_tmp, best_seq, all_best_seq = result
 
     if labels is None:

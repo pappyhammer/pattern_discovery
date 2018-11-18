@@ -173,7 +173,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     n_cells = len(spike_nums)
     if axes_list is None:
         if not plot_with_amplitude:
-            sharex = False if (SCE_times is None) else True
+            sharex = True # False if (SCE_times is None) else True
             fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=sharex,
                                            gridspec_kw={'height_ratios': [10, 2]},
                                            figsize=(15, 8))
@@ -393,7 +393,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         ax1.set_xlim(-1, len(spike_nums[0, :]) + 1)
     # ax1.margins(x=0, tight=True)
 
-    ax1.get_xaxis().set_visible(False)
+    # ax1.get_xaxis().set_visible(False)
 
     if title is None:
         ax1.set_title('Spikes raster plot')
