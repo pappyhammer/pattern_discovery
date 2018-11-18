@@ -108,7 +108,8 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        axes_list=None,
                        SCE_times=None,
                        ylabel="Cells (#)",
-                       without_activity_sum=False
+                       without_activity_sum=False,
+                       size_fig=None
                        ):
     """
     
@@ -172,14 +173,20 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
 
     n_cells = len(spike_nums)
     if axes_list is None:
+        if size_fig is None:
+            size_fig = (15, 8)
         if not plot_with_amplitude:
-            sharex = True # False if (SCE_times is None) else True
-            fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=sharex,
-                                           gridspec_kw={'height_ratios': [10, 2]},
-                                           figsize=(15, 8))
+            if without_activity_sum:
+                fig, ax1 = plt.subplots(nrows=1, ncols=1, sharex=False,
+                                        figsize=size_fig)
+            else:
+                sharex = True  # False if (SCE_times is None) else True
+                fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=sharex,
+                                               gridspec_kw={'height_ratios': [10, 2]},
+                                               figsize=size_fig)
             fig.set_tight_layout({'rect': [0, 0, 1, 0.95], 'pad': 1.5, 'h_pad': 1.5})
         else:
-            fig = plt.figure(figsize=(15, 8))
+            fig = plt.figure(figsize=size_fig)
             fig.set_tight_layout({'rect': [0, 0, 1, 1], 'pad': 1, 'h_pad': 1})
             outer = gridspec.GridSpec(1, 2, width_ratios=[100, 1])  # , wspace=0.2, hspace=0.2)
     else:
@@ -407,149 +414,150 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     if (axes_list is not None) and without_activity_sum:
         return
 
-    # ################################################################################################
-    # ################################ Activity sum plot part ################################
-    # ################################################################################################
-    if sliding_window_duration >= 1:
-        # print("sliding_window_duration > 1")
-        sum_spikes = np.zeros(n_times)
-        if spike_train_format:
-            windows_sum = np.zeros((n_cells, n_times), dtype="int16")
-            # one cell can participate to max one spike by window
-            # if value is True, it means this cell has already been counted
-            cell_window_participation = np.zeros((n_cells, n_times), dtype="bool")
-            for cell, spikes_train in enumerate(spike_nums):
-                for spike_time in spikes_train:
-                    # first determining to which windows to add the spike
-                    spike_index = int(spike_time - min_time)
-                    first_index_window = np.max((0, spike_index - sliding_window_duration))
-                    if np.sum(cell_window_participation[cell, first_index_window:spike_index]) == 0:
-                        windows_sum[cell, first_index_window:spike_index] += 1
-                        cell_window_participation[cell, first_index_window:spike_index] = True
-                    else:
-                        for t in np.arange(first_index_window, spike_index):
-                            if cell_window_participation[cell, t] is False:
-                                windows_sum[cell, t] += 1
-                                cell_window_participation[cell, t] = True
-            sum_spikes = np.sum(windows_sum, axis=0)
-            if debug_mode:
-                print("sliding window over")
-            # for index, t in enumerate(np.arange(int(min_time), int((np.ceil(max_time) - sliding_window_duration)))):
-            #     # counting how many cell fire during that window
-            #     if (index % 1000) == 0:
-            #         print(f"index {index}")
-            #     sum_value = 0
-            #     t_min = t
-            #     t_max = t + sliding_window_duration
-            #     for spikes_train in spike_nums:
-            #         # give the indexes
-            #         # np.where(np.logical_and(spikes_train >= t, spikes_train < t_max))
-            #         spikes = spikes_train[np.logical_and(spikes_train >= t, spikes_train < t_max)]
-            #         nb_spikes = len(spikes)
-            #         if nb_spikes > 0:
-            #             sum_value += 1
-            #     sum_spikes[index] = sum_value
-            # sum_spikes[(n_times - sliding_window_duration):] = sum_value
-        else:
-            for t in np.arange(0, (n_times - sliding_window_duration)):
-                # One spike by cell max in the sum process
-                sum_value = np.sum(spike_nums[:, t:(t + sliding_window_duration)], axis=1)
-                sum_spikes[t] = len(np.where(sum_value)[0])
-            sum_spikes[(n_times - sliding_window_duration):] = len(np.where(sum_value)[0])
-    else:
-        if spike_train_format:
-            pass
-        else:
-            binary_spikes = np.zeros((n_cells, n_times), dtype="int8")
-            for neuron, spikes in enumerate(spike_nums):
-                binary_spikes[neuron, spikes > 0] = 1
-            if param.bin_size > 1:
-                sum_spikes = np.mean(np.split(np.sum(binary_spikes, axis=0), n_times // param.bin_size), axis=1)
-                sum_spikes = np.repeat(sum_spikes, param.bin_size)
+    if not without_activity_sum:
+        # ################################################################################################
+        # ################################ Activity sum plot part ################################
+        # ################################################################################################
+        if sliding_window_duration >= 1:
+            # print("sliding_window_duration > 1")
+            sum_spikes = np.zeros(n_times)
+            if spike_train_format:
+                windows_sum = np.zeros((n_cells, n_times), dtype="int16")
+                # one cell can participate to max one spike by window
+                # if value is True, it means this cell has already been counted
+                cell_window_participation = np.zeros((n_cells, n_times), dtype="bool")
+                for cell, spikes_train in enumerate(spike_nums):
+                    for spike_time in spikes_train:
+                        # first determining to which windows to add the spike
+                        spike_index = int(spike_time - min_time)
+                        first_index_window = np.max((0, spike_index - sliding_window_duration))
+                        if np.sum(cell_window_participation[cell, first_index_window:spike_index]) == 0:
+                            windows_sum[cell, first_index_window:spike_index] += 1
+                            cell_window_participation[cell, first_index_window:spike_index] = True
+                        else:
+                            for t in np.arange(first_index_window, spike_index):
+                                if cell_window_participation[cell, t] is False:
+                                    windows_sum[cell, t] += 1
+                                    cell_window_participation[cell, t] = True
+                sum_spikes = np.sum(windows_sum, axis=0)
+                if debug_mode:
+                    print("sliding window over")
+                # for index, t in enumerate(np.arange(int(min_time), int((np.ceil(max_time) - sliding_window_duration)))):
+                #     # counting how many cell fire during that window
+                #     if (index % 1000) == 0:
+                #         print(f"index {index}")
+                #     sum_value = 0
+                #     t_min = t
+                #     t_max = t + sliding_window_duration
+                #     for spikes_train in spike_nums:
+                #         # give the indexes
+                #         # np.where(np.logical_and(spikes_train >= t, spikes_train < t_max))
+                #         spikes = spikes_train[np.logical_and(spikes_train >= t, spikes_train < t_max)]
+                #         nb_spikes = len(spikes)
+                #         if nb_spikes > 0:
+                #             sum_value += 1
+                #     sum_spikes[index] = sum_value
+                # sum_spikes[(n_times - sliding_window_duration):] = sum_value
             else:
-                sum_spikes = np.sum(binary_spikes, axis=0)
-
-    if spike_train_format:
-        x_value = np.arange(min_time, max_time)
-    else:
-        x_value = np.arange(n_times)
-
-    if plot_with_amplitude:
-        ax2 = fig.add_subplot(inner[1], sharex=ax1)
-
-    # sp = UnivariateSpline(x_value, sum_spikes, s=240)
-    # ax2.fill_between(x_value, 0, smooth_curve(sum_spikes), facecolor="black") # smooth_curve(sum_spikes)
-    if show_sum_spikes_as_percentage:
-        if debug_mode:
-            print("using percentages")
-        sum_spikes = sum_spikes / n_cells
-        sum_spikes *= 100
-        if activity_threshold is not None:
-            activity_threshold = activity_threshold / n_cells
-            activity_threshold *= 100
-
-    ax2.fill_between(x_value, 0, sum_spikes, facecolor="black")
-    if activity_threshold is not None:
-        line_beg_x = 0
-        line_end_x = 0
-        if spike_train_format:
-            line_beg_x = min_time - 1
-            line_end_x = max_time + 1
+                for t in np.arange(0, (n_times - sliding_window_duration)):
+                    # One spike by cell max in the sum process
+                    sum_value = np.sum(spike_nums[:, t:(t + sliding_window_duration)], axis=1)
+                    sum_spikes[t] = len(np.where(sum_value)[0])
+                sum_spikes[(n_times - sliding_window_duration):] = len(np.where(sum_value)[0])
         else:
-            line_beg_x = -1
-            line_end_x = len(spike_nums[0, :]) + 1
-        ax2.hlines(activity_threshold, line_beg_x, line_end_x, color="red", linewidth=2, linestyles="dashed")
-
-    # draw span to highlight some periods
-    if (span_area_coords is not None) and (not span_area_only_on_raster):
-        for index, span_area_coord in enumerate(span_area_coords):
-            for coord in span_area_coord:
-                if span_area_colors is not None:
-                    color = span_area_colors[index]
+            if spike_train_format:
+                pass
+            else:
+                binary_spikes = np.zeros((n_cells, n_times), dtype="int8")
+                for neuron, spikes in enumerate(spike_nums):
+                    binary_spikes[neuron, spikes > 0] = 1
+                if param.bin_size > 1:
+                    sum_spikes = np.mean(np.split(np.sum(binary_spikes, axis=0), n_times // param.bin_size), axis=1)
+                    sum_spikes = np.repeat(sum_spikes, param.bin_size)
                 else:
-                    color = "lightgrey"
-                ax2.axvspan(coord[0], coord[1], alpha=0.5, facecolor=color, zorder=1)
+                    sum_spikes = np.sum(binary_spikes, axis=0)
 
-    # early born
-    if cells_to_highlight is not None and color_peaks_activity:
-        for index, cell_to_span in enumerate(cells_to_highlight):
-            ax2.vlines(np.where(spike_nums[cell_to_span, :])[0], 0, np.max(sum_spikes),
-                       color=cells_to_highlight_colors[index],
-                       linewidth=2, linestyles="dashed", alpha=0.2)
-
-    # ax2.yaxis.set_visible(False)
-    ax2.set_frame_on(False)
-    ax2.get_xaxis().set_visible(True)
-    if spike_train_format:
-        ax2.set_xlim(min_time - 1, max_time + 1)
-    else:
-        ax2.set_xlim(-1, len(spike_nums[0, :]) + 1)
-    if SCE_times is not None:
-        ax_top = ax2.twiny()
-        ax_top.set_frame_on(False)
         if spike_train_format:
-            ax_top.set_xlim(min_time - 1, max_time + 1)
+            x_value = np.arange(min_time, max_time)
         else:
-            ax_top.set_xlim(-1, len(spike_nums[0, :]) + 1)
-        xticks_pos = []
-        for times_tuple in SCE_times:
-            xticks_pos.append(times_tuple[0])
-        ax_top.set_xticks(xticks_pos)
-        ax_top.xaxis.set_ticks_position('none')
-        ax_top.set_xticklabels(np.arange(len(SCE_times)))
-        plt.setp(ax_top.xaxis.get_majorticklabels(), rotation=90)
-        if len(SCE_times) > 30:
-            ax_top.xaxis.set_tick_params(labelsize=3)
-        elif len(SCE_times) > 50:
-            ax_top.xaxis.set_tick_params(labelsize=2)
-        elif len(SCE_times) > 100:
-            ax_top.xaxis.set_tick_params(labelsize=1)
-        elif len(SCE_times) > 300:
-            ax_top.xaxis.set_tick_params(labelsize=0.5)
+            x_value = np.arange(n_times)
+
+        if plot_with_amplitude:
+            ax2 = fig.add_subplot(inner[1], sharex=ax1)
+
+        # sp = UnivariateSpline(x_value, sum_spikes, s=240)
+        # ax2.fill_between(x_value, 0, smooth_curve(sum_spikes), facecolor="black") # smooth_curve(sum_spikes)
+        if show_sum_spikes_as_percentage:
+            if debug_mode:
+                print("using percentages")
+            sum_spikes = sum_spikes / n_cells
+            sum_spikes *= 100
+            if activity_threshold is not None:
+                activity_threshold = activity_threshold / n_cells
+                activity_threshold *= 100
+
+        ax2.fill_between(x_value, 0, sum_spikes, facecolor="black")
+        if activity_threshold is not None:
+            line_beg_x = 0
+            line_end_x = 0
+            if spike_train_format:
+                line_beg_x = min_time - 1
+                line_end_x = max_time + 1
+            else:
+                line_beg_x = -1
+                line_end_x = len(spike_nums[0, :]) + 1
+            ax2.hlines(activity_threshold, line_beg_x, line_end_x, color="red", linewidth=2, linestyles="dashed")
+
+        # draw span to highlight some periods
+        if (span_area_coords is not None) and (not span_area_only_on_raster):
+            for index, span_area_coord in enumerate(span_area_coords):
+                for coord in span_area_coord:
+                    if span_area_colors is not None:
+                        color = span_area_colors[index]
+                    else:
+                        color = "lightgrey"
+                    ax2.axvspan(coord[0], coord[1], alpha=0.5, facecolor=color, zorder=1)
+
+        # early born
+        if cells_to_highlight is not None and color_peaks_activity:
+            for index, cell_to_span in enumerate(cells_to_highlight):
+                ax2.vlines(np.where(spike_nums[cell_to_span, :])[0], 0, np.max(sum_spikes),
+                           color=cells_to_highlight_colors[index],
+                           linewidth=2, linestyles="dashed", alpha=0.2)
+
+        # ax2.yaxis.set_visible(False)
+        ax2.set_frame_on(False)
+        ax2.get_xaxis().set_visible(True)
+        if spike_train_format:
+            ax2.set_xlim(min_time - 1, max_time + 1)
         else:
-            ax_top.xaxis.set_tick_params(labelsize=4)
-    # print(f"max sum_spikes {np.max(sum_spikes)}, mean  {np.mean(sum_spikes)}, median {np.median(sum_spikes)}")
-    ax2.set_ylim(0, np.max(sum_spikes))
+            ax2.set_xlim(-1, len(spike_nums[0, :]) + 1)
+        if SCE_times is not None:
+            ax_top = ax2.twiny()
+            ax_top.set_frame_on(False)
+            if spike_train_format:
+                ax_top.set_xlim(min_time - 1, max_time + 1)
+            else:
+                ax_top.set_xlim(-1, len(spike_nums[0, :]) + 1)
+            xticks_pos = []
+            for times_tuple in SCE_times:
+                xticks_pos.append(times_tuple[0])
+            ax_top.set_xticks(xticks_pos)
+            ax_top.xaxis.set_ticks_position('none')
+            ax_top.set_xticklabels(np.arange(len(SCE_times)))
+            plt.setp(ax_top.xaxis.get_majorticklabels(), rotation=90)
+            if len(SCE_times) > 30:
+                ax_top.xaxis.set_tick_params(labelsize=3)
+            elif len(SCE_times) > 50:
+                ax_top.xaxis.set_tick_params(labelsize=2)
+            elif len(SCE_times) > 100:
+                ax_top.xaxis.set_tick_params(labelsize=1)
+            elif len(SCE_times) > 300:
+                ax_top.xaxis.set_tick_params(labelsize=0.5)
+            else:
+                ax_top.xaxis.set_tick_params(labelsize=4)
+        # print(f"max sum_spikes {np.max(sum_spikes)}, mean  {np.mean(sum_spikes)}, median {np.median(sum_spikes)}")
+        ax2.set_ylim(0, np.max(sum_spikes))
 
     # color bar section
     if plot_with_amplitude:
