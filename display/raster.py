@@ -259,9 +259,10 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         links_labels = []
         links_labels_color = []
         links_labels_y_coord = []
-        nb_jitters = 10
-        indices_rand_x = np.linspace(-jitter_links_range, jitter_links_range, nb_jitters)
-        np.random.shuffle(indices_rand_x)
+        if jitter_links_range > 0:
+            nb_jitters = 10
+            indices_rand_x = np.linspace(-jitter_links_range, jitter_links_range, nb_jitters)
+            np.random.shuffle(indices_rand_x)
         for seq_indices, seq_times_list in seq_times_to_color_dict.items():
             nb_seq_times = 0
             for times_list_index, times_list in enumerate(seq_times_list):
@@ -298,7 +299,11 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                     else:
                         color_to_use = link_seq_color[seq_count % len(link_seq_color)]
                     x_coord_to_link = np.array(x_coord_to_link)
-                    ax1.plot(x_coord_to_link + indices_rand_x[seq_count % nb_jitters], y_coord_to_link,
+                    if jitter_links_range > 0:
+                        jitter_to_add = indices_rand_x[seq_count % nb_jitters]
+                    else:
+                        jitter_to_add = 0
+                    ax1.plot(x_coord_to_link + jitter_to_add, y_coord_to_link,
                              color=color_to_use,
                              linewidth=link_seq_line_width, zorder=30, alpha=link_seq_alpha)
                     nb_seq_times += 1
@@ -400,7 +405,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         ax1.set_xlim(-1, len(spike_nums[0, :]) + 1)
     # ax1.margins(x=0, tight=True)
 
-    # ax1.get_xaxis().set_visible(False)
+    ax1.get_xaxis().set_visible(False)
 
     if title is None:
         ax1.set_title('Spikes raster plot')
@@ -506,7 +511,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
             else:
                 line_beg_x = -1
                 line_end_x = len(spike_nums[0, :]) + 1
-            ax2.hlines(activity_threshold, line_beg_x, line_end_x, color="red", linewidth=2, linestyles="dashed")
+            ax2.hlines(activity_threshold, line_beg_x, line_end_x, color="red", linewidth=1, linestyles="dashed")
 
         # draw span to highlight some periods
         if (span_area_coords is not None) and (not span_area_only_on_raster):

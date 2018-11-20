@@ -64,7 +64,7 @@ class CoordClass:
 
         cells_in_groups = np.array(cells_in_groups)
         cells_not_in_groups = np.setdiff1d(np.arange(n_cells), cells_in_groups)
-        # print(f"cells_not_in_groups {cells_not_in_groups}")
+
         for cell in cells_not_in_groups:
             non_special_cell_img = np.zeros((self.nb_lines, self.nb_col), dtype="int8")
 
@@ -102,7 +102,7 @@ class CoordClass:
             c_x, c_y = ndimage.center_of_mass(bw)
             self.center_coord.append((c_y, c_x))
 
-        self.img_filled = np.zeros((self.nb_lines, self.nb_col), dtype="int8")
+        self.img_filled = np.zeros((self.nb_lines, self.nb_col), dtype="int16")
         # specifying output, otherwise binary_fill_holes return a boolean array
         # morphology.binary_fill_holes(img_contours, output=self.img_filled)
         # self.img_filled = self.img_filled * 2
@@ -121,6 +121,7 @@ class CoordClass:
             if c.shape[0] == 0:
                 continue
             c_filtered = c.astype(int)
+            # print(f"c_filtered {c_filtered}")
             # border to 2, to be in black
             if with_borders:
                 self.img_filled[c_filtered[1, :], c_filtered[0, :]] = 2
@@ -135,6 +136,7 @@ class CoordClass:
                         filled_pixels = np.where(pixels > 0)[0]
                         if len(filled_pixels) > 0:
                             # print(f"n {n}, filled_pixels {pixels[filled_pixels]}")
+                            # print(f"group_id {group_id}")
                             self.img_filled[n, filled_pixels] = 4 + (2*group_id)
 
         for non_special_cell_img in non_special_cell_imgs:
@@ -178,7 +180,7 @@ class CoordClass:
         # blue = "cornflowerblue"
         # cmap.set_over('red')
         list_colors = [background_color, default_cells_color]
-        bounds = [-1, 1, 3]
+        bounds = [-3, 1, 3]
         if self.cells_groups is not None:
             for cells_groups_color in self.cells_groups_colors:
                 list_colors.append(cells_groups_color)
@@ -186,12 +188,17 @@ class CoordClass:
         # print(f"list_colors {list_colors}")
         cmap = mpl.colors.ListedColormap(list_colors)
         cmap.set_under('black')
+        # cmap.set_over('black')
         norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
         # norm = cm.colors.Normalize(vmax=abs(self.img_filled).max(), vmin=0)
         # print(f"self.img_filled: len {len(self.img_filled)}")
         # for n, pixels in enumerate(self.img_filled):
         #     if n == 75:
         #         print(f"n {n}: {list(self.img_filled[n , :])}")
+        # print(f"bounds {bounds}, np.min(self.img_filled) {np.min(self.img_filled)},  "
+        #       f"np.max(self.img_filled) {np.max(self.img_filled)}")
+        # print(f"np.where(self.img_filled == 0) {len(np.where(self.img_filled == 0)[0])}")
+        # print(f"np.where(self.img_filled == 2) {len(np.where(self.img_filled == 2)[0])}")
         for neuron, (c_x, c_y) in enumerate(cells_center):
             with_cells_img = True
             if with_cells_img:

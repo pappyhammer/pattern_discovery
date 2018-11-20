@@ -44,6 +44,7 @@ class CellAssembliesStruct:
         self.cells_indices = None
         # new sce indices
         self.sce_indices = None
+        # give the number of sce in the no-assembly-sce, single-assembly and multiple-assembly groups respectively
         self.n_sce_in_assembly = None
         self.n_cells_in_single_cell_assembly_sce_cl = None
         self.n_cells_in_multiple_cell_assembly_sce_cl = None
@@ -90,6 +91,34 @@ class CellAssembliesStruct:
                 file.write(f"{' '.join(map(str, ca_ids))}" + '\n')
             # then if cell assemblies, write the times in frames (first and last of each SCE) by cell assemblies
             # first single cell assemblies, then multiple cell assemblies
+            n_sces_not_in_ca = self.n_sce_in_assembly[0]
+            n_sces_so_far = 0
+            start_index = n_sces_not_in_ca + n_sces_so_far
+            for ca_id, sces_indices_tuple in self.sces_in_cell_assemblies_clusters.items():
+                n_sces = sces_indices_tuple[0][1] - sces_indices_tuple[0][0]
+                last_index = start_index + n_sces
+                # print(f"self.sce_indices {self.sce_indices}")
+                # print(f"start_index {start_index}")
+                # print(f"last_index {last_index}")
+                file.write(f"single_sce_in_ca:{ca_id}:")
+                for i, index_sce_period in enumerate(self.sce_indices[start_index:last_index]):
+                    sce_period = self.SCE_times[int(index_sce_period)]
+                    file.write(f"{sce_period[0]} {sce_period[1]}")
+                    if i < len(self.sce_indices[start_index:last_index])-1:
+                        file.write(f"#")
+                file.write('\n')
+                start_index += n_sces
+            if len(self.cell_assemblies_cluster_of_multiple_ca_sce) > 0:
+                sce_ids = np.array(list(self.cell_assemblies_cluster_of_multiple_ca_sce.keys()))
+                file.write(f"multiple_sce_in_ca:")
+                for i, index_sce_period in enumerate(sce_ids):
+                    # print(f"index_sce_period {index_sce_period}")
+                    # print(f"self.sce_indices[int(index_sce_period)] {self.sce_indices[int(index_sce_period)]}")
+                    sce_period = self.SCE_times[index_sce_period]
+                    file.write(f"{sce_period[0]} {sce_period[1]}")
+                    if i < len(sce_ids)-1:
+                        file.write(f"#")
+                file.write('\n')
 
     def plot_cell_assemblies(self, data_descr, SCE_times, activity_threshold,
                              spike_nums, sce_times_bool=None,
@@ -609,6 +638,8 @@ def clusters_on_sce_from_covnorm(cells_in_sce, range_n_clusters, fct_to_keep_bes
 def give_significant_sce_clusters(kmeans_dict, range_n_clusters, m_sces, surrogate_percentile):
     significant_sce_clusters = dict()
     for n_cluster in range_n_clusters:
+        if kmeans_dict[n_cluster] is None:
+            continue
         cluster_labels = kmeans_dict[n_cluster].labels_
         significant_sce_clusters[n_cluster] = []
 
@@ -1461,7 +1492,7 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
               f"multiple_assembly_sce {multiple_assembly_sce}")
     if len(multiple_assembly_sce) > 0:
         for sce_id in multiple_assembly_sce:
-            cell_assemblies_cluster_of_multiple_ca_sce[sce_indices[sce_id]] = np.where(p_cl[:, sce_id])[0]
+            cell_assemblies_cluster_of_multiple_ca_sce[sce_id] = np.where(p_cl[:, sce_id])[0]
         sce_already_organized = np.zeros(0, dtype="uint16")
         for cluster_id in np.arange(len(cell_assemblies_clusters)):
             # sce index that are part of this cluster
@@ -1526,6 +1557,13 @@ def compute_kmean(neurons_labels, cellsinpeak, n_surrogate, range_n_clusters, pa
                                                              m_sces=m_cov_sces,
                                                              surrogate_percentile=surrogate_percentile)
 
+    # updating range_n_clusters
+    range_n_clusters_tmp = []
+    for n_cluster in range_n_clusters:
+        if n_cluster in significant_sce_clusters:
+            range_n_clusters_tmp.append(n_cluster)
+    range_n_clusters = np.array(range_n_clusters_tmp)
+
     cell_assemblies_struct_dict = dict()
     for n_cluster in range_n_clusters:
         kmeans = best_kmeans_by_cluster[n_cluster]
@@ -1551,7 +1589,7 @@ def compute_kmean(neurons_labels, cellsinpeak, n_surrogate, range_n_clusters, pa
                                             cluster_labels=cluster_labels, m_sces=m_cov_sces,
                                             significant_clusters=significant_sce_clusters[n_cluster])
 
-    return best_kmeans_by_cluster, m_cov_sces, cluster_labels_for_neurons, surrogate_percentile, \
+    return range_n_clusters, best_kmeans_by_cluster, m_cov_sces, cluster_labels_for_neurons, surrogate_percentile, \
            significant_sce_clusters, cluster_with_best_silhouette_score, cell_assemblies_struct_dict
 
 
@@ -1581,7 +1619,10 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                             sliding_window_duration=sliding_window_duration,
                             SCE_times=SCE_times)
 
-    best_kmeans_by_cluster, m_cov_sces, \
+    if results is None:
+        return
+
+    range_n_clusters_k_mean, best_kmeans_by_cluster, m_cov_sces, \
     cluster_labels_for_neurons, surrogate_percentiles, significant_sce_clusters, \
     cluster_with_best_silhouette_score, cas_dict = results
 

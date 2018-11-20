@@ -138,7 +138,7 @@ def time_correlation_graph(time_lags_list, correlation_list, time_lags_dict, cor
                            data_id, param, plot_cell_numbers=False,
                            title_option="",
                            cells_groups=None, groups_colors=None, set_y_limit_to_max=True,
-                           set_x_limit_to_max=True, xlabel=None,
+                           set_x_limit_to_max=True, xlabel=None, size_cells=100, size_cells_in_groups=240,
                            time_stamps_by_ms=0.01, ms_scale=200, save_formats="pdf",
                            show_percentiles=None):
     # ms_scale represents the space between each tick
@@ -152,7 +152,7 @@ def time_correlation_graph(time_lags_list, correlation_list, time_lags_dict, cor
     ax.set_facecolor("black")
 
     ax.scatter(time_lags_list, correlation_list, color=default_cell_color, marker="o",
-               s=100, zorder=1, alpha=0.5)
+               s=size_cells, zorder=1, alpha=0.5)
 
     if cells_groups is not None:
         for group_id, cells in enumerate(cells_groups):
@@ -160,7 +160,7 @@ def time_correlation_graph(time_lags_list, correlation_list, time_lags_dict, cor
                 if cell in time_lags_dict:
                     ax.scatter(time_lags_dict[cell], correlation_dict[cell], color=groups_colors[group_id],
                                marker="o",
-                               s=240, zorder=10)
+                               s=size_cells_in_groups, zorder=10)
                 else:
                     print(f"{data_id}: cell {cell} not in time-correlation graph")
 

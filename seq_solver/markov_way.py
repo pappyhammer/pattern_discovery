@@ -784,15 +784,15 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
                     for seq_in, seq_times_in in current_seq_dict.items():
                         if len(seq_in) > len(tuple_seq):
                             cells_diff = np.setdiff1d(seq_in, tuple_seq)
-                            if len(cells_diff) < len(tuple_seq) * intersec_coeff:
+                            if len(cells_diff) <= len(tuple_seq) * intersec_coeff:
                                 current_seq_times = current_seq_times + ([current_seq_times[-1]] * len(cells_diff))
                                 # print(f"len(current_seq_times) {len(current_seq_times)}, len(seq_in) {len(seq_in)}")
                                 current_seq_dict[seq_in].append(current_seq_times)
                                 seq_added = True
                                 break
-                        elif len(seq_in) < len(tuple_seq):
+                        elif len(seq_in) <= len(tuple_seq):
                             cells_diff = np.setdiff1d(tuple_seq, seq_in)
-                            if len(cells_diff) < len(seq_in) * intersec_coeff:
+                            if len(cells_diff) <= len(seq_in) * intersec_coeff:
                                 seq_to_remove.append(seq_in)
                                 new_seq_times_in = []
                                 for seq_times in seq_times_in:
@@ -935,7 +935,8 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
                         #     print(f"short_seq :{short_seq}")
                         #     print(f"long_seq: {long_seq}")
                         # if two seq have the same end, we increase the size of the short one to make them one
-                        if (short_seq[-1] == long_seq[-1]) and ((len(long_seq) - len(short_seq)) < len(short_seq) * intersec_coeff):
+                        if (short_seq[-1] == long_seq[-1]) and \
+                                ((len(long_seq) - len(short_seq)) <= len(short_seq) * intersec_coeff):
                             # print("new condition")
                             new_seq_times = []
                             for short_seq_times in short_times:
@@ -959,7 +960,7 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
 
                         cells_diff = np.setdiff1d(long_seq, short_seq)
                         # print(f"cells_diff {cells_diff}")
-                        if len(cells_diff) < (len(short_seq) * intersec_coeff):
+                        if len(cells_diff) <= (len(short_seq) * intersec_coeff):
                             index_beg = np.where(np.array(long_seq) == short_seq[0])[0]
                             if len(index_beg) > 0:
                                 # print(f"len(index_beg) > 0 {len(index_beg) > 0}")
@@ -989,7 +990,7 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
                                 del short_dict[short_seq]
                                 break
                 else:
-                    if len(unique_cells) < len(short_seq) * intersec_coeff:
+                    if len(unique_cells) <= len(short_seq) * intersec_coeff:
                         new_seq = []
                         # to_add_beg_long = 0
                         # to_add_beg_short = 0
@@ -1407,8 +1408,8 @@ def order_spike_nums_by_seq(spike_nums, param, sce_times_bool=None, debug_mode=T
                 if len(seq_times) > best_seq_n_rep:
                     best_seq = seq
                     best_seq_n_rep = len(seq_times)
-        if (not use_only_uniformity_method) and (max_len in dict_by_len_seq_uniform):
-            for seq, seq_times in dict_by_len_seq_uniform[max_len].items():
+        if (not use_only_uniformity_method) and (max_len in dict_by_len_seq):
+            for seq, seq_times in dict_by_len_seq[max_len].items():
                 if len(seq_times) > best_seq_n_rep:
                     best_seq = seq
                     best_seq_n_rep = len(seq_times)
