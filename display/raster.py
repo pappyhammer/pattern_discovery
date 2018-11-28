@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 import numpy as np
 import math
 
@@ -109,7 +110,9 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        SCE_times=None,
                        ylabel="Cells (#)",
                        without_activity_sum=False,
-                       size_fig=None
+                       spike_nums_for_activity_sum=None,
+                       size_fig=None,
+                       cmap_name="jet"
                        ):
     """
     
@@ -167,6 +170,9 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     if spike_nums is None:
         return
 
+    if spike_nums_for_activity_sum is None:
+        spike_nums_for_activity_sum = spike_nums
+
     if plot_with_amplitude and spike_train_format:
         # not possible so far
         return
@@ -209,7 +215,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         my_colors = mymap(colors)
 
         # colors = plt.cm.hsv(y / float(max(y)))
-        scalar_map = plt.cm.ScalarMappable(cmap="jet", norm=plt.Normalize(vmin=min_value, vmax=max_value))
+        scalar_map = plt.cm.ScalarMappable(cmap=cmap_name, norm=plt.Normalize(vmin=min_value, vmax=max_value))
         # # fake up the array of the scalar mappable. Urgh…
         scalar_map._A = []
 
@@ -431,7 +437,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                 # one cell can participate to max one spike by window
                 # if value is True, it means this cell has already been counted
                 cell_window_participation = np.zeros((n_cells, n_times), dtype="bool")
-                for cell, spikes_train in enumerate(spike_nums):
+                for cell, spikes_train in enumerate(spike_nums_for_activity_sum):
                     for spike_time in spikes_train:
                         # first determining to which windows to add the spike
                         spike_index = int(spike_time - min_time)
@@ -466,7 +472,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
             else:
                 for t in np.arange(0, (n_times - sliding_window_duration)):
                     # One spike by cell max in the sum process
-                    sum_value = np.sum(spike_nums[:, t:(t + sliding_window_duration)], axis=1)
+                    sum_value = np.sum(spike_nums_for_activity_sum[:, t:(t + sliding_window_duration)], axis=1)
                     sum_spikes[t] = len(np.where(sum_value)[0])
                 sum_spikes[(n_times - sliding_window_duration):] = len(np.where(sum_value)[0])
         else:
@@ -474,7 +480,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                 pass
             else:
                 binary_spikes = np.zeros((n_cells, n_times), dtype="int8")
-                for neuron, spikes in enumerate(spike_nums):
+                for neuron, spikes in enumerate(spike_nums_for_activity_sum):
                     binary_spikes[neuron, spikes > 0] = 1
                 if param.bin_size > 1:
                     sum_spikes = np.mean(np.split(np.sum(binary_spikes, axis=0), n_times // param.bin_size), axis=1)
@@ -510,7 +516,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                 line_end_x = max_time + 1
             else:
                 line_beg_x = -1
-                line_end_x = len(spike_nums[0, :]) + 1
+                line_end_x = len(spike_nums_for_activity_sum[0, :]) + 1
             ax2.hlines(activity_threshold, line_beg_x, line_end_x, color="red", linewidth=1, linestyles="dashed")
 
         # draw span to highlight some periods
@@ -526,7 +532,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         # early born
         if cells_to_highlight is not None and color_peaks_activity:
             for index, cell_to_span in enumerate(cells_to_highlight):
-                ax2.vlines(np.where(spike_nums[cell_to_span, :])[0], 0, np.max(sum_spikes),
+                ax2.vlines(np.where(spike_nums_for_activity_sum[cell_to_span, :])[0], 0, np.max(sum_spikes),
                            color=cells_to_highlight_colors[index],
                            linewidth=2, linestyles="dashed", alpha=0.2)
 
@@ -536,14 +542,14 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         if spike_train_format:
             ax2.set_xlim(min_time - 1, max_time + 1)
         else:
-            ax2.set_xlim(-1, len(spike_nums[0, :]) + 1)
+            ax2.set_xlim(-1, len(spike_nums_for_activity_sum[0, :]) + 1)
         if SCE_times is not None:
             ax_top = ax2.twiny()
             ax_top.set_frame_on(False)
             if spike_train_format:
                 ax_top.set_xlim(min_time - 1, max_time + 1)
             else:
-                ax_top.set_xlim(-1, len(spike_nums[0, :]) + 1)
+                ax_top.set_xlim(-1, len(spike_nums_for_activity_sum[0, :]) + 1)
             xticks_pos = []
             for times_tuple in SCE_times:
                 xticks_pos.append(times_tuple[0])

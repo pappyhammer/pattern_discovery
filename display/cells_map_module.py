@@ -176,7 +176,6 @@ class CoordClass:
                                gridspec_kw={'height_ratios': [1]},
                                figsize=(20, 20))
         # ax.set_facecolor("black")
-
         # blue = "cornflowerblue"
         # cmap.set_over('red')
         list_colors = [background_color, default_cells_color]
@@ -297,8 +296,14 @@ class CoordClass:
                                            zorder=15, lw=3)
                 ax.add_patch(poly_gon)
 
-        plt.title(f"Cells map {data_id} {title_option}")
+        # plt.title(f"Cells map {data_id} {title_option}")
 
+        ax.set_frame_on(False)
+        frame = plt.gca()
+        frame.axes.get_xaxis().set_visible(False)
+        frame.axes.get_yaxis().set_visible(False)
+        # ax.xaxis.set_ticks_position('none')
+        # ax.yaxis.set_ticks_position('none')
         #  :param plot_option: if 0: plot n_out and n_int, if 1 only n_out, if 2 only n_in, if 3: only n_out with dotted to
         # show the commun n_in and n_out, if 4: only n_in with dotted to show the commun n_in and n_out,
 

@@ -161,8 +161,8 @@ def time_correlation_graph(time_lags_list, correlation_list, time_lags_dict, cor
                     ax.scatter(time_lags_dict[cell], correlation_dict[cell], color=groups_colors[group_id],
                                marker="o",
                                s=size_cells_in_groups, zorder=10)
-                else:
-                    print(f"{data_id}: cell {cell} not in time-correlation graph")
+                # else:
+                #     print(f"{data_id}: cell {cell} not in time-correlation graph")
 
     if plot_cell_numbers:
         for cell in np.arange(n_cells):

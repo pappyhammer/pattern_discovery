@@ -332,7 +332,7 @@ def get_low_activity_events_detection_threshold(spike_nums, window_duration, n_s
 def detect_sce_with_sliding_window(spike_nums, window_duration, perc_threshold=95,
                                    with_refractory_period=-1, non_binary=False,
                                    activity_threshold=None, debug_mode=False,
-                                   no_redundancy=False):
+                                   no_redundancy=False, keep_only_the_peak=False):
 
     """
     Use a sliding window to detect sce (define as peak of activity > perc_threshold percentile after
@@ -372,6 +372,12 @@ def detect_sce_with_sliding_window(spike_nums, window_duration, perc_threshold=9
         binary_sum = np.zeros(n_times, dtype="int8")
         binary_sum[sum_spike_nums >= activity_threshold] = 1
         sce_tuples = get_continous_time_periods(binary_sum)
+        if keep_only_the_peak:
+            new_sce_tuples = []
+            for sce_index, sce_tuple in enumerate(sce_tuples):
+                index_max = np.argmax(spike_nums[:, sce_tuple[0]:sce_tuple[1]+1])
+                new_sce_tuples.append((sce_tuple[0]+index_max, sce_tuple[0]+index_max))
+            sce_tuples = sce_tuples
         sce_bool = np.zeros(n_times, dtype="bool")
         sce_times_numbers = np.ones(n_times, dtype="int16")
         sce_times_numbers *= -1
@@ -425,11 +431,19 @@ def detect_sce_with_sliding_window(spike_nums, window_duration, perc_threshold=9
                         pass
             else:
                 if start_sce > -1:
-                    # then a new SCE is detected
-                    sce_bool[start_sce:t] = True
-                    sce_tuples.append((start_sce, (t + window_duration) - 2))
-                    # sce_tuples.append((start_sce, t-1))
-                    sce_times_numbers[start_sce:t] = len(sce_tuples) - 1
+                    if keep_only_the_peak:
+                        index_max = np.argmax(spike_nums[:, start_sce:(t + window_duration) - 1])
+                        sce_tuples.append((sce_tuple[0] + index_max, sce_tuple[0] + index_max))
+                        sce_bool[sce_tuple[0] + index_max] = True
+                        # sce_tuples.append((start_sce, t-1))
+                        sce_times_numbers[sce_tuple[0] + index_max] = len(sce_tuples) - 1
+                    else:
+                        # then a new SCE is detected
+                        sce_bool[start_sce:(t + window_duration) - 1] = True
+                        sce_tuples.append((start_sce, (t + window_duration) - 2))
+                        # sce_tuples.append((start_sce, t-1))
+                        sce_times_numbers[start_sce:(t + window_duration) - 1] = len(sce_tuples) - 1
+
                     start_sce = -1
                     cells_in_sce_so_far = np.zeros(n_cells, dtype="bool")
                 if no_redundancy and cells_has_been_removed_due_to_redundancy:

@@ -676,7 +676,7 @@ def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method
     return list_dict_result, dict_by_len_seq, max_seq_dict
 
 
-def find_sequences_in_ordered_spike_nums(spike_nums, param):
+def find_sequences_in_ordered_spike_nums(spike_nums, param, debug_mode=False):
     """
     Find sequence in spike_nums starting from cell 0, with respect of param (such as len_seq, rep_seq etc..)
     :param spike_nums:
@@ -1077,10 +1077,11 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param):
         if key in seq_dict:
             del seq_dict[key]
 
-    print("")
-    print("seq_dict")
-    for key, times in seq_dict.items():
-        print(f"## key rep {len(times)} len {len(key)}: {key}")
+    if debug_mode:
+        print("")
+        print("seq_dict")
+        for key, times in seq_dict.items():
+            print(f"## key rep {len(times)} len {len(key)}: {key}")
 
     return seq_dict
 
