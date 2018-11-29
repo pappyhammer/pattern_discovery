@@ -482,7 +482,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                 binary_spikes = np.zeros((n_cells, n_times), dtype="int8")
                 for neuron, spikes in enumerate(spike_nums_for_activity_sum):
                     binary_spikes[neuron, spikes > 0] = 1
-                if param.bin_size > 1:
+                if (param is not None) and (param.bin_size > 1):
                     sum_spikes = np.mean(np.split(np.sum(binary_spikes, axis=0), n_times // param.bin_size), axis=1)
                     sum_spikes = np.repeat(sum_spikes, param.bin_size)
                 else:

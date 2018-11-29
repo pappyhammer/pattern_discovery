@@ -168,7 +168,6 @@ def time_correlation_graph(time_lags_list, correlation_list, time_lags_dict, cor
         for cell in np.arange(n_cells):
             if cell in time_lags_dict:
                 ax.text(x=time_lags_dict[cell], y=correlation_dict[cell],
-                        s=f"{cell}", color="white", zorder=22,
                         ha='center', va="center", fontsize=0.9, fontweight='bold')
 
     xticks_pos = []
