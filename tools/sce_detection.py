@@ -342,6 +342,7 @@ def detect_sce_with_sliding_window(spike_nums, window_duration, perc_threshold=9
     :param perc_threshold:
     :param no_redundancy: if True, then when using the sliding window, a second spike of a cell is not taking into
     consideration when looking for a new SCE
+    :param keep_only_the_peak: keep only the frame with the maximum cells co-activating
     :return: ** one array (mask, boolean) containing True for indices (times) part of an SCE,
     ** a list of tuple corresponding to the first and last index of each SCE, (last index being included in the SCE)
     ** sce_nums: a new spike_nums with in x axis the SCE and in y axis the neurons, with 1 if

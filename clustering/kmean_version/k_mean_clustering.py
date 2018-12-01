@@ -161,9 +161,11 @@ class CellAssembliesStruct:
         #                          show_silhouettes=True, neurons_labels=labels,
         #                          surrogate_silhouette_avg=surrogate_percentiles[n_cluster],
         #                          axes_list=[ax5, ax3, ax4], fig_to_use=fig, save_formats="pdf")
-
-        fig.savefig(f'{self.param.path_results}/{self.data_descr}_{self.n_clusters}_cell_assemblies.{save_formats}',
-                    format=f"{save_formats}")
+        if isinstance(save_formats, str):
+            save_formats = [save_formats]
+        for save_format in save_formats:
+            fig.savefig(f'{self.param.path_results}/{self.data_descr}_{self.n_clusters}_cell_assemblies.{save_format}',
+                    format=f"{save_format}")
         if show_fig:
             plt.show()
         plt.close()
@@ -1651,7 +1653,8 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
         cas.plot_cell_assemblies(data_descr=data_descr, spike_nums=spike_nums_to_use,
                                  SCE_times=SCE_times, activity_threshold=activity_threshold,
                                  with_cells_in_cluster_seq_sorted=False,
-                                 sce_times_bool=sce_times_bool)
+                                 sce_times_bool=sce_times_bool,
+                                 save_formats=["pdf", "svg", "eps"])
 
         cas.save_data_on_file(n_clusters=n_cluster)
 
