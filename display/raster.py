@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import numpy as np
 import math
+import matplotlib.cm as cm
 
 
 def plot_dendogram_from_fca(cluster_tree, nb_cells, save_plot, axes_list=None, fig_to_use=None, file_name="",
@@ -112,7 +113,9 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        without_activity_sum=False,
                        spike_nums_for_activity_sum=None,
                        size_fig=None,
-                       cmap_name="jet"
+                       cmap_name="jet", traces=None,
+                       display_traces=False,
+                       traces_lw=0.3
                        ):
     """
     
@@ -170,6 +173,10 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     if spike_nums is None:
         return
 
+    if display_traces:
+        if traces is None:
+            return
+
     if spike_nums_for_activity_sum is None:
         spike_nums_for_activity_sum = spike_nums
 
@@ -226,39 +233,47 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     min_time = 0
     max_time = 0
 
-    for y, neuron in enumerate(spike_nums):
-        if spike_train_format:
-            if y == 0:
-                min_time = np.min(neuron)
+    if display_traces:
+        max_n_color = 10
+        n_times = len(traces[0, :])
+        for cell, trace in enumerate(traces):
+            color = cm.nipy_spectral(((cell % max_n_color) + 1) / (max_n_color + 1))
+            ax1.plot(np.arange(n_times), trace + cell, lw=traces_lw, color=color, zorder=20)
+    else:
+        for y, neuron in enumerate(spike_nums):
+            if spike_train_format:
+                if y == 0:
+                    min_time = np.min(neuron)
+                else:
+                    min_time = int(np.min((min_time, np.min(neuron))))
+                max_time = int(np.ceil(np.max((max_time, np.max(neuron)))))
+            # print(f"Neuron {y}, total spikes {len(np.where(neuron)[0])}, "
+            #       f"nb > 2: {len(np.where(neuron>2)[0])}, nb < 2: {len(np.where(neuron[neuron<2])[0])}")
+            color_neuron = cell_spikes_color
+            if cells_to_highlight is not None:
+                if y in cells_to_highlight:
+                    cells_to_highlight = np.array(cells_to_highlight)
+                    index = np.where(cells_to_highlight == y)[0][0]
+                    color_neuron = cells_to_highlight_colors[index]
+            if spike_train_format:
+                neuron_times = neuron
             else:
-                min_time = int(np.min((min_time, np.min(neuron))))
-            max_time = int(np.ceil(np.max((max_time, np.max(neuron)))))
-        # print(f"Neuron {y}, total spikes {len(np.where(neuron)[0])}, "
-        #       f"nb > 2: {len(np.where(neuron>2)[0])}, nb < 2: {len(np.where(neuron[neuron<2])[0])}")
-        color_neuron = cell_spikes_color
-        if cells_to_highlight is not None:
-            if y in cells_to_highlight:
-                cells_to_highlight = np.array(cells_to_highlight)
-                index = np.where(cells_to_highlight == y)[0][0]
-                color_neuron = cells_to_highlight_colors[index]
-        if spike_train_format:
-            neuron_times = neuron
-        else:
-            neuron_times = np.where(neuron)[0]
-        if spike_shape != "|":
-            if plot_with_amplitude:
-                ax1.scatter(neuron_times, np.repeat(y, len(neuron_times)), color=scalar_map.to_rgba(neuron[neuron > 0]),
-                            marker=spike_shape,
-                            s=spike_shape_size, zorder=20)
+                neuron_times = np.where(neuron)[0]
+            if spike_shape != "|":
+                if plot_with_amplitude:
+                    ax1.scatter(neuron_times, np.repeat(y, len(neuron_times)),
+                                color=scalar_map.to_rgba(neuron[neuron > 0]),
+                                marker=spike_shape,
+                                s=spike_shape_size, zorder=20)
+                else:
+                    ax1.scatter(neuron_times, np.repeat(y, len(neuron_times)), color=color_neuron, marker=spike_shape,
+                                s=spike_shape_size, zorder=20)
             else:
-                ax1.scatter(neuron_times, np.repeat(y, len(neuron_times)), color=color_neuron, marker=spike_shape,
-                            s=spike_shape_size, zorder=20)
-        else:
-            if plot_with_amplitude:
-                ax1.vlines(neuron_times, y - .5, y + .5, color=scalar_map.to_rgba(neuron[neuron > 0]),
-                           linewidth=1, zorder=20)
-            else:
-                ax1.vlines(neuron_times, y - .5, y + .5, color=color_neuron, linewidth=1, zorder=20)
+                if plot_with_amplitude:
+                    ax1.vlines(neuron_times, y - .5, y + .5, color=scalar_map.to_rgba(neuron[neuron > 0]),
+                               linewidth=1, zorder=20)
+                else:
+                    ax1.vlines(neuron_times, y - .5, y + .5, color=color_neuron, linewidth=1, zorder=20)
 
     if seq_times_to_color_dict is not None:
         seq_count = 0

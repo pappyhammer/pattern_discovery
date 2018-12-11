@@ -1654,7 +1654,7 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                                  SCE_times=SCE_times, activity_threshold=activity_threshold,
                                  with_cells_in_cluster_seq_sorted=False,
                                  sce_times_bool=sce_times_bool,
-                                 save_formats=["pdf", "svg", "eps"])
+                                 save_formats=["pdf"])
 
         cas.save_data_on_file(n_clusters=n_cluster)
 
