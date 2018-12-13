@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib as mpl
 from matplotlib import patches
+from shapely import geometry
 
 
 class CoordClass:
@@ -13,6 +14,7 @@ class CoordClass:
         self.coord = coord
         self.nb_lines = nb_lines
         self.nb_col = nb_col
+        self.n_cells = len(self.coord)
         # dict of tuples, key is the cell #, cell center coord x and y (x and y are inverted for imgshow)
         self.center_coord = dict()
         self.img_filled = None
@@ -23,30 +25,69 @@ class CoordClass:
         # self.compute_center_coord()
         self.cells_groups = None
         self.cells_groups_colors = None
+        # shapely polygons
+        self.cells_polygon = dict()
+        # first key is an int representing the number of the cell, and value is a list of cells it interesects
+        self.intersect_cells = dict()
 
-        for i, c in enumerate(self.coord):
+        for cell, c in enumerate(self.coord):
 
             # it is necessary to remove one, as data comes from matlab, starting from 1 and not 0
             c = c - 1
 
             if c.shape[0] == 0:
-                print(f'Error: {i} c.shape {c.shape}')
+                print(f'Error: {cell} c.shape {c.shape}')
                 continue
+
             c_filtered = c.astype(int)
             bw = np.zeros((self.nb_lines, self.nb_col), dtype="int8")
             # morphology.binary_fill_holes(input
-            bw[c_filtered[1, :], c_filtered[0, :]] = 1
+            bw[c_filtered[0, :], c_filtered[1, :]] = 1
+
+            n_coord = len(c_filtered[0, :])
+            coord_list_tuple = []
+            for n in np.arange(n_coord):
+                coord_list_tuple.append((c_filtered[0, n], c_filtered[1, n]))
+
+            self.cells_polygon[cell] = geometry.Polygon(coord_list_tuple)
 
             c_x, c_y = ndimage.center_of_mass(bw)
-            self.center_coord[i] = (c_y, c_x)
+            self.center_coord[cell] = (c_x, c_y)
+
+        for cell_1 in np.arange(self.n_cells-1):
+            if cell_1 not in self.intersect_cells:
+                self.intersect_cells[cell_1] = set()
+            for cell_2 in np.arange(cell_1+1, self.n_cells):
+                if cell_2 not in self.intersect_cells:
+                    self.intersect_cells[cell_2] = set()
+                poly_1 = self.cells_polygon[cell_1]
+                poly_2 = self.cells_polygon[cell_2]
+                if poly_1.intersects(poly_2):
+                    self.intersect_cells[cell_2].add(cell_1)
+                    self.intersect_cells[cell_1].add(cell_2)
+
+        # print(f"n_cells {self.n_cells}")
+        # n_intersecting_cells = 0
+        # n_dict = dict()
+        # for cell in np.arange(self.n_cells):
+        #     n = len(self.intersect_cells[cell])
+        #     if n > 0:
+        #         n_intersecting_cells += 1
+        #         n_dict[n] = n_dict.get(n, 0) + 1
+        # print(f"n_intersecting_cells {n_intersecting_cells}")
+        # print(f"n_dict {n_dict}")
 
     def plot_cells_map(self, param, data_id, title_option="", connections_dict=None,
                        background_color=(0, 0, 0, 1), default_cells_color=(1, 1, 1, 1.0),
+                       default_edge_color="white",
                        dont_fill_cells_not_in_groups=False,
                        link_connect_color="white", link_line_width=1,
                        cell_numbers_color="dimgray", show_polygons=False,
-                       cells_to_link=None,
-                       fill_polygons=True, cells_groups=None, cells_groups_colors=None, cells_to_hide=None,
+                       cells_to_link=None, edge_line_width=2, cells_alpha=1,
+                       fill_polygons=True, cells_groups=None, cells_groups_colors=None,
+                       cells_groups_alpha=None,
+                       cells_to_hide=None,
+                       cells_groups_edge_colors=None, with_edge=False,
                        with_cell_numbers=False, save_formats="png"):
         """
 
@@ -93,10 +134,28 @@ class CoordClass:
                 for n in np.arange(n_coord):
                     xy[n, 0] = coord[0, n]
                     xy[n, 1] = coord[1, n]
+                if with_edge:
+                    line_width = edge_line_width
+                    if cells_groups_edge_colors is None:
+                        edge_color = default_edge_color
+                    else:
+                        edge_color = cells_groups_edge_colors[group_index]
+                else:
+                    edge_color = cells_groups_colors[group_index]
+                    line_width = 0
+                # allow to set alpha of the edge to 1
+                face_color = list(cells_groups_colors[group_index])
+                # changing alpha
+                if cells_groups_alpha is not None:
+                    face_color[3] = cells_groups_alpha[group_index]
+                else:
+                    face_color[3] = cells_alpha
+                face_color = tuple(face_color)
                 self.cell_contour = patches.Polygon(xy=xy,
-                                                    fill=True, linewidth=0, facecolor=cells_groups_colors[group_index],
-                                                    edgecolor=cells_groups_colors[group_index],
-                                                    zorder=z_order_cells, lw=2)
+                                                    fill=True, linewidth=line_width,
+                                                    facecolor=face_color,
+                                                    edgecolor=edge_color,
+                                                    zorder=z_order_cells) # lw=2
                 ax.add_patch(self.cell_contour)
                 if with_cell_numbers:
                     self.plot_text_cell(cell=cell, cell_numbers_color=cell_numbers_color)
@@ -129,7 +188,7 @@ class CoordClass:
         ax.set_xlim(0, 200)
         ylim = ax.get_ylim()
         # invert Y
-        # ax.set_ylim(ylim[::-1])
+        ax.set_ylim(ylim[::-1])
 
         if (connections_dict is not None) :
             zorder_lines = 15
