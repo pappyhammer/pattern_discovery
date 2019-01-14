@@ -37,7 +37,7 @@ def get_continous_time_periods(binary_array):
         return [(0, neg[0])]
     elif neg.size == 0:
         # starts, then ends on a spike.
-        return [(neg[0], n_times-1)]
+        return [(pos[0], n_times-1)]
     else:
         if pos[0] > neg[0]:
             # we start with a spike
@@ -80,7 +80,7 @@ def get_spikes_duration_from_raster_dur(spike_nums_dur):
             spike_durations.append([neg[0]])
         elif neg.size == 0:
             # starts, then ends on a spike.
-            spike_durations.append([n_times - neg[0]])
+            spike_durations.append([n_times - pos[0]])
         else:
             if pos[0] > neg[0]:
                 # we start with a spike
