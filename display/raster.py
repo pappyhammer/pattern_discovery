@@ -69,7 +69,7 @@ def plot_dendogram_from_fca(cluster_tree, nb_cells, save_plot, axes_list=None, f
     plt.close()
 
 
-def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
+def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        spike_train_format=False,
                        y_ticks_labels=None,
                        y_ticks_labels_size=None,
@@ -115,6 +115,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                        size_fig=None,
                        cmap_name="jet", traces=None,
                        display_traces=False,
+                       display_spike_nums=True,
                        traces_lw=0.3
                        ):
     """
@@ -170,7 +171,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     :return: 
     """
 
-    if spike_nums is None:
+    if (spike_nums is None) and (traces is None):
         return
 
     if display_traces:
@@ -181,10 +182,14 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         spike_nums_for_activity_sum = spike_nums
 
     if plot_with_amplitude and spike_train_format:
-        # not possible so far
+        # not possible for now
         return
 
-    n_cells = len(spike_nums)
+    if spike_nums is None:
+        n_cells = len(traces)
+    else:
+        n_cells = len(spike_nums)
+
     if axes_list is None:
         if size_fig is None:
             size_fig = (15, 8)
@@ -233,47 +238,59 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     min_time = 0
     max_time = 0
 
+    max_n_color = 10
     if display_traces:
-        max_n_color = 10
         n_times = len(traces[0, :])
         for cell, trace in enumerate(traces):
             color = cm.nipy_spectral(((cell % max_n_color) + 1) / (max_n_color + 1))
             ax1.plot(np.arange(n_times), trace + cell, lw=traces_lw, color=color, zorder=20)
-    else:
-        for y, neuron in enumerate(spike_nums):
+            line_beg_x = -1
+            line_end_x = n_times + 1
+            ax1.hlines(cell, line_beg_x, line_end_x, lw=0.1, linestyles="dashed", color=color, zorder=15)
+
+    if display_spike_nums:
+        for cell, spikes in enumerate(spike_nums):
             if spike_train_format:
-                if y == 0:
-                    min_time = np.min(neuron)
+                if cell == 0:
+                    min_time = np.min(spikes)
                 else:
-                    min_time = int(np.min((min_time, np.min(neuron))))
-                max_time = int(np.ceil(np.max((max_time, np.max(neuron)))))
+                    min_time = int(np.min((min_time, np.min(spikes))))
+                max_time = int(np.ceil(np.max((max_time, np.max(spikes)))))
             # print(f"Neuron {y}, total spikes {len(np.where(neuron)[0])}, "
             #       f"nb > 2: {len(np.where(neuron>2)[0])}, nb < 2: {len(np.where(neuron[neuron<2])[0])}")
-            color_neuron = cell_spikes_color
+            if display_traces:
+                # same color as traces
+                color_neuron = cm.nipy_spectral(((cell % max_n_color) + 1) / (max_n_color + 1))
+            else:
+                color_neuron = cell_spikes_color
             if cells_to_highlight is not None:
-                if y in cells_to_highlight:
+                if cell in cells_to_highlight:
                     cells_to_highlight = np.array(cells_to_highlight)
-                    index = np.where(cells_to_highlight == y)[0][0]
+                    index = np.where(cells_to_highlight == cell)[0][0]
                     color_neuron = cells_to_highlight_colors[index]
             if spike_train_format:
-                neuron_times = neuron
+                neuron_times = spikes
             else:
-                neuron_times = np.where(neuron)[0]
+                neuron_times = np.where(spikes)[0]
             if spike_shape != "|":
                 if plot_with_amplitude:
-                    ax1.scatter(neuron_times, np.repeat(y, len(neuron_times)),
-                                color=scalar_map.to_rgba(neuron[neuron > 0]),
+                    ax1.scatter(neuron_times, np.repeat(cell, len(neuron_times)),
+                                color=scalar_map.to_rgba(spikes[spikes > 0]),
                                 marker=spike_shape,
                                 s=spike_shape_size, zorder=20)
                 else:
-                    ax1.scatter(neuron_times, np.repeat(y, len(neuron_times)), color=color_neuron, marker=spike_shape,
+                    if display_traces:
+                        y_values = traces[cell, neuron_times] + cell
+                    else:
+                        y_values = np.repeat(cell, len(neuron_times))
+                    ax1.scatter(neuron_times, y_values, color=color_neuron, marker=spike_shape,
                                 s=spike_shape_size, zorder=20)
             else:
                 if plot_with_amplitude:
-                    ax1.vlines(neuron_times, y - .5, y + .5, color=scalar_map.to_rgba(neuron[neuron > 0]),
+                    ax1.vlines(neuron_times, cell - .5, cell + .5, color=scalar_map.to_rgba(spikes[spikes > 0]),
                                linewidth=1, zorder=20)
                 else:
-                    ax1.vlines(neuron_times, y - .5, y + .5, color=color_neuron, linewidth=1, zorder=20)
+                    ax1.vlines(neuron_times, cell - .5, cell + .5, color=color_neuron, linewidth=1, zorder=20)
 
     if seq_times_to_color_dict is not None:
         seq_count = 0
@@ -337,20 +354,23 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                 links_labels_y_coord.append((seq_indices[0] + seq_indices[-1]) / 2)
             seq_count += 1
 
-    ax1.set_ylim(-1, len(spike_nums))
+    if display_traces:
+        ax1.set_ylim(-2, n_cells+4)
+    else:
+        ax1.set_ylim(-1, n_cells)
     if y_ticks_labels is not None:
-        ax1.set_yticks(np.arange(len(spike_nums)))
+        ax1.set_yticks(np.arange(n_cells))
         ax1.set_yticklabels(y_ticks_labels)
     if y_ticks_labels_size is not None:
         ax1.yaxis.set_tick_params(labelsize=y_ticks_labels_size)
     else:
-        if len(spike_nums) < 50:
+        if n_cells < 50:
             y_ticks_labels_size = 5
-        elif len(spike_nums) < 100:
+        elif n_cells < 100:
             y_ticks_labels_size = 4
-        elif len(spike_nums) < 200:
+        elif n_cells < 200:
             y_ticks_labels_size = 3
-        elif len(spike_nums) < 400:
+        elif n_cells < 400:
             y_ticks_labels_size = 2
         else:
             y_ticks_labels_size = 1
@@ -360,7 +380,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
         if link_seq_color is not None:
             ax_right = ax1.twinx()
             ax_right.set_frame_on(False)
-            ax_right.set_ylim(-1, len(spike_nums))
+            ax_right.set_ylim(-1, n_cells)
             ax_right.set_yticks(links_labels_y_coord)
             # clusters labels
             ax_right.set_yticklabels(links_labels)
@@ -377,7 +397,10 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     if spike_train_format:
         n_times = int(math.ceil(max_time - min_time))
     else:
-        n_times = len(spike_nums[0, :])
+        if spike_nums is None:
+            n_times = traces.shape[1]
+        else:
+            n_times = len(spike_nums[0, :])
 
     # draw span to highlight some periods
     if span_area_coords is not None:
@@ -404,7 +427,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
             line_end_x = max_time + 1
         else:
             line_beg_x = -1
-            line_end_x = len(spike_nums[0, :]) + 1
+            line_end_x = n_times + 1
         if horizontal_lines_linewidth is None:
             ax1.hlines(horizontal_lines, line_beg_x, line_end_x, color=horizontal_lines_colors, linewidth=2,
                        linestyles=horizontal_lines_sytle)
@@ -415,7 +438,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
 
     if vertical_lines is not None:
         line_beg_y = 0
-        line_end_y = len(spike_nums) - 1
+        line_end_y = n_cells - 1
         ax1.vlines(vertical_lines, line_beg_y, line_end_y, color=vertical_lines_colors,
                    linewidth=vertical_lines_linewidth,
                    linestyles=vertical_lines_sytle)
@@ -423,10 +446,11 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
     if spike_train_format:
         ax1.set_xlim(min_time - 1, max_time + 1)
     else:
-        ax1.set_xlim(-1, len(spike_nums[0, :]) + 1)
+        ax1.set_xlim(-1, n_times + 1)
     # ax1.margins(x=0, tight=True)
 
-    ax1.get_xaxis().set_visible(False)
+    if not without_activity_sum:
+        ax1.get_xaxis().set_visible(False)
 
     if title is None:
         ax1.set_title('Spikes raster plot')
@@ -495,8 +519,8 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                 pass
             else:
                 binary_spikes = np.zeros((n_cells, n_times), dtype="int8")
-                for neuron, spikes in enumerate(spike_nums_for_activity_sum):
-                    binary_spikes[neuron, spikes > 0] = 1
+                for spikes, spikes in enumerate(spike_nums_for_activity_sum):
+                    binary_spikes[spikes, spikes > 0] = 1
                 if (param is not None) and (param.bin_size > 1):
                     sum_spikes = np.mean(np.split(np.sum(binary_spikes, axis=0), n_times // param.bin_size), axis=1)
                     sum_spikes = np.repeat(sum_spikes, param.bin_size)
@@ -545,7 +569,7 @@ def plot_spikes_raster(spike_nums, param=None, title=None, file_name=None,
                     ax2.axvspan(coord[0], coord[1], alpha=0.5, facecolor=color, zorder=1)
 
         # early born
-        if cells_to_highlight is not None and color_peaks_activity:
+        if (cells_to_highlight is not None) and color_peaks_activity:
             for index, cell_to_span in enumerate(cells_to_highlight):
                 ax2.vlines(np.where(spike_nums_for_activity_sum[cell_to_span, :])[0], 0, np.max(sum_spikes),
                            color=cells_to_highlight_colors[index],
