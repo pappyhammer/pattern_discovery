@@ -88,7 +88,8 @@ class CoordClass:
                        cells_groups_alpha=None,
                        cells_to_hide=None,
                        cells_groups_edge_colors=None, with_edge=False,
-                       with_cell_numbers=False, save_formats="png"):
+                       with_cell_numbers=False, save_formats="png",
+                       save_plot=True, return_fig=False):
         """
 
         :param connections_dict: key is an int representing a cell number, and value is a dict representing the cells it
@@ -184,8 +185,8 @@ class CoordClass:
             if with_cell_numbers:
                 self.plot_text_cell(cell=cell, cell_numbers_color=cell_numbers_color)
 
-        ax.set_ylim(0, 200)
-        ax.set_xlim(0, 200)
+        ax.set_ylim(0, self.nb_lines)
+        ax.set_xlim(0, self.nb_col)
         ylim = ax.get_ylim()
         # invert Y
         ax.set_ylim(ylim[::-1])
@@ -232,6 +233,7 @@ class CoordClass:
         # plt.title(f"Cells map {data_id} {title_option}")
 
         # ax.set_frame_on(False)
+        plt.setp(ax.spines.values(), color=background_color)
         frame = plt.gca()
         frame.axes.get_xaxis().set_visible(False)
         frame.axes.get_yaxis().set_visible(False)
@@ -239,14 +241,17 @@ class CoordClass:
         # ax.yaxis.set_ticks_position('none')
         #  :param plot_option: if 0: plot n_out and n_int, if 1 only n_out, if 2 only n_in, if 3: only n_out with dotted to
         # show the commun n_in and n_out, if 4: only n_in with dotted to show the commun n_in and n_out,
-
-        if isinstance(save_formats, str):
-            save_formats = [save_formats]
-        for save_format in save_formats:
-            fig.savefig(f'{param.path_results}/{data_id}_cell_maps_{title_option}'
-                        f'_{param.time_str}.{save_format}',
-                        format=f"{save_format}")
-        plt.close()
+        if save_plot:
+            if isinstance(save_formats, str):
+                save_formats = [save_formats]
+            for save_format in save_formats:
+                fig.savefig(f'{param.path_results}/{data_id}_cell_maps_{title_option}'
+                            f'_{param.time_str}.{save_format}',
+                            format=f"{save_format}")
+        if return_fig:
+            return fig
+        else:
+            plt.close()
 
     def plot_text_cell(self, cell, cell_numbers_color):
         fontsize = 6
