@@ -6,6 +6,8 @@ import matplotlib.cm as cm
 import matplotlib as mpl
 from matplotlib import patches
 from shapely import geometry
+import PIL
+from PIL import ImageDraw
 
 
 class CoordClass:
@@ -76,6 +78,13 @@ class CoordClass:
         #         n_dict[n] = n_dict.get(n, 0) + 1
         # print(f"n_intersecting_cells {n_intersecting_cells}")
         # print(f"n_dict {n_dict}")
+
+    def get_cell_mask(self, cell, dimensions):
+        poly_gon = self.cells_polygon[cell]
+        img = PIL.Image.new('1', (dimensions[0], dimensions[1]), 0)
+        ImageDraw.Draw(img).polygon(list(poly_gon.exterior.coords), outline=1,
+                                    fill=1)
+        return np.array(img)
 
     def plot_cells_map(self, param, data_id, title_option="", connections_dict=None,
                        background_color=(0, 0, 0, 1), default_cells_color=(1, 1, 1, 1.0),
