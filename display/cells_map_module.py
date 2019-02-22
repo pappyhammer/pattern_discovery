@@ -64,6 +64,7 @@ class CoordClass:
                     self.intersect_cells[cell_2] = set()
                 poly_1 = self.cells_polygon[cell_1]
                 poly_2 = self.cells_polygon[cell_2]
+                # if it intersects and not only touches if adding and (not poly_1.touches(poly_2))
                 if poly_1.intersects(poly_2):
                     self.intersect_cells[cell_2].add(cell_1)
                     self.intersect_cells[cell_1].add(cell_2)
