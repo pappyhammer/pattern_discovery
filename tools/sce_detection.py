@@ -3,6 +3,9 @@ import numpy.random as rnd
 import pattern_discovery.tools.trains as trains_module
 import math
 from pattern_discovery.tools.misc import get_continous_time_periods
+from matplotlib import pyplot as plt
+from pattern_discovery.tools.signal import smooth_convolve
+from scipy import signal
 
 
 # TODO: create dithered method for list of spike_trains, using code and book from Drun
@@ -326,6 +329,149 @@ def get_low_activity_events_detection_threshold(spike_nums, window_duration, n_s
     return activity_threshold
 
 
+def smooth_curve(points, factor=0.8):
+    smoothed_points = []
+    for point in points:
+        if smoothed_points:
+            previous = smoothed_points[-1]
+            smoothed_points.append(previous * factor + point * (1 - factor))
+        else:
+            smoothed_points.append(point)
+    return smoothed_points
+
+def detect_sce_potatoes_style(spike_nums, perc_threshold=95, debug_mode=False, keep_only_the_peak=False):
+    sum_spike_nums = np.sum(spike_nums, axis=0)
+    sum_spike_nums_copy = np.copy(sum_spike_nums)
+    sum_spike_nums_bin = np.copy(sum_spike_nums)
+    n_times = sum_spike_nums_bin.shape[0]
+    n_cells = spike_nums.shape[0]
+    # smoothing the trace
+    windows = ['hanning', 'hamming', 'bartlett', 'blackman']
+    i_w = 1
+    window_length = 11
+    smooth_signal = smooth_convolve(x=sum_spike_nums, window_len=window_length,
+                                        window=windows[i_w])
+    beg = (window_length - 1) // 2
+    sum_spike_nums= smooth_signal[beg:-beg]
+
+    # binning
+    bin_size = 100
+    for i in np.arange(sum_spike_nums_bin.shape[0]):
+        if i >= sum_spike_nums_bin.shape[0] - bin_size:
+            break
+        sum_spike_nums_bin[i] = np.mean(sum_spike_nums_bin[i:i+bin_size])
+    smooth_signal = smooth_convolve(x=sum_spike_nums_bin, window_len=window_length,
+                                    window=windows[i_w])
+    beg = (window_length - 1) // 2
+    sum_spike_nums_bin = smooth_signal[beg:-beg]
+    mean_sum_spike_nums_bin = np.mean(sum_spike_nums_bin)
+    std_sum_spike_nums_bin = np.std(sum_spike_nums_bin)
+
+    # sum_spike_nums_bin = smooth_curve(sum_spike_nums_bin, factor=0.8)
+
+    # finding SCE
+    peak_nums = np.zeros(n_times, dtype="uint8")
+
+    # using find_peaks
+    # looking for peaks over mean
+    height = np.mean(sum_spike_nums_bin)  # + np.std(traces[cell])
+    peaks, properties = signal.find_peaks(x=sum_spike_nums_bin, distance=bin_size, height=height)
+    # print(f"peaks {peaks}")
+    peak_nums[peaks] = 1
+    for peak_index in np.arange(len(peaks)):
+        if peak_index == len(peaks) - 1:
+            break
+        if peaks[peak_index] == 0:
+            continue
+        if np.min(sum_spike_nums_bin[peaks[peak_index]:peaks[peak_index+1]+1]) >= mean_sum_spike_nums_bin:
+            # then we keep the peak with the highest value
+            if sum_spike_nums_bin[peaks[peak_index]] > sum_spike_nums_bin[peaks[peak_index+1]]:
+                peak_nums[peaks[peak_index+1]] = 0
+            else:
+                peak_nums[peaks[peak_index]] = 0
+    peak_nums[-bin_size:] = 0
+    peaks = np.where(peak_nums)[0]
+
+    sce_tuples = []
+    sce_bool = np.zeros(n_times, dtype="bool")
+    sce_times_numbers = np.ones(n_times, dtype="int16")
+    sce_times_numbers *= -1
+    end_sce_threshold = mean_sum_spike_nums_bin-(1.5*std_sum_spike_nums_bin)
+    # then for each peak we decide when the "SCE" start and finish
+    for peak_index in np.arange(len(peaks)):
+        peak = peaks[peak_index]
+        # start_sce = None
+        if peak_index == 0:
+            first_index = 0
+            last_index = peaks[peak_index + 1]
+        elif peak_index == len(peaks) -1:
+            first_index = peaks[peak_index - 1]
+            last_index = n_times - bin_size
+        else:
+            first_index = peaks[peak_index - 1]
+            last_index = peaks[peak_index + 1]
+
+        if np.min(sum_spike_nums_bin[first_index:peak]) < mean_sum_spike_nums_bin:
+            start_sce = first_index + np.where(sum_spike_nums_bin[first_index:peak] < mean_sum_spike_nums_bin)[0][-1]
+        else:
+            start_sce = first_index + np.argmin(sum_spike_nums_bin[first_index:peak])
+
+        if np.min(sum_spike_nums_bin[peak:last_index]) < end_sce_threshold:
+            end_sce = peak + \
+                      np.where(sum_spike_nums_bin[peak:last_index] < end_sce_threshold)[0][0]
+        else:
+            min_value = np.min(sum_spike_nums_bin[peak:last_index])
+            end_sce = peak + np.where(sum_spike_nums_bin[peak:last_index] == min_value)[0][-1]
+
+        sce_tuples.append((start_sce, end_sce))
+
+    if keep_only_the_peak:
+        new_sce_tuples = []
+        for sce_index, sce_tuple in enumerate(sce_tuples):
+            index_max = np.argmax(np.sum(spike_nums[:, sce_tuple[0]:sce_tuple[1] + 1], axis=0))
+            new_sce_tuples.append((sce_tuple[0] + index_max, sce_tuple[0] + index_max))
+        sce_tuples = new_sce_tuples
+    for sce_index, sce_tuple in enumerate(sce_tuples):
+        sce_bool[sce_tuple[0]:sce_tuple[1] + 1] = True
+        sce_times_numbers[sce_tuple[0]:sce_tuple[1] + 1] = sce_index
+
+    n_sces = len(sce_tuples)
+    sce_nums = np.zeros((n_cells, n_sces), dtype="int16")
+    for sce_index, sce_tuple in enumerate(sce_tuples):
+        sum_spikes = np.sum(spike_nums[:, sce_tuple[0]:(sce_tuple[1] + 1)], axis=1)
+        # neurons with sum > 1 are active during a SCE
+        active_cells = np.where(sum_spikes)[0]
+        sce_nums[active_cells, sce_index] = 1
+
+    # print(f"number of sce {len(sce_tuples)}")
+    show_plot = False
+    if show_plot:
+        # plt.plot(sum_spike_nums, zorder=8, color="black", alpha=0.4)
+        plt.plot(sum_spike_nums_bin, zorder=10, color="blue", alpha=1, lw=3)
+        plt.plot(sum_spike_nums_copy, color="red", alpha=0.4, zorder=7)
+        plt.hlines(np.mean(sum_spike_nums_bin), 0, n_times-1, color="black",
+                                         linewidth=0.5,
+                                         linestyles="dashed")
+        plt.hlines(end_sce_threshold, 0, n_times-1, color="red",
+                                         linewidth=0.5,
+                                         linestyles="dashed")
+        size_peak_scatter = 50
+        plt.scatter(peaks, sum_spike_nums_bin[peaks],
+                    marker='o', c="yellow",
+                    edgecolors="black", s=size_peak_scatter,
+                    zorder=11, alpha=0.8)
+        # print(f"sce_tuples {sce_tuples}")
+        for index, coord in enumerate(sce_tuples):
+            color = "black"
+            # print(f"coord {coord}")
+            plt.axvspan(coord[0], coord[1]+1, alpha=0.5, facecolor=color, zorder=1)
+        plt.show()
+
+    # raise Exception("TOTO TOTO")
+
+    return sce_bool, sce_tuples, sce_nums, sce_times_numbers
+
+
 # TODO: same method but with spike_trains
 # TODO: for concatenation of SCE, if the same cells spike more than one, then the following should be considered
 # in the count of cells active after the first SCE
@@ -376,9 +522,9 @@ def detect_sce_with_sliding_window(spike_nums, window_duration, perc_threshold=9
         if keep_only_the_peak:
             new_sce_tuples = []
             for sce_index, sce_tuple in enumerate(sce_tuples):
-                index_max = np.argmax(spike_nums[:, sce_tuple[0]:sce_tuple[1]+1])
+                index_max = np.argmax(np.sum(spike_nums[:, sce_tuple[0]:sce_tuple[1] + 1], axis=0))
                 new_sce_tuples.append((sce_tuple[0]+index_max, sce_tuple[0]+index_max))
-            sce_tuples = sce_tuples
+            sce_tuples = new_sce_tuples
         sce_bool = np.zeros(n_times, dtype="bool")
         sce_times_numbers = np.ones(n_times, dtype="int16")
         sce_times_numbers *= -1
