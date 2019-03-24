@@ -271,7 +271,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
             if spike_train_format:
                 neuron_times = spikes
             else:
-                neuron_times = np.where(spikes)[0]
+                neuron_times = np.where(spikes > 0)[0]
             if spike_shape != "|":
                 if plot_with_amplitude:
                     ax1.scatter(neuron_times, np.repeat(cell, len(neuron_times)),
