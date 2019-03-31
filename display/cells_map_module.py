@@ -8,10 +8,12 @@ from matplotlib import patches
 from shapely import geometry
 import PIL
 from PIL import ImageDraw
+import shapely as shapely
+import math
 
 
 class CoordClass:
-    def __init__(self, coord, nb_lines, nb_col):
+    def __init__(self, coord, nb_lines, nb_col, from_suite_2p=False):
         # contour coord
         self.coord = coord
         self.nb_lines = nb_lines
@@ -34,8 +36,11 @@ class CoordClass:
 
         for cell, c in enumerate(self.coord):
 
-            # it is necessary to remove one, as data comes from matlab, starting from 1 and not 0
-            c = c - 1
+            if not from_suite_2p:
+                # it is necessary to remove one, as data comes from matlab, starting from 1 and not 0
+                c = c - 1
+            c = c.astype(int)
+            self.coord[cell] = c
 
             if c.shape[0] == 0:
                 print(f'Error: {cell} c.shape {c.shape}')
@@ -51,10 +56,22 @@ class CoordClass:
             for n in np.arange(n_coord):
                 coord_list_tuple.append((c_filtered[0, n], c_filtered[1, n]))
 
-            self.cells_polygon[cell] = geometry.Polygon(coord_list_tuple)
+            # buffer(0) or convex_hull could be used if the coord are a list of points not
+            # in the right order. However buffer(0) return a MultiPolygon with no coord available.
+            self.cells_polygon[cell] = geometry.Polygon(coord_list_tuple)  # .convex_hull # buffer(0)
+            # self.coord[cell] = np.array(self.cells_polygon[cell].exterior.coords).transpose()
 
             c_x, c_y = ndimage.center_of_mass(bw)
             self.center_coord[cell] = (c_x, c_y)
+
+            # if (cell == 0) or (cell == 159):
+            #     print(f"cell {cell} fig")
+            #     fig, ax = plt.subplots(nrows=1, ncols=1,
+            #                            gridspec_kw={'height_ratios': [1]},
+            #                            figsize=(5, 5))
+            #     ax.imshow(bw)
+            #     plt.show()
+            #     plt.close()
 
         for cell_1 in np.arange(self.n_cells-1):
             if cell_1 not in self.intersect_cells:
@@ -65,9 +82,17 @@ class CoordClass:
                 poly_1 = self.cells_polygon[cell_1]
                 poly_2 = self.cells_polygon[cell_2]
                 # if it intersects and not only touches if adding and (not poly_1.touches(poly_2))
+                # try:
                 if poly_1.intersects(poly_2):
                     self.intersect_cells[cell_2].add(cell_1)
                     self.intersect_cells[cell_1].add(cell_2)
+                # except shapely.errors.TopologicalError:
+                #     print(f"cell_1 {cell_1}, cell_2 {cell_2}")
+                #     print(f"cell_1 {poly_1.is_valid}, cell_2 {poly_2.is_valid}")
+                #     poly_1 = poly_1.buffer(0)
+                #     poly_2 = poly_2.buffer(0)
+                #     print(f"cell_1 {poly_1.is_valid}, cell_2 {poly_2.is_valid}")
+                #     raise Exception("shapely.errors.TopologicalError")
 
         # print(f"n_cells {self.n_cells}")
         # n_intersecting_cells = 0
@@ -86,6 +111,128 @@ class CoordClass:
         ImageDraw.Draw(img).polygon(list(poly_gon.exterior.coords), outline=1,
                                     fill=1)
         return np.array(img)
+
+    def match_cells_indices(self, coord_obj, param, plot_title_opt=""):
+        """
+
+        :param coord_obj: another instanc of coord_obj
+        :return: a 1d array, each index corresponds to the index of a cell of coord_obj, and map it to an index to self
+        or -1 if no cell match
+        """
+        mapping_array = np.zeros(len(coord_obj.coord), dtype='int16')
+        for cell in np.arange(len(coord_obj.coord)):
+            c_x, c_y = coord_obj.center_coord[cell]
+            distances = np.zeros(len(self.coord))
+            for self_cell in np.arange(len(self.coord)):
+                self_c_x, self_c_y = self.center_coord[self_cell]
+                # then we calculte the cartesian distance to all other cells
+                distances[self_cell] = math.sqrt((self_c_x - c_x) ** 2 + (self_c_y - c_y) ** 2)
+            if np.min(distances) <= 2:
+                mapping_array[cell] = np.argmin(distances)
+            else:
+                mapping_array[cell] = -1
+        plot_result = True
+        if plot_result:
+            fig, ax = plt.subplots(nrows=1, ncols=1,
+                                   gridspec_kw={'height_ratios': [1]},
+                                   figsize=(20, 20))
+
+            ax.set_facecolor("black")
+
+            # dark blue
+            other_twin_color = list((0.003, 0.313, 0.678, 1.0))
+            n_twins = 0
+            # red
+            other_orphan_color = list((1, 0, 0, 1.0))
+            n_other_orphans = 0
+            # light blue
+            self_twin_color = list((0.560, 0.764, 1, 1.0))
+            # green
+            self_orphan_color = list((0.278, 1, 0.101, 1.0))
+            n_self_orphans = 0
+            # blue = "cornflowerblue"
+            # cmap.set_over('red')
+            with_edge = True
+            edge_line_width = 1
+            z_order_cells = 12
+            for cell in np.arange(len(coord_obj.coord)):
+                xy = coord_obj.coord[cell].transpose()
+                if with_edge:
+                    line_width = edge_line_width
+                    edge_color = "white"
+                else:
+                    edge_color = "white"
+                    line_width = 0
+                # allow to set alpha of the edge to 1
+                if mapping_array[cell] >= 0:
+                    # dark blue
+                    face_color = other_twin_color
+                    n_twins += 1
+                else:
+                    # red
+                    face_color = other_orphan_color
+                    n_other_orphans += 1
+                face_color[3] = 0.8
+                face_color = tuple(face_color)
+                cell_contour = patches.Polygon(xy=xy,
+                                                    fill=True, linewidth=line_width,
+                                                    facecolor=face_color,
+                                                    edgecolor=edge_color,
+                                                    zorder=z_order_cells)  # lw=2
+                ax.add_patch(cell_contour)
+            for cell in np.arange(len(self.coord)):
+                xy = self.coord[cell].transpose()
+                if with_edge:
+                    line_width = edge_line_width
+                    edge_color = "white"
+                else:
+                    edge_color = "white"
+                    line_width = 0
+                # allow to set alpha of the edge to 1
+                if cell in mapping_array:
+                    # light blue
+                    face_color = self_twin_color
+                else:
+                    # green
+                    face_color = self_orphan_color
+                    n_self_orphans += 1
+                face_color[3] = 0.8
+                face_color = tuple(face_color)
+                cell_contour = patches.Polygon(xy=xy,
+                                                    fill=True, linewidth=line_width,
+                                                    facecolor=face_color,
+                                                    edgecolor=edge_color,
+                                                    zorder=z_order_cells)  # lw=2
+                ax.add_patch(cell_contour)
+            fontsize = 12
+            plt.text(x=190, y=180,
+                     s=f"{n_twins}", color=self_twin_color, zorder=22,
+                     ha='center', va="center", fontsize=fontsize, fontweight='bold')
+            plt.text(x=190, y=185,
+                     s=f"{n_self_orphans}", color=self_orphan_color, zorder=22,
+                     ha='center', va="center", fontsize=fontsize, fontweight='bold')
+            plt.text(x=190, y=190,
+                     s=f"{n_twins}", color=other_twin_color, zorder=22,
+                     ha='center', va="center", fontsize=fontsize, fontweight='bold')
+            plt.text(x=190, y=195,
+                     s=f"{n_other_orphans}", color=other_orphan_color, zorder=22,
+                     ha='center', va="center", fontsize=fontsize, fontweight='bold')
+            ax.set_ylim(0, self.nb_lines)
+            ax.set_xlim(0, self.nb_col)
+            ylim = ax.get_ylim()
+            # invert Y
+            ax.set_ylim(ylim[::-1])
+            plt.setp(ax.spines.values(), color="black")
+            frame = plt.gca()
+            frame.axes.get_xaxis().set_visible(False)
+            frame.axes.get_yaxis().set_visible(False)
+            save_format = "png"
+            fig.savefig(f'{param.path_results}/cells_map_{plot_title_opt}'
+                        f'_{param.time_str}.{save_format}',
+                        format=f"{save_format}")
+            # plt.show()
+            plt.close()
+        return mapping_array
 
     def plot_cells_map(self, param, data_id, title_option="", connections_dict=None,
                        background_color=(0, 0, 0, 1), default_cells_color=(1, 1, 1, 1.0),
@@ -137,14 +284,7 @@ class CoordClass:
                 if cell in cells_to_hide:
                     continue
 
-                coord = self.coord[cell]
-                coord = coord - 1
-                # c_filtered = c.astype(int)
-                n_coord = len(coord[0, :])
-                xy = np.zeros((n_coord, 2))
-                for n in np.arange(n_coord):
-                    xy[n, 0] = coord[0, n]
-                    xy[n, 1] = coord[1, n]
+                xy = self.coord[cell].transpose()
                 if with_edge:
                     line_width = edge_line_width
                     if cells_groups_edge_colors is None:
@@ -174,14 +314,7 @@ class CoordClass:
         for cell in cells_not_in_groups:
             if cell in cells_to_hide:
                 continue
-            coord = self.coord[cell]
-            coord = coord - 1
-            # c_filtered = c.astype(int)
-            n_coord = len(coord[0, :])
-            xy = np.zeros((n_coord, 2))
-            for n in np.arange(n_coord):
-                xy[n, 0] = coord[0, n]
-                xy[n, 1] = coord[1, n]
+            xy = self.coord[cell].transpose()
             # face_color = default_cells_color
             # if dont_fill_cells_not_in_groups:
             #     face_color = None
@@ -243,6 +376,9 @@ class CoordClass:
         # plt.title(f"Cells map {data_id} {title_option}")
 
         # ax.set_frame_on(False)
+
+        # invert Y
+        ax.set_ylim(ylim[::-1])
         plt.setp(ax.spines.values(), color=background_color)
         frame = plt.gca()
         frame.axes.get_xaxis().set_visible(False)
