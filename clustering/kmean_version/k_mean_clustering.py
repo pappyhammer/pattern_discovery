@@ -1048,8 +1048,11 @@ def show_co_var_first_matrix(cells_in_peak, m_sces, n_clusters, kmeans, cluster_
     if (path_results is not None) and ((axes_list is None) or (fig_to_use is not None)):
         if fig_to_use is not None:
             fig = fig_to_use
-        fig.savefig(f'{path_results}/{data_str}_{n_clusters}_sce_clusters.{save_formats}',
-                    format=f"{save_formats}")
+        if isinstance(save_formats, str):
+            save_formats = [save_formats]
+        for save_format in save_formats:
+            fig.savefig(f'{path_results}/{data_str}_{n_clusters}_sce_clusters.{save_format}',
+                    format=f"{save_format}")
     if show_fig:
         plt.show()
         plt.close()
@@ -1654,7 +1657,7 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                                  SCE_times=SCE_times, activity_threshold=activity_threshold,
                                  with_cells_in_cluster_seq_sorted=False,
                                  sce_times_bool=sce_times_bool,
-                                 save_formats=["pdf"])
+                                 save_formats=["pdf", "png"])
 
         cas.save_data_on_file(n_clusters=n_cluster)
 
@@ -1767,7 +1770,7 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                                  data_str=data_descr, path_results=param.path_results,
                                  show_silhouettes=True, neurons_labels=labels,
                                  surrogate_silhouette_avg=surrogate_percentiles[n_cluster],
-                                 axes_list=[ax5, ax3, ax4], fig_to_use=fig, save_formats="pdf")
+                                 axes_list=[ax5, ax3, ax4], fig_to_use=fig, save_formats=["pdf", "png"])
         plt.close()
 
         # ######### Plot that show cluster activation
