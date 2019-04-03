@@ -106,8 +106,14 @@ class CoordClass:
         # print(f"n_dict {n_dict}")
 
     def get_cell_mask(self, cell, dimensions):
+        """
+
+        :param cell:
+        :param dimensions: height x width
+        :return:
+        """
         poly_gon = self.cells_polygon[cell]
-        img = PIL.Image.new('1', (dimensions[0], dimensions[1]), 0)
+        img = PIL.Image.new('1', (dimensions[1], dimensions[0]), 0)
         ImageDraw.Draw(img).polygon(list(poly_gon.exterior.coords), outline=1,
                                     fill=1)
         return np.array(img)
