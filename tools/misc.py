@@ -286,3 +286,32 @@ def find_continuous_frames_period(frames):
         edges.append(frames[index])
         i += 1
     return frames_periods
+
+def get_activity_sum(raster, get_sum_spikes_as_percentage=True):
+    n_cells = raster.shape[0]
+    n_times = raster.shape[1]
+    sum_spikes = np.zeros(n_times)
+
+    sliding_window_duration = 1
+    bin_size = 1
+    if sliding_window_duration > 1:
+        for t in np.arange(0, (n_times - sliding_window_duration)):
+            # One spike by cell max in the sum process
+            sum_value = np.sum(raster[:, t:(t + sliding_window_duration)], axis=1)
+            sum_spikes[t] = len(np.where(sum_value)[0])
+        sum_spikes[(n_times - sliding_window_duration):] = len(np.where(sum_value)[0])
+    else:
+        binary_spikes = np.zeros((n_cells, n_times), dtype="int8")
+        for cell, spikes in enumerate(raster):
+            binary_spikes[cell, spikes > 0] = 1
+        if bin_size > 1:
+            sum_spikes = np.mean(np.split(np.sum(binary_spikes, axis=0), n_times // bin_size), axis=1)
+            sum_spikes = np.repeat(sum_spikes, bin_size)
+        else:
+            sum_spikes = np.sum(binary_spikes, axis=0)
+
+    if get_sum_spikes_as_percentage:
+        sum_spikes = sum_spikes / n_cells
+        sum_spikes *= 100
+
+    return sum_spikes
