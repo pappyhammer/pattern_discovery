@@ -73,6 +73,10 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        spike_train_format=False,
                        y_ticks_labels=None,
                        y_ticks_labels_size=None,
+                       y_ticks_labels_color="white",
+                       x_ticks_labels_color="white",
+                       figure_background_color="black",
+                       without_ticks=True,
                        save_raster=False,
                        show_raster=False,
                        plot_with_amplitude=False,
@@ -100,6 +104,8 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        spike_shape_size=10,
                        raster_face_color='black',
                        cell_spikes_color='white',
+                       activity_sum_plot_color="white",
+                       activity_sum_face_color="black",
                        seq_times_to_color_dict=None,
                        link_seq_categories=None,
                        link_seq_color=None, min_len_links_seq=3,
@@ -112,6 +118,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        ylabel="Cells (#)",
                        without_activity_sum=False,
                        spike_nums_for_activity_sum=None,
+                       spikes_sum_to_use=None,
                        size_fig=None,
                        cmap_name="jet", traces=None,
                        display_traces=False,
@@ -207,6 +214,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
             fig = plt.figure(figsize=size_fig)
             fig.set_tight_layout({'rect': [0, 0, 1, 1], 'pad': 1, 'h_pad': 1})
             outer = gridspec.GridSpec(1, 2, width_ratios=[100, 1])  # , wspace=0.2, hspace=0.2)
+        fig.patch.set_facecolor(figure_background_color)
     else:
         if without_activity_sum:
             ax1 = axes_list[0]
@@ -375,6 +383,8 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
         else:
             y_ticks_labels_size = 1
         ax1.yaxis.set_tick_params(labelsize=y_ticks_labels_size)
+    if without_ticks:
+        ax1.tick_params(axis='both', which='both', length=0)
 
     if seq_times_to_color_dict is not None:
         if link_seq_color is not None:
@@ -461,6 +471,13 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
     # Give y axis label for the spike raster plot
     ax1.set_ylabel(ylabel)
 
+
+    # ax1.spines['left'].set_color(y_ticks_labels_color)
+    # ax1.spines['bottom'].set_color(x_ticks_labels_color)
+    ax1.yaxis.label.set_color(y_ticks_labels_color)
+    ax1.tick_params(axis='y', colors=y_ticks_labels_color)
+    ax1.tick_params(axis='x', colors=x_ticks_labels_color)
+
     if (axes_list is not None) and without_activity_sum:
         return
 
@@ -468,8 +485,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
         # ################################################################################################
         # ################################ Activity sum plot part ################################
         # ################################################################################################
-        if sliding_window_duration >= 1:
-            # print("sliding_window_duration > 1")
+        if (sliding_window_duration >= 1) and (spikes_sum_to_use is None):
             sum_spikes = np.zeros(n_times)
             if spike_train_format:
                 windows_sum = np.zeros((n_cells, n_times), dtype="int16")
@@ -514,7 +530,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                     sum_value = np.sum(spike_nums_for_activity_sum[:, t:(t + sliding_window_duration)], axis=1)
                     sum_spikes[t] = len(np.where(sum_value)[0])
                 sum_spikes[(n_times - sliding_window_duration):] = len(np.where(sum_value)[0])
-        else:
+        elif spikes_sum_to_use is None:
             if spike_train_format:
                 pass
             else:
@@ -526,6 +542,8 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                     sum_spikes = np.repeat(sum_spikes, param.bin_size)
                 else:
                     sum_spikes = np.sum(binary_spikes, axis=0)
+        else:
+            sum_spikes = spikes_sum_to_use
 
         if spike_train_format:
             x_value = np.arange(min_time, max_time)
@@ -534,6 +552,8 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
 
         if plot_with_amplitude:
             ax2 = fig.add_subplot(inner[1], sharex=ax1)
+
+        ax2.set_facecolor(activity_sum_face_color)
 
         # sp = UnivariateSpline(x_value, sum_spikes, s=240)
         # ax2.fill_between(x_value, 0, smooth_curve(sum_spikes), facecolor="black") # smooth_curve(sum_spikes)
@@ -546,7 +566,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                 activity_threshold = activity_threshold / n_cells
                 activity_threshold *= 100
 
-        ax2.fill_between(x_value, 0, sum_spikes, facecolor="black")
+        ax2.fill_between(x_value, 0, sum_spikes, facecolor=activity_sum_plot_color)
         if activity_threshold is not None:
             line_beg_x = 0
             line_end_x = 0
@@ -608,6 +628,11 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                 ax_top.xaxis.set_tick_params(labelsize=4)
         # print(f"max sum_spikes {np.max(sum_spikes)}, mean  {np.mean(sum_spikes)}, median {np.median(sum_spikes)}")
         ax2.set_ylim(0, np.max(sum_spikes))
+        if without_ticks:
+            ax2.tick_params(axis='both', which='both', length=0)
+        ax2.yaxis.label.set_color(y_ticks_labels_color)
+        ax2.tick_params(axis='y', colors=y_ticks_labels_color)
+        ax2.tick_params(axis='x', colors=x_ticks_labels_color)
 
     # color bar section
     if plot_with_amplitude:
@@ -621,7 +646,8 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
             if isinstance(save_formats, str):
                 save_formats = [save_formats]
             for save_format in save_formats:
-                fig.savefig(f'{param.path_results}/{file_name}_{param.time_str}.{save_format}', format=f"{save_format}")
+                fig.savefig(f'{param.path_results}/{file_name}_{param.time_str}.{save_format}', format=f"{save_format}",
+                            facecolor=fig.get_facecolor())
         # Display the spike raster plot
         if show_raster:
             plt.show()

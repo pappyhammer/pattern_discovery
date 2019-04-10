@@ -128,6 +128,7 @@ class CellAssembliesStruct:
         self.data_descr = data_descr
         self.SCE_times = SCE_times
         self.activity_threshold = activity_threshold
+        background_color = "black"
 
         fig = plt.figure(figsize=(20, 14))
         fig.set_tight_layout({'rect': [0, 0, 1, 1], 'pad': 1, 'h_pad': 2})
@@ -147,6 +148,7 @@ class CellAssembliesStruct:
         ax2 = fig.add_subplot(inner_bottom[1], sharex=ax1)
 
         ax3 = fig.add_subplot(inner_top[0])
+        fig.patch.set_facecolor(background_color)
 
         self.plot_raster(axes_list=[ax1, ax2], spike_nums=spike_nums,
                          with_cells_in_cluster_seq_sorted=with_cells_in_cluster_seq_sorted,
@@ -165,7 +167,7 @@ class CellAssembliesStruct:
             save_formats = [save_formats]
         for save_format in save_formats:
             fig.savefig(f'{self.param.path_results}/{self.data_descr}_{self.n_clusters}_cell_assemblies.{save_format}',
-                    format=f"{save_format}")
+                    format=f"{save_format}", facecolor=fig.get_facecolor())
         if show_fig:
             plt.show()
         plt.close()
@@ -307,10 +309,15 @@ class CellAssembliesStruct:
                                "magenta"]
         plot_spikes_raster(spike_nums=clustered_spike_nums, param=self.param,
                            spike_train_format=False,
-                           title=f"{self.n_clusters} cell assemblies raster plot {self.data_descr}",
+                           title="",
                            file_name=f"cell assemblies raster plot_{self.data_descr}_{self.n_clusters}_clusters",
                            y_ticks_labels=cell_labels,
                            y_ticks_labels_size=y_ticks_labels_size,
+                           y_ticks_labels_color="white",
+                           x_ticks_labels_color="white",
+                           activity_sum_plot_color="white",
+                           activity_sum_face_color="black",
+                           without_ticks=True,
                            save_raster=False,
                            show_raster=False,
                            plot_with_amplitude=False,
@@ -368,7 +375,7 @@ class CellAssembliesStruct:
                 continue
 
             nb_cells_by_cell_ass_cluster_y_coord.append(start + (group_size / 2))
-            nb_cells_by_cell_ass_cluster.append(group_size)
+            nb_cells_by_cell_ass_cluster.append(int(group_size))
 
             range_group = np.arange(start, start+group_size)
             for cell_id in range_group:
@@ -432,7 +439,8 @@ class CellAssembliesStruct:
         # creating axis at the top
         # ax_top = ax2.twiny()
         ax_right = ax2.twinx()
-        ax2.set_frame_on(False)
+        # ax2.set_frame_on(False)
+
         # ax_top.set_frame_on(False)
         # ax_top.set_xlim((0, self.n_sces))
         # ax_top.set_xticks(cluster_sce_x_ticks_coord)
@@ -441,14 +449,21 @@ class CellAssembliesStruct:
 
         # print(f"nb_cells_by_cluster_of_cells_y_coord {nb_cells_by_cluster_of_cells_y_coord} "
         #       f"nb_cells_by_cluster_of_cells {nb_cells_by_cluster_of_cells}")
-        ax_right.set_frame_on(False)
+
+        # ax_right.set_frame_on(False)
+
         ax_right.set_ylim((0, self.n_cells))
         ax_right.set_yticks(nb_cells_by_cell_ass_cluster_y_coord)
+        ax_right.tick_params(axis='both', which='both', length=0)
         # clusters labels
-        ax_right.set_yticklabels(nb_cells_by_cell_ass_cluster)
+        ax_right.set_yticklabels(nb_cells_by_cell_ass_cluster, fontweight="bold")
+        ax_right.yaxis.set_tick_params(labelsize=14)
+        for tick_label in ax_right.get_yticklabels():
+            tick_label.set_color("white")
 
         ax2.set_xticks(np.arange(self.n_sces) + 0.5)
         plt.setp(ax2.xaxis.get_majorticklabels(), rotation=90)
+        ax2.tick_params(axis='both', which='both', length=0)
         # sce labels
         ax2.set_xticklabels(self.sce_indices.astype(int))
         if self.n_sces > 100:
@@ -489,7 +504,8 @@ class CellAssembliesStruct:
 
         # plt.setp(ax2.xaxis.get_majorticklabels(), rotation=90)
         plt.setp(ax2.yaxis.get_majorticklabels(), rotation=0)
-
+        ax2.tick_params(axis='y', colors="white")
+        ax2.tick_params(axis='x', colors="white")
         start = 0
         for i, cell_group_size in enumerate(self.n_cells_in_cell_assemblies_clusters):
             color = cm.nipy_spectral(float(i + 1) / (n_cell_assemblies + 1))
@@ -1703,6 +1719,7 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
             if (k + 1) < (np.max(cluster_labels) + 1):
                 cluster_horizontal_thresholds.append(start)
 
+        # figure with k-mean results
         fig = plt.figure(figsize=(20, 14))
         fig.set_tight_layout({'rect': [0, 0, 1, 1], 'pad': 1, 'h_pad': 2})
         outer = gridspec.GridSpec(2, 1, height_ratios=[60, 40])
