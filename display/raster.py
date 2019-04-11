@@ -566,7 +566,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                 activity_threshold = activity_threshold / n_cells
                 activity_threshold *= 100
 
-        ax2.fill_between(x_value, 0, sum_spikes, facecolor=activity_sum_plot_color)
+        ax2.fill_between(x_value, 0, sum_spikes, facecolor=activity_sum_plot_color, zorder=10)
         if activity_threshold is not None:
             line_beg_x = 0
             line_end_x = 0
