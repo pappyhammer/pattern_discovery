@@ -47,7 +47,8 @@ class CoordClass:
                 continue
 
             c_filtered = c.astype(int)
-            bw = np.zeros((self.nb_lines, self.nb_col), dtype="int8")
+            #TODO: reverse line and col
+            bw = np.zeros((self.nb_col, self.nb_lines), dtype="int8")
             # morphology.binary_fill_holes(input
             bw[c_filtered[0, :], c_filtered[1, :]] = 1
 
