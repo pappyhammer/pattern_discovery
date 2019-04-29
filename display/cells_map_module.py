@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.ndimage.morphology as morphology
 import scipy.ndimage as ndimage
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib as mpl
 from matplotlib import patches
@@ -16,8 +16,14 @@ class CoordClass:
     def __init__(self, coord, nb_lines, nb_col, from_suite_2p=False):
         # contour coord
         self.coord = coord
-        self.nb_lines = nb_lines
-        self.nb_col = nb_col
+        if nb_lines is None:
+            self.nb_lines = 200
+        else:
+            self.nb_lines = nb_lines
+        if nb_col is None:
+            self.nb_col = 200
+        else:
+            self.nb_col = nb_col
         self.n_cells = len(self.coord)
         # dict of tuples, key is the cell #, cell center coord x and y (x and y are inverted for imgshow)
         self.center_coord = dict()
@@ -47,7 +53,6 @@ class CoordClass:
                 continue
 
             c_filtered = c.astype(int)
-            #TODO: reverse line and col
             bw = np.zeros((self.nb_col, self.nb_lines), dtype="int8")
             # morphology.binary_fill_holes(input
             bw[c_filtered[0, :], c_filtered[1, :]] = 1
