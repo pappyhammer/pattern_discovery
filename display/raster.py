@@ -639,7 +639,8 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
         inner_2 = gridspec.GridSpecFromSubplotSpec(1, 1,
                                                    subplot_spec=outer[1])  # , wspace=0.1, hspace=0.1)
         ax3 = fig.add_subplot(inner_2[0])  # plt.Subplot(fig, inner_2[0])
-        fig.colorbar(scalar_map, cax=ax3)
+        cb = fig.colorbar(scalar_map, cax=ax3)
+        cb.ax.tick_params(axis='y', colors="white")
     if axes_list is None:
         if save_raster and (param is not None):
             # transforming a string in a list
