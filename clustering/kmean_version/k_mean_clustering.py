@@ -122,6 +122,7 @@ class CellAssembliesStruct:
 
     def plot_cell_assemblies(self, data_descr, SCE_times, activity_threshold,
                              spike_nums, sce_times_bool=None,
+                             display_only_cell_assemblies_on_raster=False,
                              with_cells_in_cluster_seq_sorted=False,
                              save_formats="pdf", show_fig=False):
 
@@ -152,7 +153,8 @@ class CellAssembliesStruct:
 
         self.plot_raster(axes_list=[ax1, ax2], spike_nums=spike_nums,
                          with_cells_in_cluster_seq_sorted=with_cells_in_cluster_seq_sorted,
-                         sce_times_bool=sce_times_bool)
+                         sce_times_bool=sce_times_bool,
+                         display_only_cell_assemblies_on_raster=display_only_cell_assemblies_on_raster)
 
         self.plot_cells_vs_sce(ax2=ax3)
         # show_co_var_first_matrix(cells_in_peak=np.copy(cellsinpeak), m_sces=m_cov_sces,
@@ -165,14 +167,19 @@ class CellAssembliesStruct:
         #                          axes_list=[ax5, ax3, ax4], fig_to_use=fig, save_formats="pdf")
         if isinstance(save_formats, str):
             save_formats = [save_formats]
+        bonus_str = ""
+        if display_only_cell_assemblies_on_raster:
+            bonus_str = "_only_sca_"
         for save_format in save_formats:
-            fig.savefig(f'{self.param.path_results}/{self.data_descr}_{self.n_clusters}_cell_assemblies.{save_format}',
+            fig.savefig(f'{self.param.path_results}/{self.data_descr}_{self.n_clusters}_'
+                        f'cell_assemblies{bonus_str}.{save_format}',
                     format=f"{save_format}", facecolor=fig.get_facecolor())
         if show_fig:
             plt.show()
         plt.close()
 
-    def plot_raster(self, axes_list, spike_nums, with_cells_in_cluster_seq_sorted=False, sce_times_bool=None):
+    def plot_raster(self, axes_list, spike_nums, with_cells_in_cluster_seq_sorted=False, sce_times_bool=None,
+                    display_only_cell_assemblies_on_raster=False):
         # this section will order the spike_nums for display purpose
         clustered_spike_nums = np.copy(spike_nums)
 
@@ -300,10 +307,19 @@ class CellAssembliesStruct:
         spike_shape_size = 1
         if len(cell_labels) > 150:
             spike_shape_size = 0.5
+        if len(cell_labels) > 500:
+            spike_shape_size = 0.2
 
         seq_times_to_color_dict = None
         if with_cells_in_cluster_seq_sorted and len(seq_dict) > 0:
             seq_times_to_color_dict = seq_dict
+
+        if display_only_cell_assemblies_on_raster:
+            n_cells = len(clustered_spike_nums)
+            if (self.n_cells_not_in_cell_assemblies > 0) and (self.n_cells_not_in_cell_assemblies < n_cells):
+                n_cells_to_keep = n_cells - int(self.n_cells_not_in_cell_assemblies)
+                clustered_spike_nums = clustered_spike_nums[:n_cells_to_keep]
+                cell_labels = cell_labels[:n_cells_to_keep]
 
         colors_for_seq_list = ["blue", "red", "limegreen", "grey", "orange", "cornflowerblue", "yellow", "seagreen",
                                "magenta"]
@@ -1676,6 +1692,21 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                                  save_formats=["pdf", "png"])
 
         cas.save_data_on_file(n_clusters=n_cluster)
+
+        # if more than 500 cells, we display only the cells in the cell assemblie for the raster part
+        if len(spike_nums_to_use) > 500:
+            cas = cas_dict[n_cluster]
+            cas.neurons_labels = labels
+            cas.sliding_window_duration = sliding_window_duration
+
+            cas.plot_cell_assemblies(data_descr=data_descr, spike_nums=spike_nums_to_use,
+                                     SCE_times=SCE_times, activity_threshold=activity_threshold,
+                                     with_cells_in_cluster_seq_sorted=False,
+                                     sce_times_bool=sce_times_bool,
+                                     display_only_cell_assemblies_on_raster=True,
+                                     save_formats=["pdf", "png"])
+
+            cas.save_data_on_file(n_clusters=n_cluster)
 
         # TODO: see while plotting twice cell_assemblies make it bug
         if with_cells_in_cluster_seq_sorted:

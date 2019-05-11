@@ -114,7 +114,11 @@ def loss_function_with_sliding_window(spike_nums, time_inter_seq, min_duration_i
             if spike_train_mode:
                 first_neuron_t = seq_mat[0][0]
             else:
-                first_neuron_t = np.where(seq_mat[0, :])[0][0]
+                selection = np.where(seq_mat[0, :])[0]
+                if len(selection) > 0:
+                    first_neuron_t = selection[0]
+                else:
+                    first_neuron_t = 0
             for i in np.arange(1, sliding_size + 1):
                 if spike_train_mode:
                     bool_array = (seq_mat[i] >= from_t)

@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.ndimage.morphology as morphology
 import scipy.ndimage as ndimage
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib as mpl
 from matplotlib import patches

@@ -615,6 +615,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
             ax_top.set_xticks(xticks_pos)
             ax_top.xaxis.set_ticks_position('none')
             ax_top.set_xticklabels(np.arange(len(SCE_times)))
+            ax_top.tick_params(axis='x', colors=x_ticks_labels_color)
             plt.setp(ax_top.xaxis.get_majorticklabels(), rotation=90)
             if len(SCE_times) > 30:
                 ax_top.xaxis.set_tick_params(labelsize=3)
