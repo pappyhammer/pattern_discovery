@@ -261,6 +261,53 @@ xticks_labelsize=10, yticks_labelsize=10, x_label_font_size=15, y_label_font_siz
 
         plt.close()
 
+def plot_scatters(x_coords, y_coords, size_scatter=30, ax_to_use=None, color_to_use=None, legend_str="",
+                  xlabel="", ylabel="", filename_option="",
+                  save_formats="pdf"):
+    if (color_to_use is None):
+        color = "cornflowerblue"
+    else:
+        color = color_to_use
+
+    if ax_to_use is None:
+        fig, ax = plt.subplots(nrows=1, ncols=1,
+                               gridspec_kw={'height_ratios': [1]},
+                               figsize=(20, 20))
+        fig.patch.set_facecolor("black")
+        ax.set_facecolor("black")
+    else:
+        ax = ax_to_use
+
+    ax.scatter(x_coords, y_coords, color=color, edgecolors="white", marker="o",
+               s=size_scatter, zorder=1, alpha=0.7, label=legend_str)
+
+    ax.xaxis.set_tick_params(labelsize=5)
+
+    ax.tick_params(axis='y', colors="white")
+    ax.tick_params(axis='x', colors="white")
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.xaxis.label.set_color("white")
+    ax.yaxis.label.set_color("white")
+
+    # legend_elements = [Patch(facecolor=color,
+    #                          edgecolor="white",
+    #                          label=f"{legend_str}")]
+    ax.legend() # handles=legend_elements
+
+    #  :param plot_option: if 0: plot n_out and n_int, if 1 only n_out, if 2 only n_in, if 3: only n_out with dotted to
+    # show the commun n_in and n_out, if 4: only n_in with dotted to show the commun n_in and n_out,
+    if ax_to_use is None:
+        if isinstance(save_formats, str):
+            save_formats = [save_formats]
+        for save_format in save_formats:
+            fig.savefig(f'{param.path_results}/plot_scatter_{filename_option}'
+                        f'_{param.time_str}.{save_format}',
+                        format=f"{save_format}",
+                        facecolor=fig.get_facecolor())
+        plt.close()
+
 
 def time_correlation_graph(time_lags_list, correlation_list, time_lags_dict, correlation_dict,
                            n_cells, time_window,

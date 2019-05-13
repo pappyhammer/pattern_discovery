@@ -64,7 +64,14 @@ class CoordClass:
 
             # buffer(0) or convex_hull could be used if the coord are a list of points not
             # in the right order. However buffer(0) return a MultiPolygon with no coord available.
-            self.cells_polygon[cell] = geometry.Polygon(coord_list_tuple)  # .convex_hull # buffer(0)
+            if len(coord_list_tuple) < 3:
+                list_points = []
+                for coord in coord_list_tuple:
+                    list_points.append(geometry.Point(coord))
+                self.cells_polygon[cell] = geometry.LineString(list_points)
+                # print(f"len(coord_list_tuple) {len(coord_list_tuple)}")
+            else:
+                self.cells_polygon[cell] = geometry.Polygon(coord_list_tuple)  # .convex_hull # buffer(0)
             # self.coord[cell] = np.array(self.cells_polygon[cell].exterior.coords).transpose()
 
             c_x, c_y = ndimage.center_of_mass(bw)
@@ -81,8 +88,12 @@ class CoordClass:
 
         for cell_1 in np.arange(self.n_cells-1):
             if cell_1 not in self.intersect_cells:
+                if cell_1 not in self.cells_polygon:
+                    continue
                 self.intersect_cells[cell_1] = set()
             for cell_2 in np.arange(cell_1+1, self.n_cells):
+                if cell_2 not in self.cells_polygon:
+                    continue
                 if cell_2 not in self.intersect_cells:
                     self.intersect_cells[cell_2] = set()
                 poly_1 = self.cells_polygon[cell_1]
@@ -120,7 +131,11 @@ class CoordClass:
         """
         poly_gon = self.cells_polygon[cell]
         img = PIL.Image.new('1', (dimensions[1], dimensions[0]), 0)
-        ImageDraw.Draw(img).polygon(list(poly_gon.exterior.coords), outline=1,
+        if isinstance(poly_gon, geometry.LineString):
+            ImageDraw.Draw(img).polygon(list(poly_gon.coords), outline=1,
+                                        fill=1)
+        else:
+            ImageDraw.Draw(img).polygon(list(poly_gon.exterior.coords), outline=1,
                                     fill=1)
         return np.array(img)
 
