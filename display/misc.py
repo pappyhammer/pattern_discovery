@@ -138,6 +138,7 @@ xticks_labelsize=10, yticks_labelsize=10, x_label_font_size=15, y_label_font_siz
                            labels=None, scatter_shapes=None, colors=None, tight_x_range=False,
                            twice_more_bins=False, background_color="black", labels_color="white",
                            xlabel="", ylabel=None, path_results=None, save_formats="pdf",
+                           v_line=None,
                            ax_to_use=None, color_to_use=None):
     """
     Plot a distribution in the form of an histogram, with option for adding some scatter values
@@ -217,6 +218,12 @@ xticks_labelsize=10, yticks_labelsize=10, x_label_font_size=15, y_label_font_siz
             else:
                 ax1.scatter(x=value_to_scatter, y=hist_plt[scatter_bins[i]] * decay[i], marker=scatter_shapes[i],
                             color=colors[i], s=60, zorder=20)
+    y_min, y_max = ax1.get_ylim()
+    if v_line is not None:
+        ax1.vlines(v_line, y_min, y_max,
+                   color="white", linewidth=2,
+                   linestyles="dashed", zorder=5)
+
     ax1.legend()
 
     if tight_x_range:

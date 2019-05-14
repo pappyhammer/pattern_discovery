@@ -740,6 +740,7 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
                                                  sigma, n_surrogate_fca,
                                                  labels,
                                                  activity_threshold,
+                                                 jitter_range=None,
                                                  fca_early_stop=True,
                                                  with_cells_in_cluster_seq_sorted=False,
                                                  use_uniform_jittering=True,
@@ -751,12 +752,13 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
     # sigma = 4
     # n_surrogate_fca = 20
 
-    sce_durations = []
-    for sce_tuple in SCE_times:
-        sce_durations.append(sce_tuple[1] - sce_tuple[0])
 
-    # the jitter range is determined given the duration of the SCE detected
-    jitter_range = np.max(sce_durations) + np.mean(sce_durations)
+    if jitter_range is None:
+        sce_durations = []
+        for sce_tuple in SCE_times:
+            sce_durations.append(sce_tuple[1] - sce_tuple[0])
+        # the jitter range is determined given the duration of the SCE detected
+        jitter_range = np.max(sce_durations) + np.mean(sce_durations)
 
     merge_history, current_cluster = functional_clustering_algorithm(spike_trains,
                                                                      nsurrogate=n_surrogate_fca,
@@ -855,7 +857,12 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
         y_ticks_labels_size = 1
     else:
         y_ticks_labels_size = 3
-
+    if SCE_times is not None:
+        span_area_coords = [SCE_times]
+        span_area_colors = ['white']
+    else:
+        span_area_coords = []
+        span_area_colors = []
     plot_spikes_raster(spike_nums=clustered_spike_nums, param=param,
                        spike_train_format=False,
                        title=f"{n_cluster} clusters raster plot {data_descr}",
@@ -876,8 +883,8 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
                        # vertical_lines_colors=['white'] * len(SCE_times),
                        # vertical_lines_sytle="solid",
                        # vertical_lines_linewidth=[0.2] * len(SCE_times),
-                       span_area_coords=[SCE_times],
-                       span_area_colors=['white'],
+                       span_area_coords=span_area_coords,
+                       span_area_colors=span_area_colors,
                        cells_to_highlight=cells_to_highlight,
                        cells_to_highlight_colors=cells_to_highlight_colors,
                        sliding_window_duration=sliding_window_duration,
@@ -941,7 +948,12 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
     ax1 = fig.add_subplot(inner_bottom[0])
     # ax3 contains the peak activity diagram
     ax2 = fig.add_subplot(inner_bottom[1], sharex=ax1)
-
+    if SCE_times is not None:
+        span_area_coords = [SCE_times]
+        span_area_colors = ['white']
+    else:
+        span_area_coords = []
+        span_area_colors = []
     plot_spikes_raster(spike_nums=clusters_activations_by_cell, param=param,
                        spike_train_format=False,
                        file_name=f"raster_clusters_detection_{data_descr}",
@@ -959,8 +971,8 @@ def compute_and_plot_clusters_raster_fca_version(spike_trains, spike_nums, data_
                        # vertical_lines_colors=['white'] * len(SCE_times),
                        # vertical_lines_sytle="solid",
                        # vertical_lines_linewidth=[0.4] * len(SCE_times),
-                       span_area_coords=[SCE_times],
-                       span_area_colors=['white'],
+                       span_area_coords=span_area_coords,
+                       span_area_colors=span_area_colors,
                        cells_to_highlight=cells_to_highlight,
                        cells_to_highlight_colors=cells_to_highlight_colors,
                        sliding_window_duration=sliding_window_duration,
@@ -1003,7 +1015,11 @@ def save_stat_SCE_and_cluster_fca_version(spike_nums_to_use, activity_threshold,
     with open(file_name, "w", encoding='UTF-8') as file:
         file.write(f"Stat FCA version for {n_cluster} clusters" + '\n')
         file.write("" + '\n')
-        file.write(f"cells {len(spike_nums_to_use)}, events {len(SCE_times)}" + '\n')
+        if SCE_times is not None:
+            n_events =  len(SCE_times)
+        else:
+            n_events = 0
+        file.write(f"cells {len(spike_nums_to_use)}, events {n_events}" + '\n')
         file.write(f"Event participation threshold {activity_threshold}, {perc_threshold} percentile, "
                    f"{n_surrogate_activity_threshold} surrogates" + '\n')
         file.write(f"Sliding window duration {sliding_window_duration}" + '\n')
