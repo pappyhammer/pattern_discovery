@@ -10,7 +10,7 @@ import PIL
 from PIL import ImageDraw
 import shapely as shapely
 import math
-
+import scipy.stats as stats
 
 class CoordClass:
     def __init__(self, coord, nb_lines, nb_col, from_suite_2p=False):
@@ -440,6 +440,195 @@ class CoordClass:
                  s=f"{cell}", color=cell_numbers_color, zorder=22,
                  ha='center', va="center", fontsize=fontsize + 2, fontweight='bold')
 
+    def get_cell_new_coord_in_source(self, cell, minx, miny):
+        coord = self.coord[cell]
+        # coord = coord - 1
+        coord = coord.astype(int)
+        n_coord = len(coord[0, :])
+        xy = np.zeros((n_coord, 2))
+        for n in np.arange(n_coord):
+            # shifting the coordinates in the square size_square+1
+            xy[n, 0] = coord[0, n] - minx
+            xy[n, 1] = coord[1, n] - miny
+        return xy
+
+    def scale_polygon_to_source(self, poly_gon, minx, miny):
+        coords = list(poly_gon.exterior.coords)
+        scaled_coords = []
+        for coord in coords:
+            scaled_coords.append((coord[0] - minx, coord[1] - miny))
+        # print(f"scaled_coords {scaled_coords}")
+        return geometry.Polygon(scaled_coords)
+
+
+    def get_source_profile(self, cell, tiff_movie, traces, peak_nums, spike_nums,
+                           pixels_around=0, bounds=None, buffer=None, with_full_frame=False):
+        """
+        Return the source profile of a cell
+        :param cell:
+        :param pixels_around:
+        :param bounds: how much padding around the cell pretty much, coordinate of the frame covering the source profile
+        4 int list
+        :param buffer:
+        :param with_full_frame:  Average the full frame
+        :return:
+        """
+        # print("get_source_profile")
+        len_frame_x = tiff_movie[0].shape[1]
+        len_frame_y = tiff_movie[0].shape[0]
+
+        # determining the size of the square surrounding the cell
+        poly_gon = self.cells_polygon[cell]
+        if bounds is None:
+            minx, miny, maxx, maxy = np.array(list(poly_gon.bounds)).astype(int)
+        else:
+            minx, miny, maxx, maxy = bounds
+
+        if with_full_frame:
+            minx = 0
+            miny = 0
+            maxx = len_frame_x - 1
+            maxy = len_frame_y - 1
+        else:
+            minx = max(0, minx - pixels_around)
+            miny = max(0, miny - pixels_around)
+            maxx = min(len_frame_x - 1, maxx + pixels_around)
+            maxy = min(len_frame_y - 1, maxy + pixels_around)
+
+        len_x = maxx - minx + 1
+        len_y = maxy - miny + 1
+
+        # mask used in order to keep only the cells pixel
+        # the mask put all pixels in the polygon, including the pixels on the exterior line to zero
+        scaled_poly_gon = self.scale_polygon_to_source(poly_gon=poly_gon, minx=minx, miny=miny)
+        img = PIL.Image.new('1', (len_x, len_y), 1)
+        if buffer is not None:
+            scaled_poly_gon = scaled_poly_gon.buffer(buffer)
+        ImageDraw.Draw(img).polygon(list(scaled_poly_gon.exterior.coords), outline=0, fill=0)
+        mask = np.array(img)
+        # mask = np.ones((len_x, len_y))
+        # cv2.fillPoly(mask, scaled_poly_gon, 0)
+        # mask = mask.astype(bool)
+
+        source_profile = np.zeros((len_y, len_x))
+
+        # selectionning the best peak to produce the source_profile
+        peaks = np.where(peak_nums[cell, :] > 0)[0]
+        threshold = np.percentile(traces[cell, peaks], 95)
+        selected_peaks = peaks[np.where(traces[cell, peaks] > threshold)[0]]
+        # max 10 peaks, min 5 peaks
+        if len(selected_peaks) > 10:
+            p = 10 / len(peaks)
+            threshold = np.percentile(traces[cell, peaks], (1 - p) * 100)
+            selected_peaks = peaks[np.where(traces[cell, peaks] > threshold)[0]]
+        elif (len(selected_peaks) < 5) and (len(peaks) > 5):
+            p = 5 / len(peaks)
+            threshold = np.percentile(traces[cell, peaks], (1 - p) * 100)
+            selected_peaks = peaks[np.where(traces[cell, peaks] > threshold)[0]]
+
+        # print(f"threshold {threshold}")
+        # print(f"n peaks: {len(selected_peaks)}")
+
+        onsets_frames = np.where(spike_nums[cell, :] > 0)[0]
+        pos_traces = np.copy(traces)
+        pos_traces += abs(np.min(traces))
+        for peak in selected_peaks:
+            tmp_source_profile = np.zeros((len_y, len_x))
+            onsets_before_peak = np.where(onsets_frames <= peak)[0]
+            if len(onsets_before_peak) == 0:
+                # shouldn't arrive
+                continue
+            onset = onsets_frames[onsets_before_peak[-1]]
+            # print(f"onset {onset}, peak {peak}")
+            frames_tiff = tiff_movie[onset:peak + 1]
+            for frame_index, frame_tiff in enumerate(frames_tiff):
+                tmp_source_profile += (frame_tiff[miny:maxy + 1, minx:maxx + 1] * pos_traces[cell, onset + frame_index])
+            # averaging
+            tmp_source_profile = tmp_source_profile / (np.sum(pos_traces[cell, onset:peak + 1]))
+            source_profile += tmp_source_profile
+        if len(selected_peaks) > 0:
+            source_profile = source_profile / len(selected_peaks)
+
+        return source_profile, minx, miny, mask
+
+    def get_transient_profile(self, cell, transient, tiff_movie, traces,
+                              pixels_around=0, bounds=None):
+        len_frame_x = tiff_movie[0].shape[1]
+        len_frame_y = tiff_movie[0].shape[0]
+
+        # determining the size of the square surrounding the cell
+        if bounds is None:
+            poly_gon = self.cells_polygon[cell]
+            minx, miny, maxx, maxy = np.array(list(poly_gon.bounds)).astype(int)
+        else:
+            minx, miny, maxx, maxy = bounds
+
+        minx = max(0, minx - pixels_around)
+        miny = max(0, miny - pixels_around)
+        maxx = min(len_frame_x - 1, maxx + pixels_around)
+        maxy = min(len_frame_y - 1, maxy + pixels_around)
+
+        len_x = maxx - minx + 1
+        len_y = maxy - miny + 1
+
+        transient_profile = np.zeros((len_y, len_x))
+        frames_tiff = tiff_movie[transient[0]:transient[-1] + 1]
+        # print(f"transient[0] {transient[0]}, transient[1] {transient[1]}")
+        # now we do the weighted average
+        raw_traces = np.copy(traces)
+        # so the lowest value is zero
+        raw_traces += abs(np.min(raw_traces))
+
+        for frame_index, frame_tiff in enumerate(frames_tiff):
+            transient_profile += (
+                    frame_tiff[miny:maxy + 1, minx:maxx + 1] * raw_traces[cell, transient[0] + frame_index])
+        # averaging
+        transient_profile = transient_profile / (np.sum(raw_traces[cell, transient[0]:transient[-1] + 1]))
+
+        return transient_profile, minx, miny
+
+    def corr_between_source_and_transient(self, cell, transient, source_profile_dict, tiff_movie, traces,
+                                          source_profile_corr_dict=None,
+                                          pixels_around=1):
+        """
+        Measure the correlation (pearson) between a source and transient profile for a giveb cell
+        :param cell:
+        :param transient:
+        :param source_profile_dict should contains cell as key, and results of get_source_profile avec values
+        :param pixels_around:
+        :param source_profile_corr_dict: if not None, used to save the correlation of the source profile, f
+        for memory and computing proficiency
+        :return:
+        """
+        # print('corr_between_source_and_transient')
+        poly_gon = self.cells_polygon[cell]
+
+        # Correlation test
+        bounds_corr = np.array(list(poly_gon.bounds)).astype(int)
+        # looking if this source has been computed before for correlation
+        if (source_profile_corr_dict is not None) and (cell in source_profile_corr_dict):
+            source_profile_corr, mask_source_profile = source_profile_corr_dict[cell]
+        else:
+            source_profile_corr, minx_corr, \
+                miny_corr, mask_source_profile, xy_source = source_profile_dict[cell]
+            # normalizing
+            source_profile_corr = source_profile_corr - np.mean(source_profile_corr)
+            # we want the mask to be at ones over the cell
+            mask_source_profile = (1 - mask_source_profile).astype(bool)
+            if source_profile_corr_dict is not None:
+                source_profile_corr_dict[cell] = (source_profile_corr, mask_source_profile)
+
+        transient_profile_corr, minx_corr, miny_corr = self.get_transient_profile(cell=cell,
+                                                                                  transient=transient,
+                                                                                  tiff_movie=tiff_movie, traces=traces,
+                                                                                  pixels_around=pixels_around,
+                                                                                  bounds=bounds_corr)
+        transient_profile_corr = transient_profile_corr - np.mean(transient_profile_corr)
+
+        pearson_corr, pearson_p_value = stats.pearsonr(source_profile_corr[mask_source_profile],
+                                                       transient_profile_corr[mask_source_profile])
+
+        return pearson_corr
 
 def _angle_to_point(point, centre):
     '''calculate angle in 2-D between points and x axis'''

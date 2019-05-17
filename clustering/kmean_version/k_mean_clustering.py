@@ -13,6 +13,7 @@ from pattern_discovery.display.misc import plot_hist_clusters_by_sce
 from pattern_discovery.seq_solver.markov_way import order_spike_nums_by_seq
 from pattern_discovery.seq_solver.markov_way import sort_it_and_plot_it
 from sortedcontainers import SortedList, SortedDict
+import hdbscan
 
 
 class CellAssembliesStruct:
@@ -614,6 +615,8 @@ def clusters_on_sce_from_covnorm(cells_in_sce, range_n_clusters, fct_to_keep_bes
     # normalized covariance matrix
     m_sces = covnorm(m_sces)
     # m_sces = np.corrcoef(m_sces)
+    # print(f"m_sces.shape {m_sces.shape}")
+
 
     # key is the nth clusters as int, value is a list of list of SCE
     # (each list representing a cluster, so we have as many list as the number of cluster wanted)
@@ -1569,7 +1572,6 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
     cas.n_cells_in_single_cell_assembly_sce_cl = n_cells_in_single_cell_assembly_sce_cl
     cas.n_cells_in_multiple_cell_assembly_sce_cl = n_cells_in_multiple_cell_assembly_sce_cl
     cas.cell_assemblies_cluster_of_multiple_ca_sce = cell_assemblies_cluster_of_multiple_ca_sce
-
 
 def compute_kmean(neurons_labels, cellsinpeak, n_surrogate, range_n_clusters, param,
                   sliding_window_duration, SCE_times, data_id,

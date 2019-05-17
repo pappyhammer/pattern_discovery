@@ -133,6 +133,7 @@ def plot_hist_clusters_by_sce(cluster_particpation_to_sce, data_str="", save_for
         plt.show()
     plt.close()
 
+
 def plot_hist_distribution(distribution_data, description, param, values_to_scatter=None,
 xticks_labelsize=10, yticks_labelsize=10, x_label_font_size=15, y_label_font_size=15,
                            labels=None, scatter_shapes=None, colors=None, tight_x_range=False,

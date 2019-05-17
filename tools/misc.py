@@ -58,6 +58,25 @@ def get_continous_time_periods(binary_array):
             return result
     return []
 
+def give_unique_id_to_each_transient_of_raster_dur(raster_dur):
+    """
+    we create a spike_nums_dur but not binary, for a given cell each transient will have an id (int)
+    unique from other transients of this cell
+    :param raster_dur: 2-D binary array (should not be uint, but int)
+    :return:
+    """
+
+    #
+    spike_nums_dur_numbers = np.ones(raster_dur.shape, dtype="int16")
+    # -1 means no transient
+    spike_nums_dur_numbers *= -1
+    for cell in np.arange(raster_dur.shape[0]):
+        # first we want to identify each transient
+        periods = get_continous_time_periods(raster_dur[cell])
+        for period_index, period in enumerate(periods):
+            spike_nums_dur_numbers[period[0]:period[1] + 1] = period_index
+    return spike_nums_dur_numbers
+
 def get_spikes_duration_from_raster_dur(spike_nums_dur):
     spike_durations = []
     for cell_id, spikes_time in enumerate(spike_nums_dur):
