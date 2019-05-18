@@ -300,7 +300,7 @@ class CoordClass:
         fig, ax = plt.subplots(nrows=1, ncols=1,
                                gridspec_kw={'height_ratios': [1]},
                                figsize=(20, 20))
-
+        fig.patch.set_facecolor(background_color)
         ax.set_facecolor(background_color)
 
         # blue = "cornflowerblue"
@@ -420,7 +420,8 @@ class CoordClass:
             for save_format in save_formats:
                 fig.savefig(f'{param.path_results}/{data_id}_cell_maps_{title_option}'
                             f'_{param.time_str}.{save_format}',
-                            format=f"{save_format}")
+                            format=f"{save_format}",
+                            facecolor=fig.get_facecolor())
         if return_fig:
             return fig
         else:
