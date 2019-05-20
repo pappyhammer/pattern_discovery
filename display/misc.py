@@ -139,7 +139,7 @@ xticks_labelsize=10, yticks_labelsize=10, x_label_font_size=15, y_label_font_siz
                            labels=None, scatter_shapes=None, colors=None, tight_x_range=False,
                            twice_more_bins=False, background_color="black", labels_color="white",
                            xlabel="", ylabel=None, path_results=None, save_formats="pdf",
-                           v_line=None,
+                           v_line=None, x_range=None,
                            ax_to_use=None, color_to_use=None):
     """
     Plot a distribution in the form of an histogram, with option for adding some scatter values
@@ -163,7 +163,10 @@ xticks_labelsize=10, yticks_labelsize=10, x_label_font_size=15, y_label_font_siz
     else:
         hist_color = color_to_use
     edge_color = "white"
-    if tight_x_range:
+    if x_range is not None:
+        min_range = x_range[0]
+        max_range = x_range[1]
+    elif tight_x_range:
         max_range = np.max(distribution)
         min_range = np.min(distribution)
     else:
