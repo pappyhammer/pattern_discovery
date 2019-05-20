@@ -126,27 +126,32 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        traces_lw=0.3
                        ):
     """
-    
+    Plot or save a raster given a 2d array either binary representing onsets, peaks or rising time, or made of float
+    to represents traces or encoding in onset/peaks/rising time a value.
     :param spike_nums: np.array of 2D, axis=1 (lines) represents the cells, the columns representing the spikes
     It could be binary, or containing the amplitude, if amplitudes values should be display put plot_with_amplitude
     to True
-    :param param:
+    :param param:instance of pattern_discovery.tools.param.Parameters used for its path_results variable
     :param spike_train_format: if True, means the data is a list of np.array, and then spike_nums[i][j] is
     a timestamps value as float
-    :param title: 
-    :param file_name: 
-    :param save_raster: 
-    :param show_raster: 
-    :param plot_with_amplitude: 
-    :param activity_threshold: 
-    :param save_formats: 
-    :param span_area_coords: List of list of tuples of two float representing coord of are to span with a color
+    :param title: title to be plot
+    :param file_name: name of the file if save_raster is True
+    :param save_raster: if True, the plot will be save. To do so param should not be None and contain a variable
+    path_results that will indicated where to save file_name
+    :param show_raster: if True, the plot will be shown
+    :param plot_with_amplitude: to display a color bar representing the content values.
+    :param activity_threshold: Int representing a threshold that will be display as a red line on the sum of activity
+    subplot.
+    :param save_formats: string or list of string representing the formats in which saving the raster.
+    Exemple: "pdf" or ["pdf", "png"]
+    :param span_area_coords: List of list of tuples of two float representing coords (x, x) of span band with a color
     corresponding to the one in span_area_colors
     :param span_area_colors: list of colors, same len as span_area_coords
-    :param cells_to_highlight: cells index to span and with special spikes color, list of int
+    :param span_area_only_on_raster: if True, means the span won't be on the sum of activity on the sub-plot as well
+    :param cells_to_highlight: cells index to span (y-axis) with special spikes color, list of int
     :param cells_to_highlight_colors: cells colors to span, same len as cells_to_span, list of string
     :param color_peaks_activity: if True, will span to the color of cells_to_highlight_colors each time at which a cell
-    among cells_to_highlight will spike on the actiivty peak diagram
+    among cells_to_highlight will spike on the activity peak diagram
     :param horizontal_lines: list of float, representing the y coord at which trace horizontal lines
     :param horizontal_lines_colors: if horizontal_lines is not None, will set the colors of each line,
     list of string or color code
@@ -155,9 +160,9 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
     :param vertical__lines_colors: if horizontal_lines is not None, will set the colors of each line,
     list of string or color code
     :param vertical__lines_style: give the style of the lines, string
-    :param vertical_lines_linewidth:
-    :param raster_face_color:
-    :param cell_spikes_color:
+    :param vertical_lines_linewidth: linewidth of vertical_lines
+    :param raster_face_color: the background color of the raster
+    :param cell_spikes_color: the color of the spikes of the raster
     :param spike_shape: shape of the spike, "|", "*", "o"
     :param spike_shape_size: use for shape != of "|"
     :param seq_times_to_color_dict: None or a dict with as the key a tuple of int representing the cell index,
@@ -173,8 +178,17 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
     :param SCE_times:  a list of tuple corresponding to the first and last index of each SCE,
     (last index being included in the SCE). Will display the position of the SCE and their number above the activity
     diagram. If None, the overall time will be displayed. Need to be adapted to the format spike_numw or
-    spike_train
+    spike_train. Equivalent to span_are_coords
     :param without_activity_sum: if True, don't plot the sum of activity diagram, valid only if axes_list is not None
+    :param spike_nums_for_activity_sum: if different that the one given for the raster, should be the
+    same second dimension
+    :param spikes_sum_to_use: an array of 1D, that will be use to display the sum of activity,
+    :param size_fig: tuple of int
+    :param cmap_name: "jet" by default, used if with_amplitude for the colormap
+    :param traces if not None and display_traces is True, will display traces instead of a raster
+    :param display_traces, if True display traces
+    :param display_spike_nums, if False, won't display a raster using spike_nums
+    :param traces_lw, default 0.3,  linewidth of the traces
     :return: 
     """
 
