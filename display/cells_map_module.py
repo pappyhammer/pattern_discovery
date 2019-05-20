@@ -164,6 +164,7 @@ class CoordClass:
                                    gridspec_kw={'height_ratios': [1]},
                                    figsize=(20, 20))
 
+            fig.patch.set_facecolor("black")
             ax.set_facecolor("black")
 
             # dark blue
@@ -256,7 +257,8 @@ class CoordClass:
             save_format = "png"
             fig.savefig(f'{param.path_results}/cells_map_{plot_title_opt}'
                         f'_{param.time_str}.{save_format}',
-                        format=f"{save_format}")
+                        format=f"{save_format}",
+                            facecolor=fig.get_facecolor())
             # plt.show()
             plt.close()
         return mapping_array
