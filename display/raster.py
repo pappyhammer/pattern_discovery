@@ -3,6 +3,7 @@ import matplotlib.gridspec as gridspec
 import numpy as np
 import math
 import matplotlib.cm as cm
+import os
 
 
 def plot_dendogram_from_fca(cluster_tree, nb_cells, save_plot, axes_list=None, fig_to_use=None, file_name="",
@@ -123,7 +124,8 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        cmap_name="jet", traces=None,
                        display_traces=False,
                        display_spike_nums=True,
-                       traces_lw=0.3
+                       traces_lw=0.3,
+                       path_results=None
                        ):
     """
     Plot or save a raster given a 2d array either binary representing onsets, peaks or rising time, or made of float
@@ -189,6 +191,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
     :param display_traces, if True display traces
     :param display_spike_nums, if False, won't display a raster using spike_nums
     :param traces_lw, default 0.3,  linewidth of the traces
+    :param path_results: indicate where to save the plot, replace the param.path_results if it exists
     :return: 
     """
 
@@ -657,12 +660,18 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
         cb = fig.colorbar(scalar_map, cax=ax3)
         cb.ax.tick_params(axis='y', colors="white")
     if axes_list is None:
-        if save_raster and (param is not None):
+        if save_raster and ((param is not None) or (path_results is not None)):
             # transforming a string in a list
             if isinstance(save_formats, str):
                 save_formats = [save_formats]
+            if path_results is None:
+                path_results = param.path_results
+            time_str = ""
+            if param is not None:
+                time_str = f"_{param.time_str}"
             for save_format in save_formats:
-                fig.savefig(f'{param.path_results}/{file_name}_{param.time_str}.{save_format}', format=f"{save_format}",
+                fig.savefig(os.path.join(f'{path_results}', f'{file_name}{time_str}.{save_format}'),
+                            format=f"{save_format}",
                             facecolor=fig.get_facecolor())
         # Display the spike raster plot
         if show_raster:

@@ -292,6 +292,10 @@ class CellAssembliesStruct:
 
             # coloring cell assemblies
             color = cm.nipy_spectral(float(group_number + 1) / (len(self.n_cells_in_cell_assemblies_clusters) + 1))
+            # if group_number == 0:
+            #     color = "#64D7F7"
+            # else:
+            #     color = "#D526D7"
             cell_indices_to_color = list(np.arange(start, start + group_size))
             cells_to_highlight.extend(cell_indices_to_color)
             cells_to_highlight_colors.extend([color] * len(cell_indices_to_color))
@@ -426,6 +430,10 @@ class CellAssembliesStruct:
             # bounds = [-1.5, 0.5, 1.5]
             for i in np.arange(n_cell_assemblies):
                 color = cm.nipy_spectral(float(i + 1) / (n_cell_assemblies + 1))
+                # if i == 0:
+                #     color = "#64D7F7"
+                # else:
+                #     color = "#D526D7"
                 list_color.append(color)
                 bounds.append(i + 0.5)
 
@@ -526,6 +534,10 @@ class CellAssembliesStruct:
         start = 0
         for i, cell_group_size in enumerate(self.n_cells_in_cell_assemblies_clusters):
             color = cm.nipy_spectral(float(i + 1) / (n_cell_assemblies + 1))
+            # if i == 0:
+            #     color = "#64D7F7"
+            # else:
+            #     color = "#D526D7"
             for index in np.arange(start, (start+cell_group_size)):
                 ax2.get_yticklabels()[index].set_color(color)
             start += cell_group_size
@@ -1691,24 +1703,24 @@ def compute_and_plot_clusters_raster_kmean_version(labels, activity_threshold, r
                                  SCE_times=SCE_times, activity_threshold=activity_threshold,
                                  with_cells_in_cluster_seq_sorted=False,
                                  sce_times_bool=sce_times_bool,
-                                 save_formats=["pdf", "png"])
+                                 save_formats=["pdf", "png"]) # "pdf"
 
         cas.save_data_on_file(n_clusters=n_cluster)
 
         # if more than 500 cells, we display only the cells in the cell assemblie for the raster part
-        if len(spike_nums_to_use) > 500:
-            cas = cas_dict[n_cluster]
-            cas.neurons_labels = labels
-            cas.sliding_window_duration = sliding_window_duration
+        # if len(spike_nums_to_use) > 500:
+        #     cas = cas_dict[n_cluster]
+        #     cas.neurons_labels = labels
+        #     cas.sliding_window_duration = sliding_window_duration
+        #
+        #     cas.plot_cell_assemblies(data_descr=data_descr, spike_nums=spike_nums_to_use,
+        #                              SCE_times=SCE_times, activity_threshold=activity_threshold,
+        #                              with_cells_in_cluster_seq_sorted=False,
+        #                              sce_times_bool=sce_times_bool,
+        #                              display_only_cell_assemblies_on_raster=True,
+        #                              save_formats=["png"]) # "pdf",
 
-            cas.plot_cell_assemblies(data_descr=data_descr, spike_nums=spike_nums_to_use,
-                                     SCE_times=SCE_times, activity_threshold=activity_threshold,
-                                     with_cells_in_cluster_seq_sorted=False,
-                                     sce_times_bool=sce_times_bool,
-                                     display_only_cell_assemblies_on_raster=True,
-                                     save_formats=["pdf", "png"])
-
-            cas.save_data_on_file(n_clusters=n_cluster)
+            # cas.save_data_on_file(n_clusters=n_cluster)
 
         # TODO: see while plotting twice cell_assemblies make it bug
         if with_cells_in_cluster_seq_sorted:
