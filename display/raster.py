@@ -724,3 +724,43 @@ def plot_sum_active_clusters(clusters_activations,
     if show_fig:
         plt.show()
     plt.close()
+
+
+def plot_with_imshow(raster, path_results, file_name, n_subplots=4,
+                         values_to_plot=None, cmap="hot", show_fig=False, save_formats="pdf"):
+    """
+
+    :param raster: a 2-d array, 1d represents the cells, 2nd the times
+    :param n_subplots: Divide the plot in n_subplots
+    :param values_to_plot:
+    :param cmap: colormap to use, by default "hot"
+    :return:
+    """
+    n_cells, n_times = raster.shape
+    fig, axes = plt.subplots(nrows=4, ncols=1,
+                             gridspec_kw={'height_ratios': [0.25, 0.25, 0.25, 0.25],
+                                          'width_ratios': [1]},
+                             figsize=(15, 6))
+    for ax_index, ax in enumerate(axes):
+        vmax = 0.9
+        ax.imshow(raster[:, (n_times // n_subplots) * ax_index:(n_times // n_subplots) * (ax_index + 1)],
+                  cmap=plt.get_cmap(cmap), extent=[0, 10, 0, 1], aspect='auto', vmin=0, vmax=0.5)
+        ax.axis('image')
+        ax.axis('off')
+
+    # ax1.imshow(,  cmap=plt.get_cmap("hot")) # extent=[0, 1, 0, 1],
+    # sns.heatmap(amplitude_spike_nums_ordered[:max_index_seq + 1, :],
+    #             cbar=False, ax=ax1, cmap=plt.get_cmap("hot"), rasterized=True) #
+
+    if show_fig:
+        plt.show()
+
+    if isinstance(save_formats, str):
+        save_formats = [save_formats]
+
+    for save_format in save_formats:
+        fig.savefig(f'{path_results}/{file_name}.{save_format}',
+                    format=f"{save_format}")
+
+    plt.close()
+
