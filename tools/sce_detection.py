@@ -5,7 +5,7 @@ import math
 from pattern_discovery.tools.misc import get_continous_time_periods
 from matplotlib import pyplot as plt
 from pattern_discovery.tools.signal import smooth_convolve
-from scipy import signal
+from scipy import signal, stats
 
 
 # TODO: create dithered method for list of spike_trains, using code and book from Drun
@@ -697,14 +697,14 @@ def detect_sce_on_traces(raw_traces, use_speed=True, speed_threshold = None, sce
         for i in range(n_cells):
             activity_tmp = np.zeros(n_frames)
             trace_tmp = traces[i, :]
-            burst_threshold = np.median(trace_tmp) + scipy_stats.iqr(trace_tmp) / 2
+            burst_threshold = np.median(trace_tmp) + stats.iqr(trace_tmp) / 2
             for k in np.arange(window_size + 1, n_frames - window_size, 5):
-                window_tmp = np.arange(k - window_size,k + window_size)
+                window_tmp = np.arange(k - window_size, k + window_size)
                 median_tmp = np.median(trace_tmp[window_tmp])
-                if np.sum(activity_tmp[k - 10:k - 1])==0 and median_tmp < burst_threshold:
-                    activity_tmp[k] = (trace_tmp[k] - median_tmp) > (3 * scipy_stats.iqr(trace_tmp[window_tmp]))
+                if np.sum(activity_tmp[k - 10:k - 1]) == 0 and median_tmp < burst_threshold:
+                    activity_tmp[k] = (trace_tmp[k] - median_tmp) > (3 * stats.iqr(trace_tmp[window_tmp]))
             activity_tmp_all_cells[i] = np.where(activity_tmp)[0]
-            print(f" cell #{i} has {len(activity_tmp_all_cells[i])} small activation")
+            # print(f" cell #{i} has {len(activity_tmp_all_cells[i])} small activation")
 
     print(f" small transients detection is done")
 
@@ -717,16 +717,15 @@ def detect_sce_on_traces(raw_traces, use_speed=True, speed_threshold = None, sce
     # sum activity over 2 consecutive frames
     sum_activity=np.zeros(n_frames-1)
     for i in range( n_frames-1):
-        sum_activity[i] = np.sum(np.amax(raster[:,np.arange(i,i+1)], axis = 1))
+        sum_activity[i] = np.sum(np.amax(raster[:, np.arange(i, i+1)], axis=1))
 
     print(f" sum activity is obtained with max is {np.max(sum_activity)}")
 
     #select synchronous calcium events
-    sce_loc = scisi.find_peaks(sum_activity, height=sce_n_cells_threshold, distance=sce_min_distance)[0]
+    sce_loc = signal.find_peaks(sum_activity, height=sce_n_cells_threshold, distance=sce_min_distance)[0]
     n_sce = len(sce_loc)
 
     print(f" SCE are detected with n SCE is {n_sce}")
-    print(f"sce_loc {sce_loc}")
 
     # create cells vs sce matrix
     sce_cells_matrix = np.zeros((n_cells, n_sce))
@@ -752,5 +751,5 @@ def bleaching_correction(traces):
     return traces
 
 def savitzky_golay_filt(traces):
-    traces = scisi.savgol_filter(traces, 5, 3, axis=1)
+    traces = signal.savgol_filter(traces, 5, 3, axis=1)
     return traces

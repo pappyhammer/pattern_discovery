@@ -34,7 +34,6 @@ def plot_graph_using_fa2(graph, file_name="", param=None, iterations=2000, save_
     nx.write_graphml(graph, f"{param.path_results}/{file_name}.graphml")
     nx.write_gexf(graph, f"{param.path_results}/{file_name}.gexf")
 
-
     positions = forceatlas2.forceatlas2_networkx_layout(graph, pos=None, iterations=iterations)
 
     if ax_to_use is None:

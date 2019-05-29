@@ -93,18 +93,18 @@ def step1_pca(data, n_pc_max):
     # eigenvectors and eigenvalues
     u_all, eigval_all = scipy.sparse.linalg.eigs(data_mt, n_pc_max)
     # eigval_all = np.real(eigval_all)
-    # print(f"eigval_all shape {eigval_all.shape}")
-    # keep positive non-zero eig val, replacing negtive values by 0
-    # eigval = np.where(eigval_all > 0, eigval_all, 0)
-    eigval = eigval_all
-    # print(f"pos {pos}")
-    # eig_val = eigval_all[pos]
-    # issue eigval is then 1D
+    print(f"eigval_all shape {eigval_all.shape}")
+    # keep positive non-zero eig val
+    pos = np.where(eigval_all > sys.float_info.epsilon)
+    eigval = eigval_all[:, np.unique(pos[1])]
+    eigval = eigval[np.unique(pos[0]), :]
+
+    print(f"eigval {eigval.shape}")
+
     # keep corresponding eigenvectors
-    # print(f"u_all {u_all.shape}")
-    # u = u_all[pos[1]]
-    # print(f"u {u.shape}")
-    # print(f"eig_val {eig_val.shape}")
+    print(f"u_all {u_all.shape}")
+    u = u_all[np.unique(pos[1])]
+    print(f"u {u.shape}")
 
     # find V
     # print(f"eigval {eigval}")
@@ -112,18 +112,17 @@ def step1_pca(data, n_pc_max):
     # print(f"eig_val {eig_val.shape}")
     print(f"mat_svd {mat_svd.shape}")
     # print(f"u_all {u_all.shape}")
-    least_squares_solution = np.linalg.lstsq(mat_svd.transpose(), u_all)[0]
+    least_squares_solution = np.linalg.lstsq(mat_svd.transpose(), u)[0]
     print(f"least_squares_solution {least_squares_solution.shape}")
     v = (least_squares_solution * data_mt).transpose()
 
     pc_cout = dict()
-    pc_cout["pc_x_filter"] = u_all
+    pc_cout["pc_x_filter"] = u
     pc_cout["pc_time_course"] = v
     pc_cout["pc_eig_val"] = np.diag(eigval)
 
     # data has been normalized
     return data, pc_cout
-
 
 def find_seq_with_pca(traces, path_results, file_name, speed=None):
     if traces is None:
