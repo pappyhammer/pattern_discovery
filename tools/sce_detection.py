@@ -640,3 +640,117 @@ def compute_sce_threshold_from_raster_dur(spike_nums, perc_threshold=95, n_surro
     sce_threshold = np.percentile(n_rand_sum, perc_threshold)
 
     return sce_threshold
+
+
+def detect_sce_on_traces(raw_traces, use_speed=True, speed_threshold = None, sce_n_cells_threshold=5,
+                         sce_min_distance=4, use_median_norm=True, use_bleaching_correction=False,
+                         use_savitzky_golay_filt=True):
+
+    traces = np.copy(raw_traces)
+
+    if use_speed is True:
+        if speed_threshold is None:
+            speed_threshold = 1  # define below which instantaneous speed (cm/s) we consider mice in rest period
+        else:
+            pass
+        rest_periods = np.where(speed < speed_threshold)[0]  # not used
+        traces_rest = traces[:, rest_periods]  # can do detection directly on this selected part of the traces
+
+    if use_speed is False:
+        if speed_threshold is not None:
+            raise Exception('speed threshold is useless if speed is not used')
+        else:
+            pass
+
+    if use_median_norm is True:
+        median_normalization(traces)
+
+    if use_bleaching_correction is True:
+        bleaching_correction(traces)
+
+    if use_savitzky_golay_filt is True:
+        savitzky_golay_filt(traces)
+
+    print(f" traces normalization done with n traces: {len(traces)}")
+
+    # Detect small transients
+    n_cells, n_frames = traces.shape
+    window_size = 40  # size in frames of the sliding window to detect transients
+    activity_tmp_all_cells=[[] for i in range(n_cells)]
+
+    if use_speed is True:
+        print(f" starting detection using speed threshold")
+        for i in range(n_cells):
+            activity_tmp = np.zeros((1, n_frames))
+            trace_tmp = traces[i, :]
+            burst_threshold = np.median(trace_tmp) + scipy_stats.iqr(trace_tmp) / 2
+            for k in range(window_size + 1, n_frames - window_size):
+                 if speed [k] < speed_threshold:
+                    window_tmp = np.arange(k - window_size,k + window_size)
+                    median_tmp = np.median(trace_tmp[window_tmp])
+                    if np.sum(activity_tmp[k - 10:k - 1]) and median_tmp < burst_threshold:
+                        activity_tmp[k] = (trace_tmp[k] - median_tmp) > (3 * scipy_stats.iqr(trace_tmp[window_tmp]))
+            activity_tmp_all_cells[i] = np.where(activity_tmp)[0]
+
+    if use_speed is False:
+        print(f" starting detection without speed threshold")
+        for i in range(n_cells):
+            activity_tmp = np.zeros(n_frames)
+            trace_tmp = traces[i, :]
+            burst_threshold = np.median(trace_tmp) + scipy_stats.iqr(trace_tmp) / 2
+            for k in np.arange(window_size + 1, n_frames - window_size, 5):
+                window_tmp = np.arange(k - window_size,k + window_size)
+                median_tmp = np.median(trace_tmp[window_tmp])
+                if np.sum(activity_tmp[k - 10:k - 1])==0 and median_tmp < burst_threshold:
+                    activity_tmp[k] = (trace_tmp[k] - median_tmp) > (3 * scipy_stats.iqr(trace_tmp[window_tmp]))
+            activity_tmp_all_cells[i] = np.where(activity_tmp)[0]
+            print(f" cell #{i} has {len(activity_tmp_all_cells[i])} small activation")
+
+    print(f" small transients detection is done")
+
+    raster = np.zeros((n_cells, n_frames))
+    for i in range(n_cells):
+        raster[i, activity_tmp_all_cells[i]] = 1
+
+    print(f" raster is obtained")
+
+    # sum activity over 2 consecutive frames
+    sum_activity=np.zeros(n_frames-1)
+    for i in range( n_frames-1):
+        sum_activity[i] = np.sum(np.amax(raster[:,np.arange(i,i+1)], axis = 1))
+
+    print(f" sum activity is obtained with max is {np.max(sum_activity)}")
+
+    #select synchronous calcium events
+    sce_loc = scisi.find_peaks(sum_activity, height=sce_n_cells_threshold, distance=sce_min_distance)[0]
+    n_sce = len(sce_loc)
+
+    print(f" SCE are detected with n SCE is {n_sce}")
+    print(f"sce_loc {sce_loc}")
+
+    # create cells vs sce matrix
+    sce_cells_matrix = np.zeros((n_cells, n_sce))
+    for i in range(n_sce):
+        sce_cells_matrix[:, i] = np.amax(raster[:, np.arange(np.max((sce_loc[i]-1, 0)),
+                                                             np.min((sce_loc[i]+2, n_frames)))], axis=1)
+
+    print(f" SCE vs cells matrix is obtained")
+    return sce_cells_matrix, sce_loc
+
+# Normalization functions
+def median_normalization(traces):
+    n_cells, n_frames = traces.shape
+    for i in range(n_cells):
+        traces[i, :] = traces[i, :] / np.median(traces[i, :])
+    return traces
+
+def bleaching_correction(traces):
+    n_cells, n_frames = traces.shape
+    for k in range(n_cells):
+        p0 = np.polyfit(np.arange(n_frames), traces[k, :], 3)
+        traces[k, :] = traces[k, :] / np.polyval(p0, np.arange(n_frames))
+    return traces
+
+def savitzky_golay_filt(traces):
+    traces = scisi.savgol_filter(traces, 5, 3, axis=1)
+    return traces
