@@ -12,6 +12,7 @@ from pattern_discovery.graph.force_directed_graphs import plot_graph_using_fa2
 from networkx.algorithms.shortest_paths.unweighted import all_pairs_shortest_path
 from networkx.algorithms.shortest_paths.weighted import all_pairs_dijkstra
 
+
 class MarkovParameters(p_disc_tools_param.Parameters):
     def __init__(self, time_inter_seq, min_duration_intra_seq, min_len_seq, min_rep_nb,
                  max_branches, stop_if_twin, error_rate, no_reverse_seq, spike_rate_weight,
@@ -44,7 +45,9 @@ class MarkovParameters(p_disc_tools_param.Parameters):
         # making some change for gitkraken test
 
 
-def build_mle_transition_dict(spike_nums, param, sce_times_bool=None,
+def build_mle_transition_dict(spike_nums, min_duration_intra_seq, time_inter_seq,
+                              sce_times_bool=None, using_avg_dist=True,
+                              spike_rate_weight=None, no_reverse_seq=None,
                               try_uniformity_method=False, debug_mode=False):
     """
     Maximum Likelihood estimation,
@@ -52,6 +55,7 @@ def build_mle_transition_dict(spike_nums, param, sce_times_bool=None,
     then it decreases the probability than B fires after A
     :param spike_nums:
     :param param:
+    :param try_uniformity_method: doesn't work so far
     :return:
     """
     print("building Maximum Likelihood estimation transition dict")
@@ -60,10 +64,18 @@ def build_mle_transition_dict(spike_nums, param, sce_times_bool=None,
     nb_neurons = len(spike_nums)
     n_times = len(spike_nums[0, :])
     transition_dict = np.zeros((nb_neurons, nb_neurons))
+    # give the average distance between consecutive spikes of 2 neurons, in frames
+    if using_avg_dist:
+        spikes_dist_dict = np.zeros((nb_neurons, nb_neurons))
+        # count to make average
+        spikes_count_dict = np.zeros((nb_neurons, nb_neurons))
+    else:
+        spikes_dist_dict = None
+        spikes_count_dict = None
     # results obtain from uniform distribution
     uniform_transition_dict = np.zeros((nb_neurons, nb_neurons))
     # so the neuron with the lower spike rates gets the biggest weight in terms of probability
-    if param.spike_rate_weight and (not try_uniformity_method):
+    if spike_rate_weight and (not try_uniformity_method):
         spike_rates = 1 - p_disc_tools_misc.get_spike_rates(spike_nums)
     else:
         spike_rates = np.ones(nb_neurons)
@@ -88,20 +100,19 @@ def build_mle_transition_dict(spike_nums, param, sce_times_bool=None,
                     continue
                 xy_cov = np.correlate(neuron_spikes, spike_nums[cell], mode="full")
                 center_index = len(xy_cov) // 2
-                transition_dict[neuron_index, cell] = np.max(xy_cov[(center_index + param.min_duration_intra_seq):
-                                                                    (center_index + param.time_inter_seq + 1)])
+                transition_dict[neuron_index, cell] = np.max(xy_cov[(center_index + min_duration_intra_seq):
+                                                                    (center_index + time_inter_seq + 1)])
             continue
         # will count how many spikes of each neuron are following the spike of
-        # tmp_count = np.zeros(nb_neurons)
         for t in np.where(neuron_spikes)[0]:
-            t = np.max((0, t + param.min_duration_intra_seq))
-            t_max = np.min((t + param.time_inter_seq, n_times))
-            times_to_check = np.arange(t, t_max)
+            # print(f"min_duration_intra_seq {min_duration_intra_seq}")
+            t_min = np.max((0, t + min_duration_intra_seq))
+            t_max = np.min((t + time_inter_seq, n_times))
+            times_to_check = np.arange(t_min, t_max)
             if sce_times_bool is not None:
                 # if > 0, means there is a SCE during that interval, and we don't count it
                 # if np.sum(sce_times_bool[t:t_max]) > 0:
                 #         continue
-
                 # another option is to remove the times of the SCE from the search:
                 times_to_check = times_to_check[sce_times_bool[t:t_max]]
                 if len(times_to_check) == 0:
@@ -112,19 +123,29 @@ def build_mle_transition_dict(spike_nums, param, sce_times_bool=None,
             spike_nums[neuron_index, actual_neurons_spikes] = 0
 
             # Retrieve all cells active during the period of time times_to_check
-            pos = np.where(spike_nums[:, times_to_check])[0]
+            if len(times_to_check) == 1:
+                co_active_cells = np.where(spike_nums[:, times_to_check])[0]
+            else:
+                # co-active cells
+                co_active_cells = np.where(np.sum(spike_nums[:, times_to_check], axis=1))[0]
+
             # pos = np.unique(pos)
-            for p in pos:
+            for p in co_active_cells:
                 transition_dict[neuron_index, p] = transition_dict[neuron_index, p] + \
                                                    spike_rates[p]
-                if param.no_reverse_seq:
+                if using_avg_dist:
+                    first_spike_pos = np.where(spike_nums[p, times_to_check])[0][0]
+                    first_spike_pos += min_duration_intra_seq
+                    spikes_dist_dict[neuron_index, p] += first_spike_pos
+                    spikes_count_dict[neuron_index, p] += 1
+                if no_reverse_seq:
                     # see to put transition to 0 ??
                     transition_dict[p, neuron_index] = transition_dict[p, neuron_index] - \
                                                        spike_rates[p]
                 if try_uniformity_method:
                     uniform_transition_dict[neuron_index, p] = uniform_transition_dict[neuron_index, p] + \
                                                                spike_rates[p]
-                    if param.no_reverse_seq:
+                    if no_reverse_seq:
                         # see to put transition to 0 ??
                         uniform_transition_dict[p, neuron_index] = uniform_transition_dict[p, neuron_index] - \
                                                                    spike_rates[p]
@@ -132,9 +153,9 @@ def build_mle_transition_dict(spike_nums, param, sce_times_bool=None,
             spike_nums[neuron_index, actual_neurons_spikes] = 1
         if try_uniformity_method:
             for t in np.where(uniform_spike_nums[neuron_index, :])[0]:
-                t = np.max((0, t + param.min_duration_intra_seq))
-                t_max = np.min((t + param.time_inter_seq, n_times))
-                times_to_check = np.arange(t, t_max)
+                t_min = np.max((0, t + min_duration_intra_seq))
+                t_max = np.min((t + time_inter_seq, n_times))
+                times_to_check = np.arange(t_min, t_max)
                 if sce_times_bool is not None:
                     # if > 0, means there is a SCE during that interval, and we don't count it
                     # if np.sum(sce_times_bool[t:t_max]) > 0:
@@ -154,17 +175,31 @@ def build_mle_transition_dict(spike_nums, param, sce_times_bool=None,
                 # pos = np.unique(pos)
                 for p in pos:
                     uniform_transition_dict[neuron_index, p] = uniform_transition_dict[neuron_index, p] + \
-                                                                   spike_rates[p]
-                    if param.no_reverse_seq:
+                                                               spike_rates[p]
+                    if no_reverse_seq:
                         # see to put transition to 0 ??
                         uniform_transition_dict[p, neuron_index] = uniform_transition_dict[p, neuron_index] - \
-                                                                       spike_rates[p]
+                                                                   spike_rates[p]
                 # back to one
                 uniform_spike_nums[neuron_index, actual_neurons_spikes] = 1
 
         transition_dict[neuron_index, neuron_index] = 0
         if try_uniformity_method:
             uniform_transition_dict[neuron_index, neuron_index] = 0
+
+    # try normalizing by the mean spike count of the 2 cells
+    normalize_by_spike_count = False
+    if normalize_by_spike_count:
+        for cell_1 in np.arange(nb_neurons):
+            for cell_2 in np.arange(nb_neurons):
+                if cell_1 == cell_2:
+                    continue
+                cell_1_count = len(np.where(spike_nums[cell_1])[0])
+                # cell_2_count = len(np.where(spike_nums[cell_2])[0])
+                # mean_spikes_count = (cell_1_count + cell_2_count) / 2
+                if cell_1_count > 0:
+                    transition_dict[cell_1, cell_2] = transition_dict[cell_1, cell_2] / \
+                                                      cell_1_count
 
     # all negatives values should be put to zero
     transition_dict[np.where(transition_dict < 0)] = 0
@@ -173,19 +208,22 @@ def build_mle_transition_dict(spike_nums, param, sce_times_bool=None,
     if try_uniformity_method:
         # we divide the values by the uniform one
         uniform_transition_dict[np.where(uniform_transition_dict < 0)] = 0
-    # we divide for each neuron the sum of the probabilities to get the sum to 1
-    for neuron_index in np.arange(nb_neurons):
-        if try_uniformity_method:
-            # we divide the values by the uniform one
-            other_neurons = np.where(uniform_transition_dict[neuron_index, :])[0]
-            for o_n in other_neurons:
-                transition_dict[neuron_index, o_n] = transition_dict[neuron_index, o_n] / \
-                                                     uniform_transition_dict[neuron_index, o_n]
-        if np.sum(transition_dict[neuron_index, :]) > 0:
-            transition_dict[neuron_index, :] = transition_dict[neuron_index, :] / \
-                                               np.sum(transition_dict[neuron_index, :])
-        else:
-            print(f"For cell {neuron_index}, transition_dict is 0, n_spikes: {np.sum(spike_nums[neuron_index])}")
+
+    keeping_the_nb_of_rep = True
+    if not keeping_the_nb_of_rep:
+        # we divide for each neuron the sum of the probabilities to get the sum to 1
+        for neuron_index in np.arange(nb_neurons):
+            if try_uniformity_method:
+                # we divide the values by the uniform one
+                other_neurons = np.where(uniform_transition_dict[neuron_index, :])[0]
+                for o_n in other_neurons:
+                    transition_dict[neuron_index, o_n] = transition_dict[neuron_index, o_n] / \
+                                                         uniform_transition_dict[neuron_index, o_n]
+            if np.sum(transition_dict[neuron_index, :]) > 0:
+                transition_dict[neuron_index, :] = transition_dict[neuron_index, :] / \
+                                                   np.sum(transition_dict[neuron_index, :])
+            else:
+                print(f"For cell {neuron_index}, transition_dict is 0, n_spikes: {np.sum(spike_nums[neuron_index])}")
 
     print_transit_dict = False
     if print_transit_dict:
@@ -204,7 +242,12 @@ def build_mle_transition_dict(spike_nums, param, sce_times_bool=None,
     stop_time = time.time()
     print(f"Maximum Likelihood estimation transition dict built in {np.round(stop_time - start_time, 3)} s")
 
-    return transition_dict
+    if using_avg_dist:
+        # averaging
+        spikes_count_dict[spikes_count_dict == 0] = 1
+        spikes_dist_dict = np.divide(spikes_dist_dict, spikes_count_dict)
+
+    return transition_dict, spikes_dist_dict
 
 
 # TODO: Print best_seq + info on data
@@ -250,7 +293,6 @@ def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
         file.write(f"use_ordered_spike_nums_for_surrogate {use_ordered_spike_nums_for_surrogate}" + '\n')
         file.write(f"keep_the_longest_seq {keep_the_longest_seq}" + '\n')
 
-
         file.write("" + '\n')
         min_len = 1000
         max_len = 0
@@ -284,23 +326,23 @@ def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
             if (nb_rep_seq is not None) and (len(nb_rep_seq) > 0):
                 real_data_in = True
                 str_to_write += f"# Real data (nb seq: {len(nb_rep_seq)}), " \
-                                f"repetition: mean {np.round(np.mean(nb_rep_seq), 3)}"
+                    f"repetition: mean {np.round(np.mean(nb_rep_seq), 3)}"
                 if np.std(nb_rep_seq) > 0:
                     str_to_write += f", std {np.round(np.std(nb_rep_seq), 3)}"
                 str_to_write += f"#, duration: " \
-                                f": mean {np.round(np.mean(flat_durations), 3)}"
+                    f": mean {np.round(np.mean(flat_durations), 3)}"
                 if np.std(flat_durations) > 0:
                     str_to_write += f", std {np.round(np.std(flat_durations), 3)}"
             if (nb_rep_seq_surrogate is not None) and (len(nb_rep_seq_surrogate) > 0):
                 if real_data_in:
                     str_to_write += f"\n"
-                str_to_write += f"# Surrogate (nb seq: {np.round((len(nb_rep_seq_surrogate)/n_surrogate), 4)}), " \
-                                f"repetition: " \
-                                f"mean {np.round(np.mean(nb_rep_seq_surrogate), 3)}"
+                str_to_write += f"# Surrogate (nb seq: {np.round((len(nb_rep_seq_surrogate) / n_surrogate), 4)}), " \
+                    f"repetition: " \
+                    f"mean {np.round(np.mean(nb_rep_seq_surrogate), 3)}"
                 if np.std(nb_rep_seq_surrogate) > 0:
                     str_to_write += f", std {np.round(np.std(nb_rep_seq_surrogate), 3)}"
                 str_to_write += f"#, duration: " \
-                                f": mean {np.round(np.mean(flat_durations_surrogate), 3)}"
+                    f": mean {np.round(np.mean(flat_durations_surrogate), 3)}"
                 if np.std(flat_durations_surrogate) > 0:
                     str_to_write += f", std {np.round(np.std(flat_durations_surrogate), 3)}"
             else:
@@ -310,17 +352,17 @@ def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
             if (nb_rep_seq is not None) and (len(nb_rep_seq) > 0):
                 if key in significant_results_dict:
                     str_to_write += f"!!!!!!!!! {len(significant_results_dict[key])} significant sequences " \
-                                    f"of {key} cells, repetition : mean " \
-                                    f"{np.round(np.mean(significant_results_dict[key]), 2)}, " \
-                                    f"std {np.round(np.std(significant_results_dict[key]), 2)} " \
-                                    f"!!!!!!!!!\n"
+                        f"of {key} cells, repetition : mean " \
+                        f"{np.round(np.mean(significant_results_dict[key]), 2)}, " \
+                        f"std {np.round(np.std(significant_results_dict[key]), 2)} " \
+                        f"!!!!!!!!!\n"
                     for sig_seq, time_stamps in significant_seq_dict.items():
                         if len(sig_seq) == key:
                             labels_seq = []
                             for cell in sig_seq:
                                 labels_seq.append(labels[cell])
                             str_to_write += f"Cat {significant_category_dict[sig_seq]}: " \
-                                            f"{labels_seq} repeated {len(time_stamps)}\n"
+                                f"{labels_seq} repeated {len(time_stamps)}\n"
                 else:
                     str_to_write += f"No significant sequences of {key} cells\n"
 
@@ -359,6 +401,7 @@ def give_me_stat_on_sorting_seq_results(results_dict, significant_results_dict,
                                        param=param,
                                        significant_category_dict=significant_seq_dict)
 
+
 def save_on_file_seq_detection_results(best_cells_order, seq_dict, file_name, param, significant_category_dict=None):
     complete_file_name = f'{param.path_results}/{file_name}'
     with open(complete_file_name, "w", encoding='UTF-8') as file:
@@ -385,6 +428,7 @@ def save_on_file_seq_detection_results(best_cells_order, seq_dict, file_name, pa
                 file.write("/")
                 file.write(f"{significant_category_dict[cells]}")
             file.write("\n")
+
 
 def bfs(trans_dict, neuron_to_start, param, n_std_for_threshold=0):
     """
@@ -472,9 +516,205 @@ def get_weight_of_a_graph_path(graph, path):
     for cell_index, cell in enumerate(path):
         if cell_index == len(path) - 1:
             break
-        weight = graph[cell][path[cell_index+1]]['weight']
+        weight = graph[cell][path[cell_index + 1]]['weight']
         total_weight += weight
     return total_weight
+
+
+def build_graph_from_transition_dict(transition_dict, n_connected_cell_to_add,
+                                     use_longest_path=False, with_weight=True,
+                                     cells_to_isolate=None, transition_dict_2_nd_order=None,
+                                     spikes_dist_dict=None, min_rep_nb=None):
+    """
+
+    :param transition_dict: a 2d np.array, should be square
+    :param n_connected_cell_to_add: n-th best conencted cell to be linked to
+    :param use_longest_path: not using shortest path, but longest path, then the graph will be acyclic
+    :param with_weight: using weight, the weight would be the rank in the transition dict (sorted)
+    :param cells_to_isolate: list of cells that should be include in the graph, and should be returned as isolated
+    :return:
+    """
+    n_cells = transition_dict.shape[0]
+    graph = nx.DiGraph()
+    graph.add_nodes_from(np.arange(n_cells))
+    list_cells_connected = set()
+    if cells_to_isolate is None:
+        cells_to_isolate = np.zeros(0)
+    for cell in np.arange(n_cells):
+        if np.sum(transition_dict[cell, :]) == 0:
+            # it usually means the cells has no transients
+            continue
+        # cell to isolate, but can follow an other cell in the directed graph
+        if cell in cells_to_isolate:
+            continue
+
+        # sorting the cells from the most connected to the less
+        connected_cells_sorted = np.argsort(transition_dict[cell, :])[::-1]
+        # removing cells_to_isolate
+        if len(cells_to_isolate) > 0:
+            connected_cells_sorted_tmp = connected_cells_sorted
+            connected_cells_sorted = []
+            for cell_connec in connected_cells_sorted_tmp:
+                if cell_connec not in cells_to_isolate:
+                    connected_cells_sorted.append(cell_connec)
+            connected_cells_sorted = np.array(connected_cells_sorted)
+        if min_rep_nb is not None:
+            # for this to work, first_cell_transition_score should correspond to the nb of rep
+            # if none of the link is repeated enough then we don't take it into consideration
+            first_cell_transition_score = transition_dict[cell, connected_cells_sorted[0]]
+            if first_cell_transition_score < min_rep_nb:
+                continue
+
+        # if more than one cell are at the same distance than the cell we're looking at
+        # we link those cells sorted by the distance of their spikes from the main cell
+        link_co_active_cells = True
+        if link_co_active_cells:
+            first_cell_transition_score = transition_dict[cell, connected_cells_sorted[0]]
+            cells_with_same_score = np.where(transition_dict[cell, connected_cells_sorted[1:]] ==
+                                            first_cell_transition_score)[0]
+            if len(cells_with_same_score) > 0:
+                cells_with_same_score = connected_cells_sorted[:len(cells_with_same_score)+1]
+                # we sort them by dist:
+                if spikes_dist_dict is not None:
+                    sorted_by_dist = np.argsort(spikes_dist_dict[cell, cells_with_same_score])
+                    cells_with_same_score = cells_with_same_score[sorted_by_dist]
+                last_cell = cell
+                for new_cell in cells_with_same_score:
+                    # we want to connect those cells one by one
+                    if with_weight:
+                        graph.add_edge(last_cell, new_cell, weight=1)
+                    else:
+                        graph.add_edge(last_cell, new_cell)
+                    last_cell = new_cell
+                cells_to_isolate = np.concatenate((cells_to_isolate, cells_with_same_score[:-1]))
+                continue
+        # else:
+        #     connected_cells_sorted = connected_cells_sorted[:n_connected_cell_to_add]
+        # cell_to_check=25
+        # if cell == cell_to_check:
+        #     print(f"{cell_to_check}: connected_cells_sorted {' '.join(map(str, connected_cells_sorted))}")
+        #     print(f"{cell_to_check}: transition_dict {' '.join(map(str, transition_dict[cell, connected_cells_sorted]))}")
+        #     print(f"{cell_to_check}: transition_dict std {np.std(transition_dict[cell, :])}")
+        #     print(f"{cell_to_check}: spikes_dist_dict {' '.join(map(str, spikes_dist_dict[cell, connected_cells_sorted]))}")
+
+        connected_cells_sorted = connected_cells_sorted[:n_connected_cell_to_add]
+        if n_connected_cell_to_add > 1:
+            first_cell_transition_score = transition_dict[cell, connected_cells_sorted[0]]
+            cells_with_same_score = np.where(transition_dict[cell, connected_cells_sorted[1:]] ==
+                                             first_cell_transition_score)[0]
+            if len(cells_with_same_score) > 0:
+                # we order them by distance
+                if spikes_dist_dict is not None:
+                    cells_to_sort = connected_cells_sorted[:len(cells_with_same_score)+1]
+                    sorted_by_dist = np.argsort(spikes_dist_dict[cell, cells_to_sort])
+                    cells_to_sort = cells_to_sort[sorted_by_dist]
+                    connected_cells_sorted[:len(cells_with_same_score)+1] = cells_to_sort
+                elif transition_dict_2_nd_order is not None:
+                    # we could start by looking to which cells is connected cell, and using a '2nd'
+                    # order transition_dict,
+                    # order the connected cell according to their rank in the 2nd order dict
+                    cells_to_sort = connected_cells_sorted[:len(cells_with_same_score) + 1]
+                    sorted_by_dist = np.argsort(transition_dict_2_nd_order[cell, cells_to_sort])[::-1]
+                    cells_to_sort = cells_to_sort[sorted_by_dist]
+                    connected_cells_sorted[:len(cells_with_same_score) + 1] = cells_to_sort
+            else:
+                if transition_dict_2_nd_order is not None:
+                    # we could start by looking to which cells is connected cell, and using a '2nd'
+                    # order transition_dict,
+                    # order the connected cell according to their rank in the 2nd order dict
+                    sorted_2nd_order = np.argsort(transition_dict_2_nd_order[cell, connected_cells_sorted])[::-1]
+                    connected_cells_sorted = connected_cells_sorted[sorted_2nd_order]
+
+        # if cell == cell_to_check:
+        #     print(f"2nd order {cell_to_check}: connected_cells_sorted {' '.join(map(str, connected_cells_sorted))}")
+        for connex_index, cell_connected in enumerate(connected_cells_sorted):
+            if (cell == cell_connected):
+                continue
+            # threshold_prob = (mean_trans_dict + (n_std_for_threshold * std_trans_dict))
+            # threshold_prob = np.median(transition_dict[cell, :])
+            # we add it, only if it passes a probability threshold
+            # if transition_dict[cell, cell_connected] <= threshold_prob:
+            #     # print(f"Stop edges process {cell} -> {cell_connected} "
+            #     #       f"at step {connex_index}: {str(np.round(threshold_prob, 4))}")
+            #     break
+            if use_longest_path:
+                # to make sure the graph is acyclic
+                if cell_connected in list_cells_connected:
+                    continue
+                list_cells_connected.add(cell_connected)
+                list_cells_connected.add(cell)
+            if with_weight:
+                # the cell the most connected has the bigger weight
+                # for the weight we could use: 1 - transition_dict[cell, cell_connected]
+                # we use the rank from this cell, the aim is to use it for shortest path
+                # the shortest weighted path, will be the one with the higher probability
+                graph.add_edge(cell, cell_connected, weight=connex_index + 1)
+                # graph.add_edge(cell, cell_connected, weight=1 - transition_dict[cell, cell_connected])
+            else:
+                # print(f"add_edge {(cell, cell_connected)}")
+                graph.add_edge(cell, cell_connected)
+
+    return graph
+
+
+def find_paths_in_a_graph(graph, shortest_path_on_weight, with_weight, use_longest_path=False):
+    # first we remove cell with no neighbors
+    isolates_cell = []
+    seq_list = []
+    while True:
+        new_isolate_cells = list(nx.isolates(graph))
+        graph.remove_nodes_from(new_isolate_cells)
+        isolates_cell.extend(new_isolate_cells)
+        if graph.number_of_nodes() == 0:
+            break
+        if use_longest_path:
+            longest_shortest_path = dag.dag_longest_path(graph)
+            print(f"longest_path {len(longest_shortest_path)}: {longest_shortest_path}")
+        else:
+            longest_shortest_path = []
+            lowest_weight_among_best_path = None
+            if shortest_path_on_weight:
+                for cell, (dist_dict, path_dict) in nx.all_pairs_dijkstra(graph):
+                    for target_cell, path in path_dict.items():
+                        if len(path) >= len(longest_shortest_path):
+                            weight = get_weight_of_a_graph_path(graph, list(path))
+                            if len(path) > len(longest_shortest_path):
+                                longest_shortest_path = list(path)
+                                lowest_weight_among_best_path = weight
+                                print(f"{list(path)}: {weight}")
+                            # else both the same length, then we look at the weight
+                            elif lowest_weight_among_best_path > weight:
+                                lowest_weight_among_best_path = weight
+                                print(f"{list(path)}: {weight}")
+            else:
+                shortest_paths_dict = dict(all_pairs_shortest_path(graph))
+                # for weighted choice: all_pairs_dijkstra(G)
+                for node_1, node_2_dict in shortest_paths_dict.items():
+                    for node_2, path in node_2_dict.items():
+                        if len(path) >= len(longest_shortest_path):
+                            if with_weight:
+                                weight = get_weight_of_a_graph_path(graph, list(path))
+                            else:
+                                weight = 0
+                            if len(path) > len(longest_shortest_path):
+                                longest_shortest_path = list(path)
+                                lowest_weight_among_best_path = weight
+                                print(f"{list(path)}: {weight}")
+                            # else both the same length, then we look at the weight
+                            elif lowest_weight_among_best_path > weight:
+                                lowest_weight_among_best_path = weight
+                                print(f"{list(path)}: {weight}")
+
+                print(f"longest_shortest_path {len(longest_shortest_path)}: {longest_shortest_path} "
+                      f"{lowest_weight_among_best_path}")
+        seq_list.append(longest_shortest_path)
+        graph.remove_nodes_from(longest_shortest_path)
+
+        if graph.number_of_nodes() == 0:
+            break
+
+    return seq_list, isolates_cell
+
 
 def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method=False,
                    debug_mode=False,
@@ -503,10 +743,27 @@ def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method
     # spike_nums = spike_nums[:, :2000]
     nb_neurons = len(spike_nums)
 
-    transition_dict = build_mle_transition_dict(spike_nums=spike_nums, param=param,
+    transition_dict, spikes_dist_dict = build_mle_transition_dict(spike_nums=spike_nums,
+                                                min_duration_intra_seq=param.min_duration_intra_seq,
+                                                time_inter_seq=param.time_inter_seq,
                                                 try_uniformity_method=try_uniformity_method,
                                                 debug_mode=debug_mode,
+                                                spike_rate_weight=param.spike_rate_weight,
+                                                no_reverse_seq=param.no_reverse_seq,
                                                 sce_times_bool=sce_times_bool)
+    transition_dict_2_nd_order = None
+    try_with_2nd_order = True
+    if try_with_2nd_order:
+        print("Building 2nd order transition dict")
+        transition_dict_2_nd_order, spikes_dist_dict_2_nd_order = build_mle_transition_dict(spike_nums=spike_nums,
+                                                               min_duration_intra_seq=param.min_duration_intra_seq * 2,
+                                                               time_inter_seq=param.time_inter_seq * 2,
+                                                               try_uniformity_method=try_uniformity_method,
+                                                               debug_mode=debug_mode,
+                                                               spike_rate_weight=param.spike_rate_weight,
+                                                               no_reverse_seq=param.no_reverse_seq,
+                                                               sce_times_bool=sce_times_bool)
+
     # print(f"transition_dict {transition_dict}")
     # len of nb_neurons, each element is a dictionary with each key represent a common seq (neurons tuple, first neurons
     # being the index of the list)
@@ -521,56 +778,35 @@ def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method
                   '#ff7f00', '#cab2d6', '#6a3d9a', '#ffff99', '#b15928', '#a50026', '#d73027',
                   '#f46d43', '#fdae61', '#fee090', '#ffffbf', '#e0f3f8', '#abd9e9',
                   '#74add1', '#4575b4', '#313695']
-        plot_graph = True
-        with_weight = True
-        use_longest_path = False
+        plot_graph = False
+        with_weight = False
         # if true, means that the algorithm will return between all pairs, the path that has the lowest weight
         # and not necessarly the one with the less cells on the path
-        shortest_path_on_weight = True
+        shortest_path_on_weight = False
+        use_longest_path = False
         use_graph_from_connectity_ms = False
-        n_connected_cell_to_add = 2
+        n_connected_cell_to_add = 5
         if use_graph_from_connectity_ms and (ms is not None):
             print('use_graph_from_connectity_ms')
             ms.detect_n_in_n_out()
             graph = ms.spike_struct.graph_out
         else:
+            # cells_to_isolate = None
+            # removing from the graph cells that fires the most and the less
+            spike_count_by_cell = np.sum(spike_nums, axis=1)
+            low_spike_count_threshold = np.percentile(spike_count_by_cell, 20)
+            high_spike_count_threshold = np.percentile(spike_count_by_cell, 95)
+            cells_to_isolate = np.where(spike_count_by_cell < low_spike_count_threshold)[0]
+            cells_to_isolate = np.concatenate((cells_to_isolate,
+                                               np.where(spike_count_by_cell > high_spike_count_threshold)[0]))
             # the idea is to build a graph based on top n connection from the transition_dict
             # directed graph
-            graph = nx.DiGraph()
-            graph.add_nodes_from(np.arange(nb_neurons))
-            list_cells_connected = set()
-            for cell in np.arange(nb_neurons):
-                if np.sum(transition_dict[cell, :]) == 0:
-                    # it usually means the cells has no transients
-                    continue
-                # sorting the cells from the most connected to the less
-                connected_cells_sorted = np.argsort(transition_dict[cell, :])[::-1]
-                for connex_index, cell_connected in enumerate(connected_cells_sorted[:n_connected_cell_to_add]):
-                    if cell == cell_connected:
-                        continue
-                    # threshold_prob = (mean_trans_dict + (n_std_for_threshold * std_trans_dict))
-                    threshold_prob = np.median(transition_dict[cell, :])
-                    # we add it, only if it passes a probability threshold
-                    # if transition_dict[cell, cell_connected] <= threshold_prob:
-                    #     # print(f"Stop edges process {cell} -> {cell_connected} "
-                    #     #       f"at step {connex_index}: {str(np.round(threshold_prob, 4))}")
-                    #     break
-                    if use_longest_path:
-                        # to make sure the graph is acyclic
-                        if cell_connected in list_cells_connected:
-                            continue
-                    list_cells_connected.add(cell_connected)
-                    list_cells_connected.add(cell)
-                    if with_weight:
-                        # the cell the most connected has the bigger weight
-                        # for the weight we could use: 1 - transition_dict[cell, cell_connected]
-                        # we use the rank from this cell, the aim is to use it for shortest path
-                        # the shortest weighted path, will be the one with the higher probability
-                        graph.add_edge(cell, cell_connected, weight=connex_index+1)
-                        # graph.add_edge(cell, cell_connected, weight=1 - transition_dict[cell, cell_connected])
-                    else:
-                        # print(f"add_edge {(cell, cell_connected)}")
-                        graph.add_edge(cell, cell_connected)
+            graph = build_graph_from_transition_dict(transition_dict, n_connected_cell_to_add,
+                                                     use_longest_path=use_longest_path,
+                                                     with_weight=with_weight, cells_to_isolate=cells_to_isolate,
+                                                     transition_dict_2_nd_order=transition_dict_2_nd_order,
+                                                     spikes_dist_dict=spikes_dist_dict,
+                                                     min_rep_nb=param.min_rep_nb)
 
         if plot_graph:
             plot_graph_using_fa2(graph=graph, file_name=f"graph_seq",
@@ -581,71 +817,90 @@ def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method
         # print(f"len(cycles) {len(list(cycles))}")
         print(f"dag.is_directed_acyclic_graph(graph) {dag.is_directed_acyclic_graph(graph)}")
 
-        # first we remove cell with no neighbors
-        isolates_cell = []
+        seq_list, isolates_cell = find_paths_in_a_graph(graph, shortest_path_on_weight, with_weight,
+                                                        use_longest_path=False)
+
+        # we have a list of seq that we want to concatenate according to the score of transition between
+        # the first and last cell in transition dict
+        # first we keep aside the seq that are composed of less than 3 cells
+        short_seq_cells = []
+        long_seq_list = []
+        for seq in seq_list:
+            if len(seq) <= 2:
+                # organize those ones according to transition dict
+                short_seq_cells.extend(seq)
+            else:
+                print(f"long_seq_list.append {seq}")
+                long_seq_list.append(seq)
+        n_long_seq = len(long_seq_list)
+        seq_transition_dict = np.zeros((n_long_seq, n_long_seq))
+        for long_seq_index_1, long_seq_1 in enumerate(long_seq_list):
+            for long_seq_index_2, long_seq_2 in enumerate(long_seq_list):
+                if long_seq_index_1 == long_seq_index_2:
+                    continue
+                first_cells = long_seq_1[-2:]
+                following_cells = long_seq_2[:2]
+                best_tuple = None
+                best_transition_prob = 0
+                sum_prob = 0
+                sum_prob += transition_dict[first_cells[1], following_cells[0]]
+                if transition_dict_2_nd_order is not None and (spikes_dist_dict_2_nd_order is not None):
+                    dist_1_st_order = spikes_dist_dict[first_cells[0], first_cells[1]]
+                    dist_2_nd_order = spikes_dist_dict_2_nd_order[first_cells[0], following_cells[0]]
+                    if dist_2_nd_order > dist_1_st_order + param.min_duration_intra_seq:
+                        sum_prob = max(sum_prob, transition_dict_2_nd_order[first_cells[0], following_cells[0]])
+
+                    dist_1_st_order = spikes_dist_dict[first_cells[1], following_cells[0]]
+                    dist_2_nd_order = spikes_dist_dict_2_nd_order[first_cells[1], following_cells[1]]
+                    if dist_2_nd_order > dist_1_st_order + param.min_duration_intra_seq:
+                        sum_prob = max(sum_prob, transition_dict_2_nd_order[first_cells[1], following_cells[1]])
+
+                # for first_cell in first_cells:
+                #     for following_cell in following_cells:
+                #         prob = transition_dict[first_cell, following_cell]
+                #         sum_prob += prob
+                #         if best_tuple is None:
+                #             best_tuple = (first_cell, following_cell)
+                #             best_transition_prob = prob
+                #         elif prob > best_transition_prob:
+                #             best_tuple = (first_cell, following_cell)
+                #             best_transition_prob = prob
+
+                seq_transition_dict[long_seq_index_1, long_seq_index_2] = sum_prob
+
+        graph_seq = build_graph_from_transition_dict(seq_transition_dict, n_connected_cell_to_add=2,
+                                                 use_longest_path=use_longest_path,
+                                                 with_weight=with_weight)
+        print(f"organizing graph of sequences")
+        seq_indices_list, isolates_seq = find_paths_in_a_graph(graph_seq, shortest_path_on_weight, with_weight,
+                                                               use_longest_path=use_longest_path)
+        # creating new cell order
         new_cell_order = []
         cells_to_highlight_colors = []
         cells_to_highlight = []
         cell_index_so_far = 0
-        sequence_index = 0
-        while True:
-            new_isolate_cells = list(nx.isolates(graph))
-            graph.remove_nodes_from(new_isolate_cells)
-            isolates_cell.extend(new_isolate_cells)
-            if graph.number_of_nodes() == 0:
-                break
-            if use_longest_path:
-                longest_shortest_path = dag.dag_longest_path(graph)
-                print(f"longest_path {len(longest_shortest_path)}: {longest_shortest_path}")
-            else:
-                longest_shortest_path = []
-                lowest_weight_among_best_path = None
-                if shortest_path_on_weight:
-                    for cell, (dist_dict, path_dict) in nx.all_pairs_dijkstra(graph):
-                        for target_cell, path in path_dict.items():
-                            weight = dist_dict[target_cell]
-                            if len(path) >= len(longest_shortest_path):
-                                weight = get_weight_of_a_graph_path(graph, list(path))
-                                if len(path) > len(longest_shortest_path):
-                                    longest_shortest_path = list(path)
-                                    lowest_weight_among_best_path = weight
-                                    print(f"{list(path)}: {weight}")
-                                # else both the same length, then we look at the weight
-                                elif lowest_weight_among_best_path > weight:
-                                    lowest_weight_among_best_path = weight
-                                    print(f"{list(path)}: {weight}")
-                else:
-                    shortest_paths_dict = dict(all_pairs_shortest_path(graph))
-                    # for weighted choice: all_pairs_dijkstra(G)
-                    for node_1, node_2_dict in shortest_paths_dict.items():
-                        for node_2, path in node_2_dict.items():
-                            if len(path) >= len(longest_shortest_path):
-                                if with_weight:
-                                    weight = get_weight_of_a_graph_path(graph, list(path))
-                                else:
-                                    weight = 0
-                                if len(path) > len(longest_shortest_path):
-                                    longest_shortest_path = list(path)
-                                    lowest_weight_among_best_path = weight
-                                    print(f"{list(path)}: {weight}")
-                                # else both the same length, then we look at the weight
-                                elif lowest_weight_among_best_path > weight:
-                                    lowest_weight_among_best_path = weight
-                                    print(f"{list(path)}: {weight}")
+        color_index_by_sub_seq = 0
+        for color_index, seq_indices in enumerate(seq_indices_list):
+            n_cells_in_seq = 0
+            for seq_index in seq_indices:
+                seq = long_seq_list[seq_index]
+                print(f"new_cell_order.extend {seq}")
+                new_cell_order.extend(seq)
+                # n_cells_in_seq += len(seq)
+                n_cells_in_seq = len(seq)
+                cells_to_highlight.extend(np.arange(cell_index_so_far, cell_index_so_far + n_cells_in_seq))
+                cell_index_so_far += n_cells_in_seq
+                cells_to_highlight_colors.extend([colors[color_index_by_sub_seq % len(colors)]] * n_cells_in_seq)
+                color_index_by_sub_seq += 1
 
-                    print(f"longest_shortest_path {len(longest_shortest_path)}: {longest_shortest_path} "
-                          f"{lowest_weight_among_best_path}")
+        #     new_cell_order.extend(longest_shortest_path)
+        #     graph.remove_nodes_from(longest_shortest_path)
+        #     cells_to_highlight.extend(np.arange(cell_index_so_far, cell_index_so_far + len(longest_shortest_path)))
+        #     cell_index_so_far += len(longest_shortest_path)
+        #     cells_to_highlight_colors.extend([colors[sequence_index % len(colors)]] * len(longest_shortest_path))
+        #     sequence_index += 1
 
-            new_cell_order.extend(longest_shortest_path)
-            graph.remove_nodes_from(longest_shortest_path)
-            cells_to_highlight.extend(np.arange(cell_index_so_far, cell_index_so_far + len(longest_shortest_path)))
-            cell_index_so_far += len(longest_shortest_path)
-            cells_to_highlight_colors.extend([colors[sequence_index % len(colors)]] * len(longest_shortest_path))
-            sequence_index += 1
-
-            if graph.number_of_nodes() == 0:
-                break
-
+        new_cell_order.extend(short_seq_cells)
         new_cell_order.extend(isolates_cell[::-1])
         plot_spikes_raster(spike_nums=spike_nums[np.array(new_cell_order)], param=param,
                            title=f"raster plot ordered with graph",
@@ -658,15 +913,15 @@ def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method
                            plot_with_amplitude=False,
                            cells_to_highlight=cells_to_highlight,
                            cells_to_highlight_colors=cells_to_highlight_colors,
-                           spike_shape='o',
-                           spike_shape_size=0.02,
+                           spike_shape='|',
+                           spike_shape_size=5,
                            save_formats="pdf")
-        n_cells_to_zoom = 200
+        n_cells_to_zoom = 150
         plot_spikes_raster(spike_nums=spike_nums[np.array(new_cell_order)][:n_cells_to_zoom], param=param,
                            title=f"raster plot ordered with graph",
                            spike_train_format=False,
                            file_name=f"raste_plot_ordered_with_graph_zoom",
-                           y_ticks_labels=new_cell_order,
+                           y_ticks_labels=new_cell_order[:n_cells_to_zoom],
                            save_raster=True,
                            show_raster=False,
                            show_sum_spikes_as_percentage=True,
@@ -676,9 +931,6 @@ def find_sequences(spike_nums, param, sce_times_bool=None, try_uniformity_method
                            spike_shape='o',
                            spike_shape_size=1,
                            save_formats="pdf")
-
-
-
 
         """
         One idea
@@ -1062,7 +1314,6 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param, debug_mode=False):
                         #       f"ok_to_add_it {current_seq_cells} / {current_seq_times}")
                         current_seq_dict[tuple_seq].append(current_seq_times)
 
-
                 # while not_added and (nb_errors_to_add >= 0):
                 #     first_cell = current_seq_cells_backup[0]
                 #     if (nb_errors_to_add > 0) and ((first_cell - 1) >= 0):
@@ -1127,7 +1378,6 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param, debug_mode=False):
             if go_out:
                 break
 
-
             value = current_seq_dict[key]
             # if len(value) < param.min_rep_nb:
             #     seq_to_remove.append(key)
@@ -1184,7 +1434,7 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param, debug_mode=False):
                                         break
                                 if not alread_in:
                                     short_seq_times = ([short_seq_times[0]] *
-                                                           (len(long_seq) - len(short_seq))) + short_seq_times
+                                                       (len(long_seq) - len(short_seq))) + short_seq_times
                                     new_seq_times.append(short_seq_times)
                             if len(new_seq_times) > 0:
                                 long_dict[long_seq].extend(new_seq_times)
@@ -1230,8 +1480,8 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param, debug_mode=False):
                         # to_add_end_long = 0
                         # to_add_end_short = 0
                         # then we merge both
-                        diff_beg_long_short = np.abs(long_seq[0]-short_seq[0])
-                        diff_end_long_short = np.abs(long_seq[-1]-short_seq[-1])
+                        diff_beg_long_short = np.abs(long_seq[0] - short_seq[0])
+                        diff_end_long_short = np.abs(long_seq[-1] - short_seq[-1])
                         if short_seq[0] <= long_seq[0]:
                             new_seq.extend(list(short_seq[:diff_beg_long_short]))
                             new_seq.extend(list(long_seq))
@@ -1279,7 +1529,6 @@ def find_sequences_in_ordered_spike_nums(spike_nums, param, debug_mode=False):
                         break
             # keys_current_seq_dict = list(current_seq_dict.keys())
             # index_key += 1
-
 
         # for key in seq_to_remove:
         #     if key in current_seq_dict:
@@ -1607,7 +1856,7 @@ def order_spike_nums_by_seq(spike_nums, param, sce_times_bool=None, debug_mode=T
 
     list_seq_dict_uniform, dict_by_len_seq_uniform, max_seq_dict_uniform = \
         find_sequences(spike_nums=spike_nums, param=param,
-                       try_uniformity_method=True, debug_mode=debug_mode,
+                       try_uniformity_method=False, debug_mode=debug_mode,
                        sce_times_bool=sce_times_bool,
                        use_loss_score_to_keep_the_best=use_loss_score_to_keep_the_best_from_tree, ms=ms)
 
@@ -1863,7 +2112,7 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
     print(f'raw loss_score: {np.round(loss_score, 4)}')
 
     # spike_struct.spike_data = trains_module.from_spike_trains_to_spike_nums(spike_struct.spike_data)
-# [:, :8000]
+    # [:, :8000]
     best_seq_real_data, seq_dict_real_data = sort_it_and_plot_it(spike_nums=spike_nums, param=param,
                                                                  sliding_window_duration=sliding_window_duration,
                                                                  activity_threshold=activity_threshold,
@@ -1947,7 +2196,7 @@ def find_significant_patterns(spike_nums, param, activity_threshold, sliding_win
                                     sliding_window_duration=sliding_window_duration,
                                     activity_threshold=activity_threshold,
                                     title_option=f"surrogate_{surrogate_number}_"
-                                                 f"{data_id}{extra_file_name}",
+                                    f"{data_id}{extra_file_name}",
                                     spike_train_format=False,
                                     debug_mode=False,
                                     use_only_uniformity_method=use_only_uniformity_method,
