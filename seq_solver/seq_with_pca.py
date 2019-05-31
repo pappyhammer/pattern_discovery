@@ -70,7 +70,7 @@ def step1_pca(data, n_pc_max):
     data_centralized = (data - cells_mean_2d)
 
     # average instensity at each time frame - average over all pixels
-    times_mean = np.mean(data, axis=0)
+    times_mean = np.mean(data_centralized, axis=0)
     times_mean_2d = np.repeat(times_mean, n_cells, axis=0)
     times_mean_2d = times_mean_2d.reshape((n_times, n_cells)).transpose()
     data_centralized = (data_centralized - times_mean_2d)
@@ -87,24 +87,34 @@ def step1_pca(data, n_pc_max):
         # then we would need to do spatial covariance on temporal matrix
         raise Exception("n_times < n_cells")
 
-    data_mt = (np.dot(data[:, :-1].transpose(), data[:, 1:]) + np.dot(data[:, 1:].transpose(), data[:, :-1]))\
+    data_mt = (np.dot(data[:, :-1], data[:, 1:].transpose()) + np.dot(data[:, 1:], data[:, :-1].transpose()))\
               / n_times / 2
     print(f"data_mt {data_mt.shape}")
     # eigenvectors and eigenvalues
-    u_all, eigval_all = scipy.sparse.linalg.eigs(data_mt, n_pc_max)
+    # eigval_all, eigvectors_all = scipy.sparse.linalg.eigs(data_mt, n_pc_max)
+    pca = PCA(n_components=n_pc_max)  #
+    pca_result = pca.fit_transform(data_mt)
+    eigvectors_all = pca.components_.transpose()
+    eigval_all = pca.explained_variance_
+    # create a diagonal matrix from eigen_values
+    eigval_all = np.diag(eigval_all)
     # eigval_all = np.real(eigval_all)
     print(f"eigval_all shape {eigval_all.shape}")
     # keep positive non-zero eig val
-    pos = np.where(eigval_all > sys.float_info.epsilon)
-    eigval = eigval_all[:, np.unique(pos[1])]
-    eigval = eigval[np.unique(pos[0]), :]
+    # pos = np.where(eigval_all > sys.float_info.epsilon)
+    # # eigval = eigval_all[:, np.unique(pos[1])]
+    # # eigval = eigval[np.unique(pos[0]), :]
+    # print(f"pos {' '.join(map(str, pos))}")
+    # eigval = eigval_all[pos[0], pos[1]]
+    eigval = eigval_all
 
     print(f"eigval {eigval.shape}")
 
     # keep corresponding eigenvectors
-    print(f"u_all {u_all.shape}")
-    u = u_all[np.unique(pos[1])]
-    print(f"u {u.shape}")
+    print(f"eigvectors_all {eigvectors_all.shape}")
+    # eigvectors = eigvectors_all[:, pos[1]]
+    eigvectors = eigvectors_all
+    print(f"eigvectors {eigvectors.shape}")
 
     # find V
     # print(f"eigval {eigval}")
@@ -112,13 +122,13 @@ def step1_pca(data, n_pc_max):
     # print(f"eig_val {eig_val.shape}")
     print(f"mat_svd {mat_svd.shape}")
     # print(f"u_all {u_all.shape}")
-    least_squares_solution = np.linalg.lstsq(mat_svd.transpose(), u)[0]
+    least_squares_solution = np.linalg.lstsq(mat_svd, eigvectors.transpose())[0]
     print(f"least_squares_solution {least_squares_solution.shape}")
-    v = (least_squares_solution * data_mt).transpose()
+    pc_time_course = np.dot(least_squares_solution, data_mt)
 
     pc_cout = dict()
-    pc_cout["pc_x_filter"] = u
-    pc_cout["pc_time_course"] = v
+    pc_cout["pc_x_filter"] = eigvectors
+    pc_cout["pc_time_course"] = pc_time_course
     pc_cout["pc_eig_val"] = np.diag(eigval)
 
     # data has been normalized

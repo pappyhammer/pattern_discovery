@@ -173,7 +173,8 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
     :param seq_colors: A dict, with key a tuple represening the indices of the seq and as value of colors,
     a color, should have the same keys as seq_times_to_color_dict
     :param link_seq_color: if not None, give the color with which link the spikes from a sequence. If not None,
-    seq_colors will be ignored
+    seq_colors will be ignored. could be a dict with key same tuple as seq_times_to_color_dict or a string and then
+    we use the same color for all seq
     :param min_len_links_seq: minimum len of a seq for the links to be drawn
     :param axes_list if not None, give a list of axes that will be used, and be filled, but no figure will be created
     or saved then. Doesn't work yet is show_amplitude is True
@@ -333,6 +334,9 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                 y_coord_to_link = []
                 for time_index, t in enumerate(times_list):
                     cell_index = seq_indices[time_index]
+                    # in case of this seq of cell would be used in a zoom version of the raster
+                    if cell_index > n_cells:
+                        continue
                     # first we make sure the cell does spike at the given time
                     if spike_train_format:
                         if t not in spike_nums[cell_index]:
@@ -742,12 +746,11 @@ def plot_with_imshow(raster, path_results, file_name, n_subplots=4,
                                           'width_ratios': [1]},
                              figsize=(15, 6))
     for ax_index, ax in enumerate(axes):
-        vmax = 0.9
         ax.imshow(raster[:, (n_times // n_subplots) * ax_index:(n_times // n_subplots) * (ax_index + 1)],
-                  cmap=plt.get_cmap(cmap), extent=[0, 10, 0, 1], aspect='auto', vmin=0, vmax=0.5)
+                  cmap=plt.get_cmap(cmap), aspect='auto', vmin=0, vmax=0.5)
         ax.axis('image')
-        ax.axis('off')
-
+        # ax.axis('off')
+    # extent=[0, 10, 0, 1],
     # ax1.imshow(,  cmap=plt.get_cmap("hot")) # extent=[0, 1, 0, 1],
     # sns.heatmap(amplitude_spike_nums_ordered[:max_index_seq + 1, :],
     #             cbar=False, ax=ax1, cmap=plt.get_cmap("hot"), rasterized=True) #
