@@ -335,7 +335,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                 for time_index, t in enumerate(times_list):
                     cell_index = seq_indices[time_index]
                     # in case of this seq of cell would be used in a zoom version of the raster
-                    if cell_index > n_cells:
+                    if cell_index >= n_cells:
                         continue
                     # first we make sure the cell does spike at the given time
                     if spike_train_format:

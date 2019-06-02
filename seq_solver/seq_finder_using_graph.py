@@ -128,7 +128,7 @@ def build_mle_transition_dict(spike_nums, min_duration_intra_seq, time_inter_seq
 
 def get_seq_times_from_raster(raster, min_time_bw_2_spikes, max_time_bw_2_spikes, error_rate,
                               max_errors_in_a_row=3, min_len_ratio=None,
-                              min_seq_len=None):
+                              min_seq_len=None, cell_indices=None):
     """
     Raster represents the len of seq (shape[0]), the fct will return a list of tuple of size (shape[0]),
     with an int > 0 at the frames where a cell fire in a seq, and -1 if the cell don't fire in the seq
@@ -141,6 +141,7 @@ def get_seq_times_from_raster(raster, min_time_bw_2_spikes, max_time_bw_2_spikes
     :param min_seq_len: min number of cells with spikes in the seq
     :return:
     """
+    # TODO: keep for each set of times, the cells associated
     # because co-active cells could have been added to sequences, we extend the search
     min_time_bw_2_spikes = - 10
     max_time_bw_2_spikes = 25
@@ -151,10 +152,14 @@ def get_seq_times_from_raster(raster, min_time_bw_2_spikes, max_time_bw_2_spikes
     min_time_bw_2_spikes_original = min_time_bw_2_spikes
     max_time_bw_2_spikes_original = max_time_bw_2_spikes
     all_seq_times = []
+    # dict to keep the number of rep of each seq depending on the cells it is composed from
+    seq_times_by_seq_cells_dict = dict()
     if min_seq_len is None:
         if min_len_ratio is None:
             min_len_ratio = 0.4
-        min_seq_len = int(n_cells * min_len_ratio)
+        min_seq_len = max(2, int(n_cells * min_len_ratio))
+        if n_cells >= 5:
+            min_seq_len = max(3, min_seq_len)
 
     for cell in np.arange(n_cells):
         if cell > (n_cells-min_seq_len):
@@ -216,11 +221,18 @@ def get_seq_times_from_raster(raster, min_time_bw_2_spikes, max_time_bw_2_spikes
                 times_in_seq += [-1] * (n_cells - len(times_in_seq))
                 # print(f"times_in_seq len: {len(times_in_seq)}")
                 all_seq_times.append(times_in_seq)
+                times_in_seq = np.array(times_in_seq)
+                if cell_indices is not None:
+                    cells_indices_with_spikes = np.where(times_in_seq >= 0)[0]
+                    cells_associated = tuple(cell_indices[cells_indices_with_spikes])
+                    if cells_associated not in seq_times_by_seq_cells_dict:
+                        seq_times_by_seq_cells_dict[cells_associated] = []
+                    seq_times_by_seq_cells_dict[cells_associated].append(times_in_seq[times_in_seq >= 0])
             else:
                 # we put back the spikes erased that didn't give a sequence
                 raster = last_raster_copy
-
-    return all_seq_times
+    # print(f"min_seq_len {min_seq_len}, n_cells {n_cells}")
+    return all_seq_times, seq_times_by_seq_cells_dict
 
 
 def get_weight_of_a_graph_path(graph, path):
@@ -378,7 +390,8 @@ def build_graph_from_transition_dict(transition_dict, n_connected_cell_to_add,
     return graph
 
 
-def find_paths_in_a_graph(graph, shortest_path_on_weight, with_weight, use_longest_path=False):
+def find_paths_in_a_graph(graph, shortest_path_on_weight, with_weight, use_longest_path=False,
+                          debug_mode=False):
     # first we remove cell with no neighbors
     isolates_cell = []
     seq_list = []
@@ -390,7 +403,8 @@ def find_paths_in_a_graph(graph, shortest_path_on_weight, with_weight, use_longe
             break
         if use_longest_path:
             longest_shortest_path = dag.dag_longest_path(graph)
-            print(f"longest_path {len(longest_shortest_path)}: {longest_shortest_path}")
+            if debug_mode:
+                print(f"longest_path {len(longest_shortest_path)}: {longest_shortest_path}")
         else:
             longest_shortest_path = []
             lowest_weight_among_best_path = None
@@ -402,11 +416,13 @@ def find_paths_in_a_graph(graph, shortest_path_on_weight, with_weight, use_longe
                             if len(path) > len(longest_shortest_path):
                                 longest_shortest_path = list(path)
                                 lowest_weight_among_best_path = weight
-                                print(f"{list(path)}: {weight}")
+                                if debug_mode:
+                                    print(f"{list(path)}: {weight}")
                             # else both the same length, then we look at the weight
                             elif lowest_weight_among_best_path > weight:
                                 lowest_weight_among_best_path = weight
-                                print(f"{list(path)}: {weight}")
+                                if debug_mode:
+                                    print(f"{list(path)}: {weight}")
             else:
                 shortest_paths_dict = dict(all_pairs_shortest_path(graph))
                 # for weighted choice: all_pairs_dijkstra(G)
@@ -420,13 +436,15 @@ def find_paths_in_a_graph(graph, shortest_path_on_weight, with_weight, use_longe
                             if len(path) > len(longest_shortest_path):
                                 longest_shortest_path = list(path)
                                 lowest_weight_among_best_path = weight
-                                print(f"{list(path)}: {weight}")
+                                if debug_mode:
+                                    print(f"{list(path)}: {weight}")
                             # else both the same length, then we look at the weight
                             elif lowest_weight_among_best_path > weight:
                                 lowest_weight_among_best_path = weight
-                                print(f"{list(path)}: {weight}")
-
-                print(f"longest_shortest_path {len(longest_shortest_path)}: {longest_shortest_path} "
+                                if debug_mode:
+                                    print(f"{list(path)}: {weight}")
+                if debug_mode:
+                    print(f"longest_shortest_path {len(longest_shortest_path)}: {longest_shortest_path} "
                       f"{lowest_weight_among_best_path}")
         seq_list.append(longest_shortest_path)
         graph.remove_nodes_from(longest_shortest_path)
@@ -439,7 +457,8 @@ def find_paths_in_a_graph(graph, shortest_path_on_weight, with_weight, use_longe
 
 def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max_time_bw_2_spikes,
                                n_surrogates,
-                               max_connex_by_cell, min_nb_of_rep=None, debug_mode=False, descr="", ms=None):
+                               max_connex_by_cell, min_nb_of_rep=None,
+                                    debug_mode=False, descr="", ms=None):
     # spike_nums_backup = spike_nums
     spike_nums = np.copy(spike_nums)
     # spike_nums = spike_nums[:, :2000]
@@ -533,10 +552,11 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                                  save_formats="pdf", show_plot=False)
         # cycles = nx.simple_cycles(graph)
         # print(f"len(cycles) {len(list(cycles))}")
-        print(f"dag.is_directed_acyclic_graph(graph) {dag.is_directed_acyclic_graph(graph)}")
+        if debug_mode:
+            print(f"dag.is_directed_acyclic_graph(graph) {dag.is_directed_acyclic_graph(graph)}")
 
         seq_list, isolates_cell = find_paths_in_a_graph(graph, shortest_path_on_weight, with_weight,
-                                                        use_longest_path=False)
+                                                        use_longest_path=False, debug_mode=debug_mode)
 
         # we have a list of seq that we want to concatenate according to the score of transition between
         # the first and last cell in transition dict
@@ -591,9 +611,12 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
         graph_seq = build_graph_from_transition_dict(seq_transition_dict, n_connected_cell_to_add=2,
                                                      use_longest_path=use_longest_path,
                                                      with_weight=with_weight)
-        print(f"organizing graph of sequences")
-        seq_indices_list, isolates_seq = find_paths_in_a_graph(graph_seq, shortest_path_on_weight, with_weight,
-                                                               use_longest_path=use_longest_path)
+        if debug_mode:
+            print(f"organizing graph of sequences")
+        seq_indices_list, isolates_seq = find_paths_in_a_graph(graph_seq, shortest_path_on_weight,
+                                                               with_weight,
+                                                               use_longest_path=use_longest_path,
+                                                               debug_mode=debug_mode)
         # creating new cell order
         new_cell_order = []
         cells_to_highlight_colors = []
@@ -605,20 +628,29 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
         color_index_by_sub_seq = 0
         seq_times_to_color_dict = dict()
         link_seq_color = "white"
+        # dict to keep the number of rep of each seq depending on the cells it is composed from
+        use_seq_from_graph_to_fill_seq_dict = True
+        seq_times_by_seq_cells_dict = dict()
+
         for color_index, seq_indices in enumerate(seq_indices_list):
             n_cells_in_group_of_seq = 0
             seq_fusion_cells = []
             for seq_index in seq_indices:
                 seq = long_seq_list[seq_index]
                 n_cells_in_seq = len(seq)
-                add_links_to_raster_here = True
+                add_links_to_raster_here = False
                 if add_links_to_raster_here:
-                    print(f"new_cell_order.extend {len(seq)}: {seq}")
-                    seq_times = get_seq_times_from_raster(spike_nums[seq], min_time_bw_2_spikes,
-                                                          max_time_bw_2_spikes, error_rate=0.3,
-                                                      max_errors_in_a_row=4,
-                                                      min_len_ratio=0.3) # , min_seq_len=3
-                    print(f"Nb rep seq {len(seq_times)}: {seq_times}")
+                    if debug_mode:
+                        print(f"new_cell_order.extend {len(seq)}: {seq}")
+                    seq_times, seq_dict = get_seq_times_from_raster(spike_nums[seq], min_time_bw_2_spikes,
+                                                                    max_time_bw_2_spikes, error_rate=0.3,
+                                                                    max_errors_in_a_row=4,
+                                                                    cell_indices=seq,
+                                                                    min_len_ratio=0.4)  # , min_seq_len=3
+                    if use_seq_from_graph_to_fill_seq_dict and (len(seq_times) > 0) and (len(seq) >= 3):
+                        seq_times_by_seq_cells_dict[tuple(seq)] = seq_times
+                    if debug_mode:
+                        print(f"Nb rep seq {len(seq_times)}: {seq_times}")
                     # adding sequences to a dict use to display them in the raster
                     if len(seq_times) > 0:
                         new_seq_indices = np.arange(cell_index_so_far, cell_index_so_far + n_cells_in_seq)
@@ -639,15 +671,22 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                 cells_to_highlight_colors.extend([colors[color_index_by_sub_seq % len(colors)]] * n_cells_in_seq)
                 color_index_by_sub_seq += 1
 
-            add_links_to_raster_here = False
+            add_links_to_raster_here = True
             if add_links_to_raster_here:
-                print(f"seq_fusion_cells {len(seq_fusion_cells)}")
-                seq_times = get_seq_times_from_raster(spike_nums[np.array(seq_fusion_cells)],
+                if debug_mode:
+                    print(f"seq_fusion_cells {len(seq_fusion_cells)}")
+                seq_times, seq_dict = get_seq_times_from_raster(spike_nums[np.array(seq_fusion_cells)],
                                                       min_time_bw_2_spikes,
                                                       max_time_bw_2_spikes, error_rate=0.3,
                                                       max_errors_in_a_row=4,
+                                                      cell_indices=np.array(seq_fusion_cells),
                                                       min_len_ratio=0.4, min_seq_len=3)
-                print(f"Nb rep seq {len(seq_times)}")
+                for seq_cells, seq_dict_times in seq_dict.items():
+                    if seq_cells not in seq_times_by_seq_cells_dict:
+                        seq_times_by_seq_cells_dict[seq_cells] = []
+                    seq_times_by_seq_cells_dict[seq_cells].extend(seq_dict_times)
+                if debug_mode:
+                    print(f"Nb rep seq {len(seq_times)}")
                 # adding sequences to a dict use to display them in the raster
                 if len(seq_times) > 0:
                     new_seq_indices = np.arange(cell_for_span_index_so_far,
@@ -713,6 +752,26 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                            link_seq_alpha=0.9,
                            save_formats="pdf")
 
+        # dict to keep the number of rep of each seq depending on its size
+        seq_stat_dict = dict()
+        for seq_cells, times in seq_times_by_seq_cells_dict.items():
+            len_seq = len(seq_cells)
+            n_rep = len(times)
+            if debug_mode:
+                print(f"n_rep {n_rep}, times: {times}")
+            if len_seq not in seq_stat_dict:
+                seq_stat_dict[len_seq] = []
+            seq_stat_dict[len_seq].append(n_rep)
+
+        file_name = f'{param.path_results}/significant_sorting_results_{descr}.txt'
+        with open(file_name, "w", encoding='UTF-8') as file:
+            for n_cells_in_seq, n_rep in seq_stat_dict.items():
+                file.write(f"{n_cells_in_seq}:{n_rep}" + '\n')
+
+        save_on_file_seq_detection_results(best_cells_order=new_cell_order,
+                                           seq_dict=seq_times_by_seq_cells_dict,
+                                           file_name=f"significant_sorting_results_with_timestamps_{descr}.txt",
+                                           param=param)
         """
         One idea
         https://networkx.github.io/documentation/stable/reference/algorithms/generated/networkx.algorithms.approximation.kcomponents.k_components.html#networkx.algorithms.approximation.kcomponents.k_components
@@ -725,3 +784,27 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
         We could also use https://en.wikipedia.org/wiki/Strongly_connected_component for
         connected graph, but then a node to belong to more than one graph
         """
+
+def save_on_file_seq_detection_results(best_cells_order, seq_dict, file_name, param):
+    complete_file_name = f'{param.path_results}/{file_name}'
+    with open(complete_file_name, "w", encoding='UTF-8') as file:
+        file.write("best_order:")
+        for cell_id, cell in enumerate(best_cells_order):
+            file.write(f"{cell}")
+            if cell_id < (len(best_cells_order) - 1):
+                file.write(" ")
+        file.write("\n")
+        for cells, value in seq_dict.items():
+            for cell_id, cell in enumerate(cells):
+                file.write(f"{cell}")
+                if cell_id < (len(cells) - 1):
+                    file.write(" ")
+            file.write(f":")
+            for time_stamps_id, time_stamps in enumerate(value):
+                for t_id, t in enumerate(time_stamps):
+                    file.write(f"{t}")
+                    if t_id < (len(time_stamps) - 1):
+                        file.write(" ")
+                if time_stamps_id < (len(value) - 1):
+                    file.write("#")
+            file.write("\n")
