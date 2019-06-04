@@ -485,14 +485,19 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                                             debug_mode=False, with_dist=False)
             all_surrogate_transition_dict[:, :, surrogate_index] = t_d
         # surrogate_threshold_transition_dict = np.zeros((n_cells, n_cells))
+        n_values_removed = 0
         for cell_1 in np.arange(n_cells):
             for cell_2 in np.arange(n_cells):
                 # surrogate_threshold_transition_dict[cell_1, cell_2] = \
                 #     np.percentile(all_surrogate_transition_dict[cell_1, cell_2, :], 95)
+                if cell_1 == cell_2:
+                    continue
                 surrogate_value = np.percentile(all_surrogate_transition_dict[cell_1, cell_2, :], 95)
                 if surrogate_value >= transition_dict[cell_1, cell_2]:
+                    n_values_removed += 1
                     transition_dict[cell_1, cell_2] = 0
-
+        print(f"{n_values_removed} values removed from transition_dict after surrogates "
+              f"{np.round((n_values_removed / (cell_1*cell_2))*100, 2)} %")
         stop_time = time.time()
         print(f"Time to generate surrogates {np.round(stop_time - start_time, 3)} s")
 
@@ -740,14 +745,14 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                            show_raster=False,
                            show_sum_spikes_as_percentage=True,
                            plot_with_amplitude=False,
-                           cells_to_highlight=cells_to_highlight[:n_cells_to_zoom],
-                           cells_to_highlight_colors=cells_to_highlight_colors[:n_cells_to_zoom],
-                           span_cells_to_highlight=span_cells_to_highlight,
-                           span_cells_to_highlight_colors=span_cells_to_highlight_colors,
+                           # cells_to_highlight=cells_to_highlight[:n_cells_to_zoom],
+                           # cells_to_highlight_colors=cells_to_highlight_colors[:n_cells_to_zoom],
+                           # span_cells_to_highlight=span_cells_to_highlight,
+                           # span_cells_to_highlight_colors=span_cells_to_highlight_colors,
                            spike_shape='o',
-                           spike_shape_size=1,
-                           seq_times_to_color_dict=seq_times_to_color_dict,
-                           link_seq_color=link_seq_color,
+                           spike_shape_size=0.5,
+                           # seq_times_to_color_dict=seq_times_to_color_dict,
+                           # link_seq_color=link_seq_color,
                            link_seq_line_width=0.5,
                            link_seq_alpha=0.9,
                            save_formats="pdf")
