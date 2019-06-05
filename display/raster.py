@@ -125,7 +125,8 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        display_traces=False,
                        display_spike_nums=True,
                        traces_lw=0.3,
-                       path_results=None
+                       path_results=None,
+                       without_time_str_in_file_name=False
                        ):
     """
     Plot or save a raster given a 2d array either binary representing onsets, peaks or rising time, or made of float
@@ -674,9 +675,14 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
             if param is not None:
                 time_str = f"_{param.time_str}"
             for save_format in save_formats:
-                fig.savefig(os.path.join(f'{path_results}', f'{file_name}{time_str}.{save_format}'),
-                            format=f"{save_format}",
-                            facecolor=fig.get_facecolor())
+                if without_time_str_in_file_name:
+                    fig.savefig(os.path.join(f'{path_results}', f'{file_name}.{save_format}'),
+                                format=f"{save_format}",
+                                facecolor=fig.get_facecolor())
+                else:
+                    fig.savefig(os.path.join(f'{path_results}', f'{file_name}{time_str}.{save_format}'),
+                                format=f"{save_format}",
+                                facecolor=fig.get_facecolor())
         # Display the spike raster plot
         if show_raster:
             plt.show()

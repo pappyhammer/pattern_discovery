@@ -643,7 +643,7 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
             for seq_index in seq_indices:
                 seq = long_seq_list[seq_index]
                 n_cells_in_seq = len(seq)
-                add_links_to_raster_here = False
+                add_links_to_raster_here = True
                 if add_links_to_raster_here:
                     if debug_mode:
                         print(f"new_cell_order.extend {len(seq)}: {seq}")
@@ -676,7 +676,7 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                 cells_to_highlight_colors.extend([colors[color_index_by_sub_seq % len(colors)]] * n_cells_in_seq)
                 color_index_by_sub_seq += 1
 
-            add_links_to_raster_here = True
+            add_links_to_raster_here = False
             if add_links_to_raster_here:
                 if debug_mode:
                     print(f"seq_fusion_cells {len(seq_fusion_cells)}")
@@ -732,30 +732,47 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                            cells_to_highlight_colors=cells_to_highlight_colors,
                            span_cells_to_highlight=span_cells_to_highlight,
                            span_cells_to_highlight_colors=span_cells_to_highlight_colors,
+                           seq_times_to_color_dict=seq_times_to_color_dict,
+                           link_seq_color=link_seq_color,
+                           link_seq_line_width=0.3,
+                           link_seq_alpha=0.9,
                            spike_shape='|',
                            spike_shape_size=5,
                            save_formats="pdf")
+        n_frames = spike_nums.shape[1]
         n_cells_to_zoom = 150
-        plot_spikes_raster(spike_nums=spike_nums[np.array(new_cell_order)][:n_cells_to_zoom], param=param,
-                           title=f"raster plot ordered with graph",
-                           spike_train_format=False,
-                           file_name=f"{descr}_raster_plot_ordered_with_graph_zoom",
-                           y_ticks_labels=new_cell_order[:n_cells_to_zoom],
-                           save_raster=True,
-                           show_raster=False,
-                           show_sum_spikes_as_percentage=True,
-                           plot_with_amplitude=False,
-                           # cells_to_highlight=cells_to_highlight[:n_cells_to_zoom],
-                           # cells_to_highlight_colors=cells_to_highlight_colors[:n_cells_to_zoom],
-                           # span_cells_to_highlight=span_cells_to_highlight,
-                           # span_cells_to_highlight_colors=span_cells_to_highlight_colors,
-                           spike_shape='o',
-                           spike_shape_size=0.5,
-                           # seq_times_to_color_dict=seq_times_to_color_dict,
-                           # link_seq_color=link_seq_color,
-                           link_seq_line_width=0.5,
-                           link_seq_alpha=0.9,
-                           save_formats="pdf")
+        for loop_index, frame_index in enumerate(np.arange(0, n_frames+n_cells_to_zoom, n_cells_to_zoom)):
+            if frame_index+n_cells_to_zoom > n_frames:
+                break
+            indices_displayed = np.arange(frame_index, frame_index+n_cells_to_zoom)
+            # re_indexing seq_dict or removing par of the cells
+            new_seq_times_to_color_dict = dict()
+            # seq_times_to_color_dict[cells_to_keep] = []
+            # seq_times_to_color_dict[cells_to_keep].append(times_to_keep)
+            for cells_seq, times_in_seq in seq_times_to_color_dict.items():
+                pass
+
+            plot_spikes_raster(spike_nums=spike_nums[np.array(new_cell_order)][frame_index:frame_index+n_cells_to_zoom],
+                               param=param,
+                               title=f"raster plot ordered with graph",
+                               spike_train_format=False,
+                               file_name=f"{descr}_raster_plot_ordered_with_graph_zoom_{loop_index}",
+                               y_ticks_labels=new_cell_order[frame_index:frame_index+n_cells_to_zoom],
+                               save_raster=True,
+                               show_raster=False,
+                               show_sum_spikes_as_percentage=True,
+                               plot_with_amplitude=False,
+                               cells_to_highlight=cells_to_highlight[:n_cells_to_zoom],
+                               cells_to_highlight_colors=cells_to_highlight_colors[:n_cells_to_zoom],
+                               span_cells_to_highlight=span_cells_to_highlight,
+                               span_cells_to_highlight_colors=span_cells_to_highlight_colors,
+                               spike_shape='o',
+                               spike_shape_size=0.5,
+                               seq_times_to_color_dict=seq_times_to_color_dict,
+                               link_seq_color=link_seq_color,
+                               link_seq_line_width=0.5,
+                               link_seq_alpha=0.9,
+                               save_formats="pdf")
 
         # dict to keep the number of rep of each seq depending on its size
         seq_stat_dict = dict()
