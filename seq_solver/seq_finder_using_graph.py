@@ -750,7 +750,27 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
             # seq_times_to_color_dict[cells_to_keep] = []
             # seq_times_to_color_dict[cells_to_keep].append(times_to_keep)
             for cells_seq, times_in_seq in seq_times_to_color_dict.items():
-                pass
+                cells_seq = np.array(cells_seq)
+                cells_not_in_raster = np.setdiff1d(cells_seq, indices_displayed)
+                if len(cells_not_in_raster) == 0:
+                    new_seq_times_to_color_dict[cells_seq] = times_in_seq
+                    continue
+                # mask used to remove cells that are not in the raster anymore
+                mask = np.ones(len(cells_seq), dtype="bool")
+                for cell_not_in_raster in cells_not_in_raster:
+                    index_to_remove = np.where(cells_seq == cell_not_in_raster)[0]
+                    mask[index_to_remove] = False
+                cells_seq = cells_seq[mask]
+                # we need to re-index the cells
+                new_cells_seq = []
+                for cell_in_seq in cells_seq:
+                    new_cell_index = np.where(indices_displayed == cell_in_seq)[0]
+                    new_cells_seq.append(new_cell_index)
+                new_times_in_seq = [indices_displayed]
+                for time_in_seq in times_in_seq:
+                    time_in_seq = np.array(time_in_seq)[mask]
+                    new_times_in_seq.append(time_in_seq)
+                new_seq_times_to_color_dict[tuple(new_cells_seq)] = new_times_in_seq
 
             plot_spikes_raster(spike_nums=spike_nums[np.array(new_cell_order)][frame_index:frame_index+n_cells_to_zoom],
                                param=param,
