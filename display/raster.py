@@ -4,6 +4,7 @@ import numpy as np
 import math
 import matplotlib.cm as cm
 import os
+import seaborn as sns
 
 
 def plot_dendogram_from_fca(cluster_tree, nb_cells, save_plot, axes_list=None, fig_to_use=None, file_name="",
@@ -126,7 +127,8 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        display_spike_nums=True,
                        traces_lw=0.3,
                        path_results=None,
-                       without_time_str_in_file_name=False
+                       without_time_str_in_file_name=False,
+                       desaturate_color_according_to_normalized_amplitude=False
                        ):
     """
     Plot or save a raster given a 2d array either binary representing onsets, peaks or rising time, or made of float
@@ -194,6 +196,9 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
     :param display_spike_nums, if False, won't display a raster using spike_nums
     :param traces_lw, default 0.3,  linewidth of the traces
     :param path_results: indicate where to save the plot, replace the param.path_results if it exists
+    :param desaturate_color_according_to_normalized_amplitude: if True, spike_nums should be filled with float between
+    0 and 1, representing the amplitude of the spike. And if a color is given for a cell, then it will be desaturate
+    according to this value
     :return: 
     """
 
@@ -274,7 +279,8 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
             line_beg_x = -1
             line_end_x = n_times + 1
             ax1.hlines(cell, line_beg_x, line_end_x, lw=0.1, linestyles="dashed", color=color, zorder=15)
-
+    if cells_to_highlight is not None:
+        cells_to_highlight = np.array(cells_to_highlight)
     if display_spike_nums:
         for cell, spikes in enumerate(spike_nums):
             if spike_train_format:
@@ -292,7 +298,6 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                 color_neuron = cell_spikes_color
             if cells_to_highlight is not None:
                 if cell in cells_to_highlight:
-                    cells_to_highlight = np.array(cells_to_highlight)
                     index = np.where(cells_to_highlight == cell)[0][0]
                     color_neuron = cells_to_highlight_colors[index]
             if spike_train_format:
@@ -305,6 +310,14 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                                 color=scalar_map.to_rgba(spikes[spikes > 0]),
                                 marker=spike_shape,
                                 s=spike_shape_size, zorder=20)
+                elif desaturate_color_according_to_normalized_amplitude:
+                    n_spikes = len(neuron_times)
+                    colors_list = [sns.desaturate(x, p) for x, p in
+                                   zip([color_neuron]*n_spikes, spikes[neuron_times])]
+                    ax1.scatter(neuron_times, np.repeat(cell, len(neuron_times)),
+                                color=colors_list,
+                                marker=spike_shape,
+                                s=spike_shape_size, zorder=20)
                 else:
                     if display_traces:
                         y_values = traces[cell, neuron_times] + cell
@@ -313,7 +326,13 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                     ax1.scatter(neuron_times, y_values, color=color_neuron, marker=spike_shape,
                                 s=spike_shape_size, zorder=20)
             else:
-                if plot_with_amplitude:
+                if desaturate_color_according_to_normalized_amplitude:
+                    n_spikes = len(neuron_times)
+                    colors_list = [sns.desaturate(x, p) for x, p in
+                                   zip([color_neuron]*n_spikes, spikes[neuron_times])]
+                    ax1.vlines(neuron_times, cell - .5, cell + .5, color=colors_list,
+                               linewidth=1, zorder=20)
+                elif plot_with_amplitude:
                     ax1.vlines(neuron_times, cell - .5, cell + .5, color=scalar_map.to_rgba(spikes[spikes > 0]),
                                linewidth=1, zorder=20)
                 else:

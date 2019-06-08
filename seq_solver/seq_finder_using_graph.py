@@ -6,10 +6,11 @@ import time
 from pattern_discovery.graph.force_directed_graphs import plot_graph_using_fa2
 from networkx.algorithms.shortest_paths.unweighted import all_pairs_shortest_path
 from networkx.algorithms.shortest_paths.weighted import all_pairs_dijkstra
+from pattern_discovery.tools.misc import get_continous_time_periods
 
 
-def build_mle_transition_dict(spike_nums, min_duration_intra_seq, time_inter_seq, debug_mode=False,
-                              with_dist=True):
+def build_mle_transition_dict(spike_nums, min_duration_intra_seq, time_inter_seq, raster_dur_version,
+                              debug_mode=False, with_dist=True):
     """
     Maximum Likelihood estimation,
     don't take into account the fact that if a neuron A fire after a neuron B ,
@@ -17,6 +18,7 @@ def build_mle_transition_dict(spike_nums, min_duration_intra_seq, time_inter_seq
     :param spike_nums:
     :param param:
     :param with_dist: if True, return a matrix representing the dist between spikes
+    :param raster_dur_version: boolean, indicating if using onset to peak 2d array.
     :return:
     """
     if debug_mode:
@@ -456,9 +458,23 @@ def find_paths_in_a_graph(graph, shortest_path_on_weight, with_weight, use_longe
 
 
 def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max_time_bw_2_spikes,
-                               n_surrogates,
-                               max_connex_by_cell, min_nb_of_rep=None,
-                                    debug_mode=False, descr="", ms=None):
+                                    n_surrogates, max_connex_by_cell, raster_dur_version,
+                                    min_nb_of_rep=None, debug_mode=False, descr="", ms=None):
+    """
+
+    :param spike_nums:
+    :param param:
+    :param min_time_bw_2_spikes:
+    :param max_time_bw_2_spikes:
+    :param n_surrogates:
+    :param max_connex_by_cell:
+    :param raster_dur_version: boolean to know if spike_nums represents onsets or onset to peak
+    :param min_nb_of_rep:
+    :param debug_mode:
+    :param descr:
+    :param ms:
+    :return:
+    """
     # spike_nums_backup = spike_nums
     spike_nums = np.copy(spike_nums)
     # spike_nums = spike_nums[:, :2000]
@@ -468,7 +484,7 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
     transition_dict, spikes_dist_dict = build_mle_transition_dict(spike_nums=spike_nums,
                                                                   min_duration_intra_seq=min_time_bw_2_spikes,
                                                                   time_inter_seq=max_time_bw_2_spikes,
-                                                                  debug_mode=True)
+                                                                  debug_mode=True, raster_dur_version=raster_dur_version)
 
     if n_surrogates > 0:
         start_time = time.time()
@@ -482,7 +498,7 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
             t_d = build_mle_transition_dict(spike_nums=surrogate_spike_nums,
                                             min_duration_intra_seq=min_time_bw_2_spikes,
                                             time_inter_seq=max_time_bw_2_spikes,
-                                            debug_mode=False, with_dist=False)
+                                            debug_mode=False, with_dist=False, raster_dur_version=raster_dur_version)
             all_surrogate_transition_dict[:, :, surrogate_index] = t_d
         # surrogate_threshold_transition_dict = np.zeros((n_cells, n_cells))
         n_values_removed = 0
@@ -510,7 +526,7 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
             build_mle_transition_dict(spike_nums=spike_nums,
                                       min_duration_intra_seq=min_time_bw_2_spikes * 2,
                                       time_inter_seq=max_time_bw_2_spikes * 2,
-                                      debug_mode=debug_mode)
+                                      debug_mode=debug_mode, raster_dur_version=raster_dur_version)
 
     try_graph_solution = True
     if try_graph_solution:
@@ -718,7 +734,35 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
 
         new_cell_order.extend(short_seq_cells)
         new_cell_order.extend(isolates_cell[::-1])
+        # adding cells that are missing
+        cells_to_add = np.setdiff1d(np.arange(n_cells), np.array(new_cell_order))
+        new_cell_order.extend(list(cells_to_add))
 
+        desaturate_color_according_to_normalized_amplitude = True
+        if desaturate_color_according_to_normalized_amplitude and ((ms is None) or (ms.raw_traces is None)):
+            print("desaturate_color_according_to_normalized_amplitude ms is None or raw_traces is None")
+            desaturate_color_according_to_normalized_amplitude = False
+
+        if desaturate_color_according_to_normalized_amplitude:
+            spike_nums_dur = np.zeros((n_cells, n_times))
+            traces_0_1 = np.zeros((n_cells, n_times))
+            for cell in np.arange(n_cells):
+                max_value = np.max(ms.raw_traces[cell])
+                min_value = np.min(ms.raw_traces[cell])
+                traces_0_1[cell] = (ms.raw_traces[cell] - min_value) / (max_value - min_value)
+            for cell in np.arange(n_cells):
+                periods = get_continous_time_periods(np.copy(ms.spike_struct.spike_nums_dur[cell]))
+                for period in periods:
+                    spike_nums_dur[cell, period[0]:period[1] + 1] = np.max(traces_0_1[cell,
+                                                                           period[0]:period[1] + 1])
+            if raster_dur_version:
+                spike_nums = spike_nums_dur
+            else:
+                spike_nums = spike_nums.astype("float")
+                for cell, spikes in enumerate(spike_nums):
+                    spike_nums[cell, spikes > 0] = spike_nums_dur[cell, spikes > 0]
+
+        desat_color = desaturate_color_according_to_normalized_amplitude
         plot_spikes_raster(spike_nums=spike_nums[np.array(new_cell_order)], param=param,
                            title=f"raster plot ordered with graph",
                            spike_train_format=False,
@@ -738,12 +782,16 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                            link_seq_alpha=0.9,
                            spike_shape='|',
                            spike_shape_size=5,
+                           desaturate_color_according_to_normalized_amplitude=desat_color,
                            save_formats="pdf")
         n_cells = spike_nums.shape[0]
+        print(f"n_cells {n_cells}")
         n_cells_to_zoom = 150
         for loop_index, cell_index in enumerate(np.arange(0, n_cells+n_cells_to_zoom, n_cells_to_zoom)):
-            if cell_index+n_cells_to_zoom > n_cells:
-                break
+            last_loop = False
+            if cell_index+n_cells_to_zoom >= n_cells:
+                n_cells_to_zoom = n_cells - cell_index
+                last_loop = True
             indices_displayed = np.arange(cell_index, cell_index+n_cells_to_zoom)
             # re_indexing seq_dict or removing par of the cells
             new_seq_times_to_color_dict = dict()
@@ -771,6 +819,7 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                     time_in_seq = np.array(time_in_seq)[mask]
                     new_times_in_seq.append(time_in_seq)
                 new_seq_times_to_color_dict[tuple(new_cells_seq)] = new_times_in_seq
+
             print(f"indices_displayed {indices_displayed}: {len(new_cell_order)}")
             plot_spikes_raster(spike_nums=spike_nums[np.array(new_cell_order)][cell_index:cell_index+n_cells_to_zoom],
                                param=param,
@@ -792,7 +841,10 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                                link_seq_color=link_seq_color,
                                link_seq_line_width=0.5,
                                link_seq_alpha=0.9,
-                               save_formats="pdf")
+                               save_formats="pdf",
+                               desaturate_color_according_to_normalized_amplitude=desat_color,)
+            if last_loop:
+                break
 
         # dict to keep the number of rep of each seq depending on its size
         seq_stat_dict = dict()
