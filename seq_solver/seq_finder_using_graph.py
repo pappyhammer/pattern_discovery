@@ -6,7 +6,7 @@ import time
 from pattern_discovery.graph.force_directed_graphs import plot_graph_using_fa2
 from networkx.algorithms.shortest_paths.unweighted import all_pairs_shortest_path
 from networkx.algorithms.shortest_paths.weighted import all_pairs_dijkstra
-from pattern_discovery.tools.misc import get_continous_time_periods
+from pattern_discovery.tools.misc import get_continous_time_periods, give_unique_id_to_each_transient_of_raster_dur
 
 
 def build_mle_transition_dict(spike_nums, min_duration_intra_seq, time_inter_seq, raster_dur_version,
@@ -24,8 +24,8 @@ def build_mle_transition_dict(spike_nums, min_duration_intra_seq, time_inter_seq
     if debug_mode:
         print("building Maximum Likelihood estimation transition dict")
     start_time = time.time()
-    nb_neurons = len(spike_nums)
-    n_times = len(spike_nums[0, :])
+    nb_neurons = spike_nums.shape[0]
+    n_times = spike_nums.shape[1]
     transition_dict = np.zeros((nb_neurons, nb_neurons))
     # give the average distance between consecutive spikes of 2 neurons, in frames
     if with_dist:
@@ -34,47 +34,83 @@ def build_mle_transition_dict(spike_nums, min_duration_intra_seq, time_inter_seq
         spikes_count_dict = np.zeros((nb_neurons, nb_neurons))
     # so the neuron with the lower spike rates gets the biggest weight in terms of probability
     spike_rates = np.ones(nb_neurons)
-
-    # a first round to put probabilities up from neurons B that spikes after neuron A
-    for neuron_index, neuron_spikes in enumerate(spike_nums):
-
-        # will count how many spikes of each neuron are following the spike of
-        for t in np.where(neuron_spikes)[0]:
-            # print(f"min_duration_intra_seq {min_duration_intra_seq}")
-            t_min = np.max((0, t + min_duration_intra_seq))
-            t_max = np.min((t + time_inter_seq, n_times))
-            times_to_check = np.arange(t_min, t_max)
-
+    if raster_dur_version:
+        # a first round to put probabilities up from neurons B that spikes after neuron A
+        for neuron_index in np.arange(nb_neurons):
+            # get the periods of rising time
+            periods_of_activity = get_continous_time_periods(spike_nums[neuron_index])
             actual_neurons_spikes = spike_nums[neuron_index, :] > 0
             # removing the spikes so they are not found in the later search
             spike_nums[neuron_index, actual_neurons_spikes] = 0
-
-            # Retrieve all cells active during the period of time times_to_check
-            if len(times_to_check) == 1:
-                co_active_cells = np.where(spike_nums[:, times_to_check])[0]
-            else:
-                # co-active cells
-                co_active_cells = np.where(np.sum(spike_nums[:, times_to_check], axis=1))[0]
-
-            # pos = np.unique(pos)
-            for p in co_active_cells:
-                transition_dict[neuron_index, p] = transition_dict[neuron_index, p] + \
-                                                   spike_rates[p]
-
-                first_spike_pos = np.where(spike_nums[p, times_to_check])[0][0]
-                first_spike_pos += min_duration_intra_seq
-                if with_dist:
-                    spikes_dist_dict[neuron_index, p] += first_spike_pos
-                    spikes_count_dict[neuron_index, p] += 1
-
+            for period in periods_of_activity:
+                all_co_active_cells = []
+                for t in np.arange(period[0], period[1] + 1):
+                    t_min = np.max((0, t + min_duration_intra_seq))
+                    t_max = np.min((t + time_inter_seq, n_times))
+                    times_to_check = np.arange(t_min, t_max)
+                    # Retrieve all cells active during the period of time times_to_check
+                    if len(times_to_check) == 1:
+                        co_active_cells = np.where(spike_nums[:, times_to_check])[0]
+                    else:
+                        # co-active cells
+                        co_active_cells = np.where(np.sum(spike_nums[:, times_to_check], axis=1))[0]
+                    all_co_active_cells.extend(list(co_active_cells))
+                all_co_active_cells = np.unique(all_co_active_cells)
+                for co_ative_cell in all_co_active_cells:
+                    transition_dict[neuron_index, co_ative_cell] = transition_dict[neuron_index, co_ative_cell] + \
+                                                                   spike_rates[co_ative_cell]
+                    t_min = np.max((0, period[0] + min_duration_intra_seq))
+                    t_max = np.min((period[1] + time_inter_seq, n_times))
+                    times_to_check = np.arange(t_min, t_max)
+                    first_spike_pos = np.where(spike_nums[co_ative_cell, times_to_check])[0][0]
+                    first_spike_pos += min_duration_intra_seq
+                    if with_dist:
+                        spikes_dist_dict[neuron_index, co_ative_cell] += first_spike_pos
+                        spikes_count_dict[neuron_index, co_ative_cell] += 1
             # back to one
             spike_nums[neuron_index, actual_neurons_spikes] = 1
+            transition_dict[neuron_index, neuron_index] = 0
+    else:
+        # a first round to put probabilities up from neurons B that spikes after neuron A
+        for neuron_index in np.arange(nb_neurons):
+            neuron_spikes = spike_nums[neuron_index]
+            # will count how many spikes of each neuron are following the spike of
+            for t in np.where(neuron_spikes)[0]:
+                # print(f"min_duration_intra_seq {min_duration_intra_seq}")
+                t_min = np.max((0, t + min_duration_intra_seq))
+                t_max = np.min((t + time_inter_seq, n_times))
+                times_to_check = np.arange(t_min, t_max)
 
-        transition_dict[neuron_index, neuron_index] = 0
+                actual_neurons_spikes = spike_nums[neuron_index, :] > 0
+                # removing the spikes so they are not found in the later search
+                spike_nums[neuron_index, actual_neurons_spikes] = 0
+
+                # Retrieve all cells active during the period of time times_to_check
+                if len(times_to_check) == 1:
+                    co_active_cells = np.where(spike_nums[:, times_to_check])[0]
+                else:
+                    # co-active cells
+                    co_active_cells = np.where(np.sum(spike_nums[:, times_to_check], axis=1))[0]
+
+                # pos = np.unique(pos)
+                for p in co_active_cells:
+                    transition_dict[neuron_index, p] = transition_dict[neuron_index, p] + \
+                                                       spike_rates[p]
+
+                    first_spike_pos = np.where(spike_nums[p, times_to_check])[0][0]
+                    first_spike_pos += min_duration_intra_seq
+                    if with_dist:
+                        spikes_dist_dict[neuron_index, p] += first_spike_pos
+                        spikes_count_dict[neuron_index, p] += 1
+
+                # back to one
+                spike_nums[neuron_index, actual_neurons_spikes] = 1
+
+            transition_dict[neuron_index, neuron_index] = 0
 
     # try normalizing by the mean spike count of the 2 cells
     normalize_by_spike_count = False
-    if normalize_by_spike_count:
+    if normalize_by_spike_count and (not raster_dur_version):
         for cell_1 in np.arange(nb_neurons):
             for cell_2 in np.arange(nb_neurons):
                 if cell_1 == cell_2:
@@ -128,8 +164,134 @@ def build_mle_transition_dict(spike_nums, min_duration_intra_seq, time_inter_seq
         return transition_dict
 
 
+def get_seq_times_starting_from_a_spike_time(cell, cell_spike_period, raster, raster_dur_version,
+                                             min_time_bw_2_spikes_original,
+                                             max_time_bw_2_spikes_original,
+                                             min_time_bw_2_spikes, max_time_bw_2_spikes, error_rate,
+                                             n_errors_in_a_row, max_errors_in_a_row, n_errors, max_n_errors,
+                                             keep_max_len=True,
+                                             raster_with_transients_numeroted=None,
+                                             cell_with_no_spike = False):
+    """
+    Start from a given cell and a given spike time, and will return a seq of spike_times associated to a
+    seq of cell indices, which will be the longest one found if keep_max_len is True, otherwise, return them all
+    The sequen length should be of n_cells - cell length
+    :param cell:
+    :param cell_spike_period:
+    :param raster:
+    :param raster_dur_version:
+    :param min_time_bw_2_spikes:
+    :param max_time_bw_2_spikes:
+    :param error_rate:
+    :param max_errors_in_a_row:
+    :param min_len_ratio:
+    :param min_seq_len:
+    :param keep_max_len:
+    :param cell_with_no_spike: if True, means the cell_spike_period don't correspond to a real spike from cell,
+    and then -1 should be add to time_seq for this cell
+    :return:
+    """
+    # print(f"cell {cell}, cell_spike_period {cell_spike_period}")
+    n_cells = raster.shape[0]
+    n_times = raster.shape[1]
+    if cell == n_cells - 1:
+        if cell_with_no_spike:
+            return [-1]
+        else:
+            return [cell_spike_period[0]]
+    t_min = np.max((0, cell_spike_period[0] + min_time_bw_2_spikes))
+    t_min = np.min((n_times, t_min))
+    t_max = np.min((n_times, cell_spike_period[1] + max_time_bw_2_spikes))
+    if t_min == t_max:
+        print("t_min == t_max")
+        if cell_with_no_spike:
+            return [-1]
+        else:
+            return [cell_spike_period[0]]
+    if cell_with_no_spike:
+        times_in_seq_so_far = [-1]
+    else:
+        times_in_seq_so_far = [cell_spike_period[0]]
+    following_cell = cell + 1
+    following_cells_spikes = np.where(raster[following_cell, t_min:t_max])[0]
+    for i in np.arange(len(following_cells_spikes)):
+        following_cells_spikes[i] += t_min
+    following_periods = []
+    if len(following_cells_spikes) > 0:
+        if raster_dur_version and (raster_with_transients_numeroted is not None):
+            transient_ids = np.unique(raster_with_transients_numeroted[following_cell,
+                                                                       following_cells_spikes])
+            for transient_id in transient_ids:
+                spike_times = np.where(raster_with_transients_numeroted[following_cell, :] == transient_id)[0]
+                following_periods.append((spike_times[0], spike_times[-1]))
+        else:
+            if raster_dur_version:
+                print('You need raster_with_transients_numeroted in get_seq_times_starting_from_a_spike_time to use'
+                      'raster dur')
+            for following_cell_spike in following_cells_spikes:
+                following_periods.append((following_cell_spike, following_cell_spike))
+
+    if len(following_periods) == 0:
+        # if we didn't reach the max number of errors, we go to the next cell
+        if (n_errors < max_n_errors) and (n_errors_in_a_row < max_errors_in_a_row):
+            n_errors += 1
+            n_errors_in_a_row += 1
+            # the next cell spikes has a wider choice for spiking, has we don't have the one in the middle
+            # TODO: if other seq have been detected before, we could use the spike intervals in those
+            # TODO: to estimate where to look
+
+            # times_in_seq_so_far += [-1]
+            min_time_bw_2_spikes = int(min_time_bw_2_spikes * 1.2)
+            max_time_bw_2_spikes = int(max_time_bw_2_spikes * 1.2)
+            following_periods = [cell_spike_period]
+            cell_with_no_spike = True
+        else:
+            return times_in_seq_so_far + [-1] * (n_cells - following_cell - 1)
+    else:
+        max_errors_in_a_row = 0
+        # back to normal time intervals
+        min_time_bw_2_spikes = min_time_bw_2_spikes_original
+        max_time_bw_2_spikes = max_time_bw_2_spikes_original
+        cell_with_no_spike = False
+
+    n_spikes_max_in_seq = 0
+    # list of times indices (-1 if a cell don't fire in the seq)
+    longest_seq = []
+    # list of tuples
+    all_seqs = []
+    for following_period in following_periods:
+        times_seq_results = \
+            get_seq_times_starting_from_a_spike_time(cell=following_cell,
+                                                     cell_spike_period=following_period,
+                                                     raster=raster,
+                                                     raster_dur_version=raster_dur_version,
+                                                     min_time_bw_2_spikes=min_time_bw_2_spikes,
+                                                     max_time_bw_2_spikes=max_time_bw_2_spikes,
+                                                     min_time_bw_2_spikes_original=min_time_bw_2_spikes_original,
+                                                     max_time_bw_2_spikes_original=max_time_bw_2_spikes_original,
+                                                     error_rate=error_rate,
+                                                     n_errors_in_a_row=n_errors_in_a_row,
+                                                     max_errors_in_a_row=max_errors_in_a_row,
+                                                     n_errors=n_errors,
+                                                     max_n_errors=max_n_errors,
+                                                     keep_max_len=keep_max_len,
+                                                     cell_with_no_spike=cell_with_no_spike,
+                                                     raster_with_transients_numeroted=raster_with_transients_numeroted)
+        n_spikes_in_result = len(np.where(np.array(times_seq_results) >= 0)[0])
+        # print(f"n_spikes_in_result {n_spikes_in_result}")
+        if n_spikes_in_result > n_spikes_max_in_seq:
+            n_spikes_max_in_seq = n_spikes_in_result
+            # print(f"longest_seq = times_seq_results {times_seq_results}")
+            longest_seq = times_seq_results
+            all_seqs.append(times_seq_results)
+    # print(f"longest_seq {longest_seq}")
+    longest_seq = times_in_seq_so_far + longest_seq
+    return longest_seq
+
+
 def get_seq_times_from_raster(raster, min_time_bw_2_spikes, max_time_bw_2_spikes, error_rate,
-                              max_errors_in_a_row=3, min_len_ratio=None,
+                              raster_dur_version,
+                              max_errors_in_a_row, min_len_ratio=None,
                               min_seq_len=None, cell_indices=None):
     """
     Raster represents the len of seq (shape[0]), the fct will return a list of tuple of size (shape[0]),
@@ -145,14 +307,17 @@ def get_seq_times_from_raster(raster, min_time_bw_2_spikes, max_time_bw_2_spikes
     """
     # TODO: keep for each set of times, the cells associated
     # because co-active cells could have been added to sequences, we extend the search
-    min_time_bw_2_spikes = - 10
-    max_time_bw_2_spikes = 25
+    min_time_bw_2_spikes = -1
+    max_time_bw_2_spikes = 10
     raster = np.copy(raster)
     n_cells = raster.shape[0]
     n_times = raster.shape[1]
     max_n_errors = int(n_cells * error_rate)
-    min_time_bw_2_spikes_original = min_time_bw_2_spikes
-    max_time_bw_2_spikes_original = max_time_bw_2_spikes
+    # min_time_bw_2_spikes_original = min_time_bw_2_spikes
+    # max_time_bw_2_spikes_original = max_time_bw_2_spikes
+    raster_with_transients_numeroted = None
+    if raster_dur_version:
+        raster_with_transients_numeroted = give_unique_id_to_each_transient_of_raster_dur(raster)
     all_seq_times = []
     # dict to keep the number of rep of each seq depending on the cells it is composed from
     seq_times_by_seq_cells_dict = dict()
@@ -162,64 +327,93 @@ def get_seq_times_from_raster(raster, min_time_bw_2_spikes, max_time_bw_2_spikes
         min_seq_len = max(2, int(n_cells * min_len_ratio))
         if n_cells >= 5:
             min_seq_len = max(3, min_seq_len)
+        if min_seq_len < 5:
+            max_errors_in_a_row = 1
+            max_n_errors = 1
 
     for cell in np.arange(n_cells):
-        if cell > (n_cells-min_seq_len):
+        if cell > (n_cells - min_seq_len):
             # means the number of errors is already too high to find any significant sequences
             break
-        cell_spike_times = np.where(raster[cell])[0]
+        # version working for raster_dur and spike_times
+        if raster_dur_version:
+            periods_of_activity = get_continous_time_periods(raster[cell])
+        else:
+            cell_spike_times = np.where(raster[cell])[0]
+            periods_of_activity = []
+            for cell_spike_time in cell_spike_times:
+                periods_of_activity.append((cell_spike_time, cell_spike_time))
+
         # last_raster_copy = np.copy(raster)
-        for cell_spike_time in cell_spike_times:
-            last_raster_copy = np.copy(raster)
-            min_time_bw_2_spikes = min_time_bw_2_spikes_original
-            max_time_bw_2_spikes = max_time_bw_2_spikes_original
-            # n_errors = cell
-            # first cells don't matter, what matters are the errors in the middle
-            n_errors = 0
-            n_errors_in_a_raw = 0
-            times_in_seq = [-1]*cell + [cell_spike_time]
-            # removing spikes one after the other in order not to find them again
-            raster[cell, cell_spike_time] = 0
-            last_spike_time = cell_spike_time
-            for following_cell in np.arange(cell + 1, n_cells):
-                t_min = np.max((0, last_spike_time + min_time_bw_2_spikes))
-                t_min = np.min((n_times, t_min))
-                t_max = np.min((n_times, last_spike_time + max_time_bw_2_spikes))
-                if t_min == t_max:
-                    break
-                # print(f"following_cell {following_cell}, t_min {t_min}, t_max {t_max}")
-                following_cells_spikes = np.where(raster[following_cell, t_min:t_max])[0]
-                if len(following_cells_spikes) == 0:
-                    # if we didn't reach the max number of errors, we go to the next cell
-                    if (n_errors < max_n_errors) and (n_errors_in_a_raw < max_errors_in_a_row):
-                        n_errors += 1
-                        max_errors_in_a_row += 1
-                        # the next cell spikes has a wider choice for spiking, has we don't have the one in the middle
-                        # TODO: if other seq have been detected before, we could use the spike intervals in those
-                        # TODO: to estimate where to look
-                        min_time_bw_2_spikes = int(min_time_bw_2_spikes * 1.2)
-                        max_time_bw_2_spikes = int(max_time_bw_2_spikes * 1.2)
-                        times_in_seq.append(-1)
-                        continue
-                    else:
-                        times_in_seq.extend([-1]*(n_cells-following_cell))
-                        break
-                else:
-                    max_errors_in_a_row = 0
-                    following_cell_spike_time = following_cells_spikes[0]
-                    following_cell_spike_time += last_spike_time + min_time_bw_2_spikes
-                    following_cell_spike_time = np.min((n_times, following_cell_spike_time))
-                    following_cell_spike_time = np.max((0, following_cell_spike_time))
-                    last_spike_time = following_cell_spike_time
-                    # back to normal time intervals
-                    min_time_bw_2_spikes = min_time_bw_2_spikes_original
-                    max_time_bw_2_spikes = max_time_bw_2_spikes_original
-                    # removing spikes one after the other in order not to find them again
-                    raster[following_cell, following_cell_spike_time] = 0
-                    times_in_seq.append(following_cell_spike_time)
+        for period_of_activity in periods_of_activity:
+            # for cell_spike_time in cell_spike_times:
+            # last_raster_copy = np.copy(raster)
+            # min_time_bw_2_spikes = min_time_bw_2_spikes_original
+            # max_time_bw_2_spikes = max_time_bw_2_spikes_original
+            # # n_errors = cell
+            # # first cells don't matter, what matters are the errors in the middle
+            # n_errors = 0
+            # n_errors_in_a_raw = 0
+            # times_in_seq = [-1] * cell + [cell_spike_time]
+            # # removing spikes one after the other in order not to find them again
+            # raster[cell, cell_spike_time] = 0
+            # last_spike_time = cell_spike_time
+            # for following_cell in np.arange(cell + 1, n_cells):
+            #     t_min = np.max((0, last_spike_time + min_time_bw_2_spikes))
+            #     t_min = np.min((n_times, t_min))
+            #     t_max = np.min((n_times, last_spike_time + max_time_bw_2_spikes))
+            #     if t_min == t_max:
+            #         break
+            #     # print(f"following_cell {following_cell}, t_min {t_min}, t_max {t_max}")
+            #     following_cells_spikes = np.where(raster[following_cell, t_min:t_max])[0]
+            #     if len(following_cells_spikes) == 0:
+            #         # if we didn't reach the max number of errors, we go to the next cell
+            #         if (n_errors < max_n_errors) and (n_errors_in_a_raw < max_errors_in_a_row):
+            #             n_errors += 1
+            #             max_errors_in_a_row += 1
+            #             # the next cell spikes has a wider choice for spiking, has we don't have the one in the middle
+            #             # TODO: if other seq have been detected before, we could use the spike intervals in those
+            #             # TODO: to estimate where to look
+            #             min_time_bw_2_spikes = int(min_time_bw_2_spikes * 1.2)
+            #             max_time_bw_2_spikes = int(max_time_bw_2_spikes * 1.2)
+            #             times_in_seq.append(-1)
+            #             continue
+            #         else:
+            #             times_in_seq.extend([-1] * (n_cells - following_cell))
+            #             break
+            #     else:
+            #         max_errors_in_a_row = 0
+            #         following_cell_spike_time = following_cells_spikes[0]
+            #         following_cell_spike_time += last_spike_time + min_time_bw_2_spikes
+            #         following_cell_spike_time = np.min((n_times, following_cell_spike_time))
+            #         following_cell_spike_time = np.max((0, following_cell_spike_time))
+            #         last_spike_time = following_cell_spike_time
+            #         # back to normal time intervals
+            #         min_time_bw_2_spikes = min_time_bw_2_spikes_original
+            #         max_time_bw_2_spikes = max_time_bw_2_spikes_original
+            #         # removing spikes one after the other in order not to find them again
+            #         raster[following_cell, following_cell_spike_time] = 0
+            #         times_in_seq.append(following_cell_spike_time)
+            # print(f"beefore get_seq_times_starting_from_a_spike_time {period_of_activity}")
+            seq_times_result = get_seq_times_starting_from_a_spike_time(cell=cell,
+                                                                        cell_spike_period=period_of_activity,
+                                                     raster=raster, raster_dur_version=raster_dur_version,
+                                                     min_time_bw_2_spikes_original=min_time_bw_2_spikes,
+                                                     max_time_bw_2_spikes_original=max_time_bw_2_spikes,
+                                                     min_time_bw_2_spikes=min_time_bw_2_spikes,
+                                                     max_time_bw_2_spikes=max_time_bw_2_spikes,
+                                                     error_rate=error_rate,
+                                                     n_errors_in_a_row=0,
+                                                     max_errors_in_a_row=max_errors_in_a_row,
+                                                     n_errors=0, max_n_errors=max_n_errors,
+                                                     keep_max_len=True,
+                                                     raster_with_transients_numeroted=raster_with_transients_numeroted)
+            times_in_seq_sor_far = [-1] * cell
+            times_in_seq = times_in_seq_sor_far + seq_times_result
             # checking if we have a full seq and at least half of the cells have a real spike
-            n_spikes = len(np.where(np.array(times_in_seq) >= 0)[0])
-            if n_spikes >= min_seq_len:
+            n_spikes_in_seq = len(np.where(np.array(times_in_seq) >= 0)[0])
+            # print(f"n_spikes_in_seq {n_spikes_in_seq}")
+            if n_spikes_in_seq >= min_seq_len:
                 times_in_seq += [-1] * (n_cells - len(times_in_seq))
                 # print(f"times_in_seq len: {len(times_in_seq)}")
                 all_seq_times.append(times_in_seq)
@@ -230,9 +424,21 @@ def get_seq_times_from_raster(raster, min_time_bw_2_spikes, max_time_bw_2_spikes
                     if cells_associated not in seq_times_by_seq_cells_dict:
                         seq_times_by_seq_cells_dict[cells_associated] = []
                     seq_times_by_seq_cells_dict[cells_associated].append(times_in_seq[times_in_seq >= 0])
-            else:
-                # we put back the spikes erased that didn't give a sequence
-                raster = last_raster_copy
+                # then we remove the spikes from the raster dur, so this spikes are not in another seq
+                for cell_index, spike_time in enumerate(times_in_seq):
+                    if raster_dur_version and (raster_with_transients_numeroted is not None):
+                        # if raster_dur, we need to remove all "ones" from the transients
+                        if spike_time >= 0:
+                            spike_number = raster_with_transients_numeroted[cell_index, spike_time]
+                            spike_times = np.where(raster_with_transients_numeroted[cell_index, :] == spike_number)[0]
+                            raster[cell_index, spike_times] = 0
+                    else:
+                        if spike_time >= 0:
+                            raster[cell_index, spike_time] = 0
+        # print(f"cell {cell} / {n_cells}")
+            # else:
+            #     # we put back the spikes erased that didn't give a sequence
+            #     raster = last_raster_copy
     # print(f"min_seq_len {min_seq_len}, n_cells {n_cells}")
     return all_seq_times, seq_times_by_seq_cells_dict
 
@@ -447,7 +653,7 @@ def find_paths_in_a_graph(graph, shortest_path_on_weight, with_weight, use_longe
                                     print(f"{list(path)}: {weight}")
                 if debug_mode:
                     print(f"longest_shortest_path {len(longest_shortest_path)}: {longest_shortest_path} "
-                      f"{lowest_weight_among_best_path}")
+                          f"{lowest_weight_among_best_path}")
         seq_list.append(longest_shortest_path)
         graph.remove_nodes_from(longest_shortest_path)
 
@@ -459,7 +665,8 @@ def find_paths_in_a_graph(graph, shortest_path_on_weight, with_weight, use_longe
 
 def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max_time_bw_2_spikes,
                                     n_surrogates, max_connex_by_cell, raster_dur_version,
-                                    min_nb_of_rep=None, debug_mode=False, descr="", ms=None):
+                                    min_nb_of_rep=None, debug_mode=False, descr="", ms=None,
+                                    span_area_coords=None, span_area_colors=None):
     """
 
     :param spike_nums:
@@ -484,7 +691,8 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
     transition_dict, spikes_dist_dict = build_mle_transition_dict(spike_nums=spike_nums,
                                                                   min_duration_intra_seq=min_time_bw_2_spikes,
                                                                   time_inter_seq=max_time_bw_2_spikes,
-                                                                  debug_mode=True, raster_dur_version=raster_dur_version)
+                                                                  debug_mode=True,
+                                                                  raster_dur_version=raster_dur_version)
 
     if n_surrogates > 0:
         start_time = time.time()
@@ -498,7 +706,8 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
             t_d = build_mle_transition_dict(spike_nums=surrogate_spike_nums,
                                             min_duration_intra_seq=min_time_bw_2_spikes,
                                             time_inter_seq=max_time_bw_2_spikes,
-                                            debug_mode=False, with_dist=False, raster_dur_version=raster_dur_version)
+                                            debug_mode=False, with_dist=False,
+                                            raster_dur_version=raster_dur_version)
             all_surrogate_transition_dict[:, :, surrogate_index] = t_d
         # surrogate_threshold_transition_dict = np.zeros((n_cells, n_cells))
         n_values_removed = 0
@@ -513,7 +722,7 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                     n_values_removed += 1
                     transition_dict[cell_1, cell_2] = 0
         print(f"{n_values_removed} values removed from transition_dict after surrogates "
-              f"{np.round((n_values_removed / (cell_1*cell_2))*100, 2)} %")
+              f"{np.round((n_values_removed / (cell_1 * cell_2)) * 100, 2)} %")
         stop_time = time.time()
         print(f"Time to generate surrogates {np.round(stop_time - start_time, 3)} s")
 
@@ -659,15 +868,16 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
             for seq_index in seq_indices:
                 seq = np.array(long_seq_list[seq_index])
                 n_cells_in_seq = len(seq)
-                add_links_to_raster_here = True
+                add_links_to_raster_here = False
                 if add_links_to_raster_here:
                     if debug_mode:
                         print(f"new_cell_order.extend {len(seq)}: {seq}")
                     seq_times, seq_dict = get_seq_times_from_raster(spike_nums[seq], min_time_bw_2_spikes,
                                                                     max_time_bw_2_spikes, error_rate=0.3,
-                                                                    max_errors_in_a_row=4,
+                                                                    max_errors_in_a_row=1,
                                                                     cell_indices=seq,
-                                                                    min_len_ratio=0.4)  # , min_seq_len=3
+                                                                    min_len_ratio=0.4,
+                                                                    raster_dur_version=raster_dur_version)  # , min_seq_len=3
                     if use_seq_from_graph_to_fill_seq_dict and (len(seq_times) > 0) and (len(seq) >= 3):
                         seq_times_by_seq_cells_dict[tuple(seq)] = seq_times
                     if debug_mode:
@@ -680,6 +890,8 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                             indices_to_keep = np.where(np.array(times) > -1)[0]
                             cells_to_keep = tuple(new_seq_indices[indices_to_keep])
                             times_to_keep = np.array(times)[indices_to_keep]
+                            if len(times_to_keep) <= 2:
+                                continue
                             if cells_to_keep not in seq_times_to_color_dict:
                                 seq_times_to_color_dict[cells_to_keep] = []
                             seq_times_to_color_dict[cells_to_keep].append(times_to_keep)
@@ -692,16 +904,17 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                 cells_to_highlight_colors.extend([colors[color_index_by_sub_seq % len(colors)]] * n_cells_in_seq)
                 color_index_by_sub_seq += 1
 
-            add_links_to_raster_here = False
+            add_links_to_raster_here = True
             if add_links_to_raster_here:
                 if debug_mode:
                     print(f"seq_fusion_cells {len(seq_fusion_cells)}")
                 seq_times, seq_dict = get_seq_times_from_raster(spike_nums[np.array(seq_fusion_cells)],
-                                                      min_time_bw_2_spikes,
-                                                      max_time_bw_2_spikes, error_rate=0.3,
-                                                      max_errors_in_a_row=4,
-                                                      cell_indices=np.array(seq_fusion_cells),
-                                                      min_len_ratio=0.4, min_seq_len=3)
+                                                                min_time_bw_2_spikes,
+                                                                max_time_bw_2_spikes, error_rate=0.3,
+                                                                max_errors_in_a_row=1,
+                                                                cell_indices=np.array(seq_fusion_cells),
+                                                                min_len_ratio=0.4, min_seq_len=3,
+                                                                raster_dur_version=raster_dur_version)
                 for seq_cells, seq_dict_times in seq_dict.items():
                     if seq_cells not in seq_times_by_seq_cells_dict:
                         seq_times_by_seq_cells_dict[seq_cells] = []
@@ -711,12 +924,14 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                 # adding sequences to a dict use to display them in the raster
                 if len(seq_times) > 0:
                     new_seq_indices = np.arange(cell_for_span_index_so_far,
-                                                     cell_for_span_index_so_far + n_cells_in_group_of_seq)
+                                                cell_for_span_index_so_far + n_cells_in_group_of_seq)
                     for times in seq_times:
                         # keeping the cells that spikes for each sequence of "seq"
                         indices_to_keep = np.where(np.array(times) > -1)[0]
                         cells_to_keep = tuple(new_seq_indices[indices_to_keep])
                         times_to_keep = np.array(times)[indices_to_keep]
+                        if len(times_to_keep) <= 2:
+                            continue
                         if cells_to_keep not in seq_times_to_color_dict:
                             seq_times_to_color_dict[cells_to_keep] = []
                         seq_times_to_color_dict[cells_to_keep].append(times_to_keep)
@@ -780,19 +995,49 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                            link_seq_color=link_seq_color,
                            link_seq_line_width=0.3,
                            link_seq_alpha=0.9,
+                           span_area_coords=span_area_coords,
+                           span_area_colors=span_area_colors,
+                           span_area_only_on_raster=False,
                            spike_shape='|',
-                           spike_shape_size=5,
+                           spike_shape_size=0.1,
                            desaturate_color_according_to_normalized_amplitude=desat_color,
                            save_formats="pdf")
+        if desat_color:
+            plot_spikes_raster(spike_nums=spike_nums[np.array(new_cell_order)], param=param,
+                               title=f"raster plot ordered with graph",
+                               spike_train_format=False,
+                               file_name=f"{descr}_raster_plot_ordered_with_graph_amplitude",
+                               y_ticks_labels=new_cell_order,
+                               save_raster=True,
+                               show_raster=False,
+                               show_sum_spikes_as_percentage=True,
+                               cmap_name="hot",
+                               plot_with_amplitude=True,
+                               # cells_to_highlight=cells_to_highlight,
+                               # cells_to_highlight_colors=cells_to_highlight_colors,
+                               # span_cells_to_highlight=span_cells_to_highlight,
+                               # span_cells_to_highlight_colors=span_cells_to_highlight_colors,
+                               seq_times_to_color_dict=seq_times_to_color_dict,
+                               link_seq_color=link_seq_color,
+                               link_seq_line_width=0.3,
+                               span_area_coords=span_area_coords,
+                               span_area_colors=span_area_colors,
+                               span_area_only_on_raster=False,
+                               link_seq_alpha=0.9,
+                               spike_shape='|',
+                               spike_shape_size=5,
+                               desaturate_color_according_to_normalized_amplitude=False,
+                               save_formats="pdf")
+
         n_cells = spike_nums.shape[0]
         print(f"n_cells {n_cells}")
         n_cells_to_zoom = 150
-        for loop_index, cell_index in enumerate(np.arange(0, n_cells+n_cells_to_zoom, n_cells_to_zoom)):
+        for loop_index, cell_index in enumerate(np.arange(0, n_cells + n_cells_to_zoom, n_cells_to_zoom)):
             last_loop = False
-            if cell_index+n_cells_to_zoom >= n_cells:
+            if cell_index + n_cells_to_zoom >= n_cells:
                 n_cells_to_zoom = n_cells - cell_index
                 last_loop = True
-            indices_displayed = np.arange(cell_index, cell_index+n_cells_to_zoom)
+            indices_displayed = np.arange(cell_index, cell_index + n_cells_to_zoom)
             # re_indexing seq_dict or removing par of the cells
             new_seq_times_to_color_dict = dict()
             # seq_times_to_color_dict[cells_to_keep] = []
@@ -801,12 +1046,16 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                 cells_seq = np.array(cells_seq)
                 cells_not_in_raster = np.setdiff1d(cells_seq, indices_displayed)
                 if len(cells_not_in_raster) == 0:
-                    new_seq_times_to_color_dict[tuple(cells_seq)] = times_in_seq
+                    # print('len(cells_not_in_raster) == 0')
+                    # put the cells in the same order
+                    first_index = np.where(indices_displayed == cells_seq[0])[0][0]
+                    tuple_cells = tuple(list(range(first_index, first_index+len(cells_seq))))
+                    new_seq_times_to_color_dict[tuple_cells] = times_in_seq
                     continue
                 # mask used to remove cells that are not in the raster anymore
                 mask = np.ones(len(cells_seq), dtype="bool")
                 for cell_not_in_raster in cells_not_in_raster:
-                    index_to_remove = np.where(cells_seq == cell_not_in_raster)[0]
+                    index_to_remove = np.where(cells_seq == cell_not_in_raster)[0][0]
                     mask[index_to_remove] = False
                 cells_seq = cells_seq[mask]
                 # we need to re-index the cells
@@ -814,19 +1063,19 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                 for cell_in_seq in cells_seq:
                     new_cell_index = np.where(indices_displayed == cell_in_seq)[0][0]
                     new_cells_seq.append(new_cell_index)
-                new_times_in_seq = [indices_displayed]
+                new_times_in_seq = []
                 for time_in_seq in times_in_seq:
                     time_in_seq = np.array(time_in_seq)[mask]
-                    new_times_in_seq.append(time_in_seq)
+                    new_times_in_seq.append(list(time_in_seq))
                 new_seq_times_to_color_dict[tuple(new_cells_seq)] = new_times_in_seq
 
             print(f"indices_displayed {indices_displayed}: {len(new_cell_order)}")
-            plot_spikes_raster(spike_nums=spike_nums[np.array(new_cell_order)][cell_index:cell_index+n_cells_to_zoom],
+            plot_spikes_raster(spike_nums=spike_nums[np.array(new_cell_order)][cell_index:cell_index + n_cells_to_zoom],
                                param=param,
                                title=f"raster plot ordered with graph",
                                spike_train_format=False,
                                file_name=f"{descr}_raster_plot_ordered_with_graph_zoom_{loop_index}",
-                               y_ticks_labels=new_cell_order[cell_index:cell_index+n_cells_to_zoom],
+                               y_ticks_labels=new_cell_order[cell_index:cell_index + n_cells_to_zoom],
                                save_raster=True,
                                show_raster=False,
                                show_sum_spikes_as_percentage=True,
@@ -837,12 +1086,15 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                                span_cells_to_highlight_colors=span_cells_to_highlight_colors,
                                spike_shape='o',
                                spike_shape_size=0.5,
-                               seq_times_to_color_dict=seq_times_to_color_dict,
+                               span_area_coords=span_area_coords,
+                               span_area_colors=span_area_colors,
+                               span_area_only_on_raster=False,
+                               seq_times_to_color_dict=new_seq_times_to_color_dict,
                                link_seq_color=link_seq_color,
                                link_seq_line_width=0.5,
                                link_seq_alpha=0.9,
                                save_formats="pdf",
-                               desaturate_color_according_to_normalized_amplitude=desat_color,)
+                               desaturate_color_according_to_normalized_amplitude=desat_color)
             if last_loop:
                 break
 
@@ -878,6 +1130,7 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
         We could also use https://en.wikipedia.org/wiki/Strongly_connected_component for
         connected graph, but then a node to belong to more than one graph
         """
+
 
 def save_on_file_seq_detection_results(best_cells_order, seq_dict, file_name, param):
     complete_file_name = f'{param.path_results}/{file_name}'

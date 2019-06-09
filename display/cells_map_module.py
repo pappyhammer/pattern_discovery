@@ -7,6 +7,7 @@ import PIL
 from PIL import ImageDraw
 import math
 import scipy.stats as stats
+from matplotlib.colors import NoNorm
 
 class CoordClass:
     def __init__(self, coord, nb_lines, nb_col, from_suite_2p=False):
@@ -268,7 +269,7 @@ class CoordClass:
                        cells_to_link=None, edge_line_width=2, cells_alpha=1,
                        fill_polygons=True, cells_groups=None, cells_groups_colors=None,
                        cells_groups_alpha=None,
-                       cells_to_hide=None,
+                       cells_to_hide=None, img_on_background=None,
                        cells_groups_edge_colors=None, with_edge=False,
                        with_cell_numbers=False, save_formats="png",
                        save_plot=True, return_fig=False):
@@ -298,43 +299,51 @@ class CoordClass:
         fig, ax = plt.subplots(nrows=1, ncols=1,
                                gridspec_kw={'height_ratios': [1]},
                                figsize=(20, 20))
+
         fig.patch.set_facecolor(background_color)
         ax.set_facecolor(background_color)
+
+        if img_on_background is not None:
+            print(f"np.mean(img_on_background) {np.mean(img_on_background)}")
+            n_bits = 8
+            ax.imshow(img_on_background, cmap=plt.get_cmap("gray"), vmin=0,
+                      vmax=math.pow(2, n_bits)-1)
 
         # blue = "cornflowerblue"
         # cmap.set_over('red')
         z_order_cells = 12
-        for group_index, cell_group in enumerate(cells_groups):
-            for cell in cell_group:
-                if cell in cells_to_hide:
-                    continue
+        if cells_groups is not None:
+            for group_index, cell_group in enumerate(cells_groups):
+                for cell in cell_group:
+                    if cell in cells_to_hide:
+                        continue
 
-                xy = self.coord[cell].transpose()
-                if with_edge:
-                    line_width = edge_line_width
-                    if cells_groups_edge_colors is None:
-                        edge_color = default_edge_color
+                    xy = self.coord[cell].transpose()
+                    if with_edge:
+                        line_width = edge_line_width
+                        if cells_groups_edge_colors is None:
+                            edge_color = default_edge_color
+                        else:
+                            edge_color = cells_groups_edge_colors[group_index]
                     else:
-                        edge_color = cells_groups_edge_colors[group_index]
-                else:
-                    edge_color = cells_groups_colors[group_index]
-                    line_width = 0
-                # allow to set alpha of the edge to 1
-                face_color = list(cells_groups_colors[group_index])
-                # changing alpha
-                if cells_groups_alpha is not None:
-                    face_color[3] = cells_groups_alpha[group_index]
-                else:
-                    face_color[3] = cells_alpha
-                face_color = tuple(face_color)
-                self.cell_contour = patches.Polygon(xy=xy,
-                                                    fill=True, linewidth=line_width,
-                                                    facecolor=face_color,
-                                                    edgecolor=edge_color,
-                                                    zorder=z_order_cells) # lw=2
-                ax.add_patch(self.cell_contour)
-                if with_cell_numbers:
-                    self.plot_text_cell(cell=cell, cell_numbers_color=cell_numbers_color)
+                        edge_color = cells_groups_colors[group_index]
+                        line_width = 0
+                    # allow to set alpha of the edge to 1
+                    face_color = list(cells_groups_colors[group_index])
+                    # changing alpha
+                    if cells_groups_alpha is not None:
+                        face_color[3] = cells_groups_alpha[group_index]
+                    else:
+                        face_color[3] = cells_alpha
+                    face_color = tuple(face_color)
+                    self.cell_contour = patches.Polygon(xy=xy,
+                                                        fill=True, linewidth=line_width,
+                                                        facecolor=face_color,
+                                                        edgecolor=edge_color,
+                                                        zorder=z_order_cells) # lw=2
+                    ax.add_patch(self.cell_contour)
+                    if with_cell_numbers:
+                        self.plot_text_cell(cell=cell, cell_numbers_color=cell_numbers_color)
 
         for cell in cells_not_in_groups:
             if cell in cells_to_hide:
@@ -346,7 +355,7 @@ class CoordClass:
             self.cell_contour = patches.Polygon(xy=xy,
                                                 fill=not dont_fill_cells_not_in_groups,
                                                 linewidth=0, facecolor=default_cells_color,
-                                                edgecolor=default_cells_color,
+                                                edgecolor=default_edge_color,
                                                 zorder=z_order_cells, lw=2)
             ax.add_patch(self.cell_contour)
 

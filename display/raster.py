@@ -331,12 +331,12 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                     colors_list = [sns.desaturate(x, p) for x, p in
                                    zip([color_neuron]*n_spikes, spikes[neuron_times])]
                     ax1.vlines(neuron_times, cell - .5, cell + .5, color=colors_list,
-                               linewidth=1, zorder=20)
+                               linewidth=0.5, zorder=20)
                 elif plot_with_amplitude:
                     ax1.vlines(neuron_times, cell - .5, cell + .5, color=scalar_map.to_rgba(spikes[spikes > 0]),
-                               linewidth=1, zorder=20)
+                               linewidth=0.5, zorder=20)
                 else:
-                    ax1.vlines(neuron_times, cell - .5, cell + .5, color=color_neuron, linewidth=1, zorder=20)
+                    ax1.vlines(neuron_times, cell - .5, cell + .5, color=color_neuron, linewidth=0.5, zorder=20)
 
     if seq_times_to_color_dict is not None:
         seq_count = 0
@@ -362,8 +362,13 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                         if t not in spike_nums[cell_index]:
                             continue
                     else:
+                        pass
                         if spike_nums[cell_index, t] == 0:
-                            # print(f"Not there: seq {times_list_index} cell {cell_index}, time {t}")
+                            cell_for_msg = cell_index
+                            if y_ticks_labels is not None:
+                                cell_for_msg = y_ticks_labels[cell_index]
+                            print(f"Not there: seq {times_list_index} cell {cell_for_msg} - {cell_index}, "
+                                  f"time {t}")
                             continue
                         # print(f"## There: seq {times_list_index} cell {cell_index}, time {t}")
                     if link_seq_color is not None:
@@ -420,9 +425,9 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
         elif n_cells < 200:
             y_ticks_labels_size = 3
         elif n_cells < 400:
-            y_ticks_labels_size = 2
-        else:
             y_ticks_labels_size = 1
+        else:
+            y_ticks_labels_size = 0.1
         ax1.yaxis.set_tick_params(labelsize=y_ticks_labels_size)
     if without_ticks:
         ax1.tick_params(axis='both', which='both', length=0)
