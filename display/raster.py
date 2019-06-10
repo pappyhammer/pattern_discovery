@@ -128,7 +128,12 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        traces_lw=0.3,
                        path_results=None,
                        without_time_str_in_file_name=False,
-                       desaturate_color_according_to_normalized_amplitude=False
+                       desaturate_color_according_to_normalized_amplitude=False,
+                       lines_to_display=None,
+                       lines_color="white",
+                       lines_width=1,
+                       lines_band=0,
+                       lines_band_color="white"
                        ):
     """
     Plot or save a raster given a 2d array either binary representing onsets, peaks or rising time, or made of float
@@ -199,6 +204,12 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
     :param desaturate_color_according_to_normalized_amplitude: if True, spike_nums should be filled with float between
     0 and 1, representing the amplitude of the spike. And if a color is given for a cell, then it will be desaturate
     according to this value
+    :param lines_to_display, dict that takes for a key a tuple of int representing 2 cells, and as value a list of tuple of 2 float
+    representing the 2 extremities of a line between those 2 cells. By defualt, no lines
+    :param lines_color="white": colors of lines_to_display
+    :param lines_width=1: width of lines_to_display
+    :param lines_band=0: if > 0, display a band around the line with transparency
+    :param lines_band_color="white"
     :return: 
     """
 
@@ -313,7 +324,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                 elif desaturate_color_according_to_normalized_amplitude:
                     n_spikes = len(neuron_times)
                     colors_list = [sns.desaturate(x, p) for x, p in
-                                   zip([color_neuron]*n_spikes, spikes[neuron_times])]
+                                   zip([color_neuron] * n_spikes, spikes[neuron_times])]
                     ax1.scatter(neuron_times, np.repeat(cell, len(neuron_times)),
                                 color=colors_list,
                                 marker=spike_shape,
@@ -329,7 +340,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                 if desaturate_color_according_to_normalized_amplitude:
                     n_spikes = len(neuron_times)
                     colors_list = [sns.desaturate(x, p) for x, p in
-                                   zip([color_neuron]*n_spikes, spikes[neuron_times])]
+                                   zip([color_neuron] * n_spikes, spikes[neuron_times])]
                     ax1.vlines(neuron_times, cell - .5, cell + .5, color=colors_list,
                                linewidth=0.5, zorder=20)
                 elif plot_with_amplitude:
@@ -337,7 +348,25 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                                linewidth=0.5, zorder=20)
                 else:
                     ax1.vlines(neuron_times, cell - .5, cell + .5, color=color_neuron, linewidth=0.5, zorder=20)
-
+    if lines_to_display is not None:
+        """
+        lines_to_display=None,
+                       lines_color="white",
+                       lines_width=1,
+                       lines_band=0,
+                       lines_band_color="white"
+                       dict that takes for a key a tuple of int representing 2 cells, and as value a list of tuple of 2 float
+    representing the 2 extremities of a line between those 2 cells. By defualt, no lines
+        """
+        for cells_tuple, spike_times_list in lines_to_display.items():
+            for spike_times in spike_times_list:
+                ax1.plot(list(spike_times), list(cells_tuple),
+                         color=lines_color,
+                         linewidth=lines_width, zorder=30, alpha=1)
+                if lines_band > 0:
+                    ax1.fill_between(list(spike_times), np.array(cells_tuple)-lines_band,
+                                     np.array(cells_tuple)+lines_band, facecolor=lines_band_color, alpha=0.4,
+                                     zorder=10)
     if seq_times_to_color_dict is not None:
         seq_count = 0
         links_labels = []
@@ -409,7 +438,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
             seq_count += 1
 
     if display_traces:
-        ax1.set_ylim(-2, n_cells+4)
+        ax1.set_ylim(-2, n_cells + 4)
     else:
         ax1.set_ylim(-1, n_cells)
     if y_ticks_labels is not None:
@@ -516,7 +545,6 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
     # ax.xlabel('Frames')
     # Give y axis label for the spike raster plot
     ax1.set_ylabel(ylabel)
-
 
     # ax1.spines['left'].set_color(y_ticks_labels_color)
     # ax1.spines['bottom'].set_color(x_ticks_labels_color)
@@ -761,7 +789,7 @@ def plot_sum_active_clusters(clusters_activations,
 
 
 def plot_with_imshow(raster, path_results, file_name, n_subplots=4,
-                         values_to_plot=None, cmap="hot", show_fig=False, save_formats="pdf"):
+                     values_to_plot=None, cmap="hot", show_fig=False, save_formats="pdf"):
     """
 
     :param raster: a 2-d array, 1d represents the cells, 2nd the times
@@ -796,4 +824,3 @@ def plot_with_imshow(raster, path_results, file_name, n_subplots=4,
                     format=f"{save_format}")
 
     plt.close()
-
