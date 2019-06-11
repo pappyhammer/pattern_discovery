@@ -5,6 +5,7 @@ import math
 import matplotlib.cm as cm
 import os
 import seaborn as sns
+from matplotlib import patches
 
 
 def plot_dendogram_from_fca(cluster_tree, nb_cells, save_plot, axes_list=None, fig_to_use=None, file_name="",
@@ -364,9 +365,26 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                          color=lines_color,
                          linewidth=lines_width, zorder=30, alpha=1)
                 if lines_band > 0:
-                    ax1.fill_between(list(spike_times), np.array(cells_tuple)-lines_band,
-                                     np.array(cells_tuple)+lines_band, facecolor=lines_band_color, alpha=0.4,
-                                     zorder=10)
+                    xy = np.zeros((4, 2))
+                    xy[0, 0] = spike_times[0]- lines_band
+                    xy[0, 1] = cells_tuple[0]
+                    xy[1, 0] = spike_times[1]- lines_band
+                    xy[1, 1] = cells_tuple[1]
+                    xy[2, 0] = spike_times[1]+ lines_band
+                    xy[2, 1] = cells_tuple[1]
+                    xy[3, 0] = spike_times[0]+ lines_band
+                    xy[3, 1] = cells_tuple[0]
+                    band_patch = patches.Polygon(xy=xy,
+                                                 fill=True,
+                                                 # linewidth=line_width,
+                                                 facecolor=lines_band_color,
+                                                 # edgecolor=edge_color,
+                                                 alpha=0.4,
+                                                 zorder=10)  # lw=2
+                    ax1.add_patch(band_patch)
+                    # ax1.fill_between(list(spike_times), np.array(cells_tuple)-lines_band,
+                    #                  np.array(cells_tuple)+lines_band, facecolor=lines_band_color, alpha=0.4,
+                    #                  zorder=10)
     if seq_times_to_color_dict is not None:
         seq_count = 0
         links_labels = []
