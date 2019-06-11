@@ -378,6 +378,8 @@ def get_seq_times_from_raster_with_slopes(raster, raster_dur_version,
             active_frames = np.array([spike_time])
             if raster_dur_version:
                 transient_id = raster_with_transients_numeroted[cell, frame]
+                if transient_id == -1:
+                    print("transient_id == -1: not normal")
                 active_frames = np.where(raster_with_transients_numeroted[cell, :] == transient_id)[0]
                 # spike_time will be the middle of the transient
                 if len(active_frames) == 1:
@@ -395,7 +397,6 @@ def get_seq_times_from_raster_with_slopes(raster, raster_dur_version,
             # and then remove the spikes/transients from those slopes in the raster
             for actual_slope in np.arange(min_slope_by_cell_in_frames, max_slope_by_cell_in_frames+1,
                                           slope_step_in_frames):
-
                 # we want to get the range of under which we are looking for the next cells activation
                 # for a given slope and a given spike time for cell
                 slope_ranges = define_slope_range_for_cells(first_cell=cell, last_cell=n_cells - 1,
@@ -404,6 +405,7 @@ def get_seq_times_from_raster_with_slopes(raster, raster_dur_version,
                                                             range_in_frames=range_around_slope_in_frames)
                 # print(f"slope_ranges {slope_ranges}")
                 n_cells_in_slope = 1
+                cells_in_slope = [cell]
                 n_errors = cell
                 raster_mask = np.zeros((n_cells, n_frames), dtype="bool")
                 raster_mask[cell, active_frames] = True
@@ -414,16 +416,24 @@ def get_seq_times_from_raster_with_slopes(raster, raster_dur_version,
                     spikes_time = np.where(raster[cell_in_slope, min_frame:max_frame])[0]
                     cell_is_in = len(spikes_time) > 0
                     if cell_is_in:
+                        spikes_time = spikes_time + min_frame
                         if raster_dur_version:
                             # we need to remove the whole transients
                             transient_ids = np.unique(raster_with_transients_numeroted[cell_in_slope, spikes_time])
+
                             for transient_id in transient_ids:
-                                frames_indices = np.where(raster_with_transients_numeroted[cell, :] == transient_id)[0]
+                                if transient_id == -1:
+                                    continue
+                                frames_indices = np.where(raster_with_transients_numeroted[cell_in_slope, :] ==
+                                                          transient_id)[0]
+                                # print(f"{cell} - {cell_in_slope}: len(frames_indices) {len(frames_indices)}: "
+                                #       f"{frames_indices}")
                                 raster_mask[cell_in_slope, frames_indices] = True
                         else:
                             raster_mask[cell_in_slope, spikes_time] = True
 
                         n_cells_in_slope += 1
+                        cells_in_slope.append(cell_in_slope)
                     else:
                         n_errors += 1
                         if n_errors > max_n_errors:
@@ -432,9 +442,9 @@ def get_seq_times_from_raster_with_slopes(raster, raster_dur_version,
                     continue
                 if (cell, spike_time) not in slope_result:
                     slope_result[(cell, spike_time)] = dict()
-                slope_result[(cell, spike_time)][(actual_slope, range_around_slope_in_frames)] = n_cells_in_slope
-                if n_cells_in_slope > best_n_cells_for_actual_slope:
-                    best_n_cells_for_actual_slope = n_cells_in_slope
+                slope_result[(cell, spike_time)][(actual_slope, range_around_slope_in_frames)] = cells_in_slope
+                if len(cells_in_slope) > best_n_cells_for_actual_slope:
+                    best_n_cells_for_actual_slope = len(cells_in_slope)
                     slope_result[(cell, spike_time)]["max"] = (actual_slope, range_around_slope_in_frames)
                     slope_result[(cell, spike_time)]["spikes_in_seq"] = raster_mask
             # now removing the transients involved in the best seq
@@ -861,14 +871,14 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
         ms.detect_n_in_n_out()
         graph = ms.spike_struct.graph_out
     else:
-        # cells_to_isolate = None
+        cells_to_isolate = None
         # removing from the graph cells that fires the most and the less
-        spike_count_by_cell = np.sum(spike_nums, axis=1)
-        low_spike_count_threshold = np.percentile(spike_count_by_cell, 10)
-        cells_to_isolate = np.where(spike_count_by_cell < low_spike_count_threshold)[0]
-        high_spike_count_threshold = np.percentile(spike_count_by_cell, 95)
-        cells_to_isolate = np.concatenate((cells_to_isolate,
-                                           np.where(spike_count_by_cell > high_spike_count_threshold)[0]))
+        # spike_count_by_cell = np.sum(spike_nums, axis=1)
+        # low_spike_count_threshold = np.percentile(spike_count_by_cell, 10)
+        # cells_to_isolate = np.where(spike_count_by_cell < low_spike_count_threshold)[0]
+        # high_spike_count_threshold = np.percentile(spike_count_by_cell, 95)
+        # cells_to_isolate = np.concatenate((cells_to_isolate,
+        #                                    np.where(spike_count_by_cell > high_spike_count_threshold)[0]))
         # the idea is to build a graph based on top n connection from the transition_dict
         # directed graph
         graph = build_graph_from_transition_dict(transition_dict, n_connected_cell_to_add,
@@ -985,7 +995,7 @@ def plot_rasters_with_sequences_with_slope(spike_nums, ms, raster_dur_version,
                                               param, descr, debug_mode=False):
     n_cells = spike_nums.shape[0]
     n_times = spike_nums.shape[1]
-    range_around_slope_in_ms = 500
+    range_around_slope_in_ms = 600
     range_around_slope_in_frames = max(1, int(range_around_slope_in_ms / (1000 / ms.sampling_rate)))
     # creating new cell order
     new_cell_order = []
@@ -999,6 +1009,13 @@ def plot_rasters_with_sequences_with_slope(spike_nums, ms, raster_dur_version,
     # dict that takes for a key a tuple of int representing 2 cells, and as value a list of tuple of 2 float
     # representing the 2 extremities of a line between those 2 cells
     lines_to_display = dict()
+    # dict to keep the number of rep of each seq depending on its size
+    # key is a tuple of int representing the cell indices of the seq
+    # value is a list whose first 4 values are: first_cell_spike_time, last_cell_spike_time, best_slope, range_around,
+    # and last values of the list are the indices of the cells of the sequence that have spikes in int (indices are
+    # going from 0 to the number of cells in the seq) for ex for seq: (234, 489, 211, 17) -> [0, 2] could be the
+    # indices of the cells with a spike in the seq
+    seq_stat_dict = dict()
     # for the raster give lines_color, lines_width and lines_band
     for color_index, seq_indices in enumerate(seq_indices_list):
         n_cells_in_group_of_seq = 0
@@ -1014,23 +1031,29 @@ def plot_rasters_with_sequences_with_slope(spike_nums, ms, raster_dur_version,
             slope_result = get_seq_times_from_raster_with_slopes(spike_nums[seq], raster_dur_version,
                                                       sampling_rate=ms.sampling_rate,
                                                       min_slope_by_cell_in_ms=150,
-                                                      max_slope_by_cell_in_ms=2000,
+                                                      max_slope_by_cell_in_ms=1200,
                                                       slope_step_in_ms=150,
                                                       range_around_slope_in_ms=range_around_slope_in_ms,
-                                                      error_rate=0.80)
+                                                      error_rate=0.75)
             # print(f"seq {seq}: {slope_result}")
             # adding sequences to a dict use to display them in the raster
             if len(slope_result) > 0:
+                cells_pair_tuple = (cell_index_so_far, cell_index_so_far + n_cells_in_seq)
+                all_cells_in_seq_tuple = tuple(range(cell_index_so_far, cell_index_so_far + n_cells_in_seq + 1))
                 for cell_and_spike_time, slopes_dict in slope_result.items():
                     best_slope, range_around = slopes_dict["max"]
                     spike_time_from_slope = cell_and_spike_time[1]
                     first_cell_spike_time = spike_time_from_slope - (cell_and_spike_time[0] * best_slope)
                     last_cell_spike_time = spike_time_from_slope + \
                                            ((n_cells_in_seq-1-cell_and_spike_time[0]) * best_slope)
-                    cells_tuple = (cell_index_so_far, cell_index_so_far + n_cells_in_seq)
-                    if cells_tuple not in lines_to_display:
-                        lines_to_display[cells_tuple] = []
-                    lines_to_display[cells_tuple].append((first_cell_spike_time, last_cell_spike_time))
+                    if cells_pair_tuple not in lines_to_display:
+                        lines_to_display[cells_pair_tuple] = []
+                    lines_to_display[cells_pair_tuple].append((first_cell_spike_time, last_cell_spike_time))
+                    if all_cells_in_seq_tuple not in seq_stat_dict:
+                        seq_stat_dict[all_cells_in_seq_tuple] = []
+                    value_for_dict = [first_cell_spike_time, last_cell_spike_time, best_slope, range_around]
+                    value_for_dict.extend(slopes_dict[(best_slope, range_around)])
+                    seq_stat_dict[all_cells_in_seq_tuple].append(value_for_dict)
             new_cell_order.extend(seq)
             seq_fusion_cells.extend(seq)
             # n_cells_in_seq += len(seq)
@@ -1051,31 +1074,9 @@ def plot_rasters_with_sequences_with_slope(spike_nums, ms, raster_dur_version,
     cells_to_add = np.setdiff1d(np.arange(n_cells), np.array(new_cell_order))
     new_cell_order.extend(list(cells_to_add))
     print(f"lines_to_display {len(lines_to_display)}: {lines_to_display}")
-    desaturate_color_according_to_normalized_amplitude = False
-    if desaturate_color_according_to_normalized_amplitude and ((ms is None) or (ms.raw_traces is None)):
-        print("desaturate_color_according_to_normalized_amplitude ms is None or raw_traces is None")
-        desaturate_color_according_to_normalized_amplitude = False
 
-    if desaturate_color_according_to_normalized_amplitude:
-        spike_nums_dur = np.zeros((n_cells, n_times))
-        traces_0_1 = np.zeros((n_cells, n_times))
-        for cell in np.arange(n_cells):
-            max_value = np.max(ms.raw_traces[cell])
-            min_value = np.min(ms.raw_traces[cell])
-            traces_0_1[cell] = (ms.raw_traces[cell] - min_value) / (max_value - min_value)
-        for cell in np.arange(n_cells):
-            periods = get_continous_time_periods(np.copy(ms.spike_struct.spike_nums_dur[cell]))
-            for period in periods:
-                spike_nums_dur[cell, period[0]:period[1] + 1] = np.max(traces_0_1[cell,
-                                                                       period[0]:period[1] + 1])
-        if raster_dur_version:
-            spike_nums = spike_nums_dur
-        else:
-            spike_nums = spike_nums.astype("float")
-            for cell, spikes in enumerate(spike_nums):
-                spike_nums[cell, spikes > 0] = spike_nums_dur[cell, spikes > 0]
 
-    desat_color = desaturate_color_according_to_normalized_amplitude
+    desat_color = False
     plot_spikes_raster(spike_nums=spike_nums[np.array(new_cell_order)], param=param,
                        spike_train_format=False,
                        file_name=f"{descr}_raster_plot_ordered_with_graph_and_slopes",
@@ -1102,6 +1103,31 @@ def plot_rasters_with_sequences_with_slope(spike_nums, ms, raster_dur_version,
                        lines_band_color="white",
                        desaturate_color_according_to_normalized_amplitude=desat_color,
                        save_formats="pdf")
+
+    desaturate_color_according_to_normalized_amplitude = True
+    if desaturate_color_according_to_normalized_amplitude and ((ms is None) or (ms.raw_traces is None)):
+        print("desaturate_color_according_to_normalized_amplitude ms is None or raw_traces is None")
+        desaturate_color_according_to_normalized_amplitude = False
+
+    if desaturate_color_according_to_normalized_amplitude:
+        spike_nums_dur = np.zeros((n_cells, n_times))
+        traces_0_1 = np.zeros((n_cells, n_times))
+        for cell in np.arange(n_cells):
+            max_value = np.max(ms.raw_traces[cell])
+            min_value = np.min(ms.raw_traces[cell])
+            traces_0_1[cell] = (ms.raw_traces[cell] - min_value) / (max_value - min_value)
+        for cell in np.arange(n_cells):
+            periods = get_continous_time_periods(np.copy(ms.spike_struct.spike_nums_dur[cell]))
+            for period in periods:
+                spike_nums_dur[cell, period[0]:period[1] + 1] = np.max(traces_0_1[cell,
+                                                                       period[0]:period[1] + 1])
+        if raster_dur_version:
+            spike_nums = spike_nums_dur
+        else:
+            spike_nums = spike_nums.astype("float")
+            for cell, spikes in enumerate(spike_nums):
+                spike_nums[cell, spikes > 0] = spike_nums_dur[cell, spikes > 0]
+    desat_color = desaturate_color_according_to_normalized_amplitude
     if desat_color:
         plot_spikes_raster(spike_nums=spike_nums[np.array(new_cell_order)], param=param,
                            spike_train_format=False,
@@ -1128,6 +1154,16 @@ def plot_rasters_with_sequences_with_slope(spike_nums, ms, raster_dur_version,
                            lines_band_color="white",
                            desaturate_color_according_to_normalized_amplitude=False,
                            save_formats="pdf")
+
+    file_name = f'{param.path_results}/significant_sorting_results_with_slope_{descr}.txt'
+    with open(file_name, "w", encoding='UTF-8') as file:
+        for cells_in_seq, rep_infos in seq_stat_dict.items():
+            file.write(f"{len(cells_in_seq)}:{len(rep_infos)}" + '\n')
+
+    save_on_file_seq_detection_results_with_slope(best_cells_order=new_cell_order,
+                                       seq_dict=seq_stat_dict,
+                                       file_name=f"significant_sorting_results_with_timestamps_with_slope_{descr}.txt",
+                                       param=param)
 
 def plot_rasters_with_sequences_without_slope(spike_nums, ms, raster_dur_version,
                                               seq_indices_list, long_seq_list, short_seq_cells, isolates_cell,
@@ -1434,3 +1470,48 @@ def save_on_file_seq_detection_results(best_cells_order, seq_dict, file_name, pa
                 if time_stamps_id < (len(value) - 1):
                     file.write("#")
             file.write("\n")
+
+
+def save_on_file_seq_detection_results_with_slope(best_cells_order, seq_dict, file_name, param):
+    """
+
+    :param best_cells_order:
+    :param seq_dict:
+    # dict to keep the number of rep of each seq depending on its size
+    # key is a tuple of int representing the cell indices of the seq
+    # value is a list of list whose first 4 values are: first_cell_spike_time, last_cell_spike_time, best_slope, range_around,
+    # and last values of the list are the indices of the cells of the sequence that have spikes in int (indices are
+    # going from 0 to the number of cells in the seq) for ex for seq: (234, 489, 211, 17) -> [0, 2] could be the
+    # indices of the cells with a spike in the seq
+    :param file_name:
+    :param param:
+    :return:
+    """
+    complete_file_name = f'{param.path_results}/{file_name}'
+    with open(complete_file_name, "w", encoding='UTF-8') as file:
+        # file.write("params:")
+        # file.write("\n")
+        file.write("best_order:")
+        for cell_id, cell in enumerate(best_cells_order):
+            file.write(f"{cell}")
+            if cell_id < (len(best_cells_order) - 1):
+                file.write(" ")
+        file.write("\n")
+        for cells, list_of_values in seq_dict.items():
+            file.write(f"#")
+            for cell_id, cell in enumerate(cells):
+                file.write(f"{cell}")
+                if cell_id < (len(cells) - 1):
+                    file.write(" ")
+            file.write("\n")
+            for value in list_of_values:
+                for i in np.arange(4):
+                    # writing values of first_cell_spike_time, last_cell_spike_time, best_slope, range_around
+                    file.write(f"{value[i]}")
+                    file.write(" ")
+                # writing the indices of cells that fire in the sequence
+                for i in np.arange(4, len(value)):
+                    file.write(f"{value[i]}")
+                    if i < (len(value) - 1):
+                        file.write(" ")
+                file.write("\n")
