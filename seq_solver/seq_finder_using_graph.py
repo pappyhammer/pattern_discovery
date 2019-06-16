@@ -381,40 +381,50 @@ def get_seq_times_from_raster_with_slopes(raster, raster_dur_version,
             slopes_list = list(range(-max_slope_by_cell_in_frames, 0, slope_step_in_frames))[::-1]
             frames_to_loop = np.arange(n_frames)[::-1]
 
-        # allows to handle raster_dur when going frame by frame, not to test the same transient
-        beg_seq_tested_cells_spike_time = dict()
+        # we need to test the different slopes, keep all the successful ones
+        # and identify the longest one
+        # and then remove the spikes/transients from those slopes in the raster
+        for actual_slope in slopes_list:
+            # allows to handle raster_dur when going frame by frame, not to test the same transient
+            beg_seq_tested_cells_spike_time = dict()
 
-        # we loop frame by frame
-        for frame in frames_to_loop:
-            for cell in np.arange(n_cells):
-                # if we aready have too many errors, we break, and go to next frame
-                if cell > max_n_errors:
-                    break
-                # if there is no spike there, we go to next cell
-                if raster[cell, frame] == 0:
-                    continue
-                spike_time = frame
-                active_frames = np.array([spike_time])
-                if raster_dur_version:
-                    transient_id = raster_with_transients_numeroted[cell, frame]
-                    if transient_id == -1:
-                        print("transient_id == -1: not normal")
-                    active_frames = np.where(raster_with_transients_numeroted[cell, :] == transient_id)[0]
-                    # spike_time will be the middle of the transient
-                    if len(active_frames) == 1:
-                        spike_time = active_frames[0]
-                    else:
-                        spike_time = active_frames[len(active_frames) // 2]
-                    # if we already tested this transient as first choice for a seq, then we skip it
-                    if (cell, spike_time) not in beg_seq_tested_cells_spike_time:
-                        beg_seq_tested_cells_spike_time[(cell, spike_time)] = True
-                    else:
+            # we loop frame by frame
+            for frame in frames_to_loop:
+                for cell in np.arange(n_cells):
+                    # if we aready have too many errors, we break, and go to next frame
+                    if cell > max_n_errors:
+                        break
+                    # if there is no spike there, we go to next cell
+                    if raster[cell, frame] == 0:
                         continue
-                best_n_cells_for_actual_slope = 0
-                # then we need to test the different slopes, keep all the successful ones
-                # and identify the longest one
-                # and then remove the spikes/transients from those slopes in the raster
-                for actual_slope in slopes_list:
+                    spike_time = frame
+                    active_frames = np.array([spike_time])
+                    if raster_dur_version:
+                        transient_id = raster_with_transients_numeroted[cell, frame]
+                        if transient_id == -1:
+                            print("transient_id == -1: not normal")
+                        active_frames = np.where(raster_with_transients_numeroted[cell, :] == transient_id)[0]
+                        # spike_time will be the middle of the transient
+                        if len(active_frames) == 1:
+                            spike_time = active_frames[0]
+                        else:
+                            spike_time = active_frames[len(active_frames) // 2]
+                        # if we already tested this transient as first choice for a seq, then we skip it
+                        if (cell, spike_time) not in beg_seq_tested_cells_spike_time:
+                            beg_seq_tested_cells_spike_time[(cell, spike_time)] = True
+                        else:
+                            continue
+
+                    best_n_cells_for_actual_slope = 0
+                    # we could either loop for slopes for each cell spike times
+                    # or go to all spikes times with the same slope then try with other slope
+                    # but then we can keep the longest one
+
+                    # we need to test the different slopes, keep all the successful ones
+                    # and identify the longest one
+                    # and then remove the spikes/transients from those slopes in the raster
+                    # for actual_slope in slopes_list:
+
                     # we want to get the range of under which we are looking for the next cells activation
                     # for a given slope and a given spike time for cell
                     slope_ranges = define_slope_range_for_cells(first_cell=cell, last_cell=n_cells - 1,
@@ -465,14 +475,18 @@ def get_seq_times_from_raster_with_slopes(raster, raster_dur_version,
                     if (cell, spike_time) not in slope_result:
                         slope_result[(cell, spike_time)] = dict()
                     slope_result[(cell, spike_time)][(actual_slope, range_around_slope_in_frames)] = cells_in_slope
-                    if len(cells_in_slope) > best_n_cells_for_actual_slope:
-                        best_n_cells_for_actual_slope = len(cells_in_slope)
-                        slope_result[(cell, spike_time)]["max"] = (actual_slope, range_around_slope_in_frames)
-                        slope_result[(cell, spike_time)]["spikes_in_seq"] = raster_mask
-                # now removing the transients involved in the best seq
-                if (cell, spike_time) in slope_result:
-                    raster_mask = slope_result[(cell, spike_time)]["spikes_in_seq"]
-                    raster[raster_mask] = 0
+                    # if loop on slope after the cells loop
+                    # if len(cells_in_slope) > best_n_cells_for_actual_slope:
+                    #     best_n_cells_for_actual_slope = len(cells_in_slope)
+                    #     slope_result[(cell, spike_time)]["max"] = (actual_slope, range_around_slope_in_frames)
+                    #     slope_result[(cell, spike_time)]["spikes_in_seq"] = raster_mask
+                    # if loop on slope before the frames loop
+                    slope_result[(cell, spike_time)]["max"] = (actual_slope, range_around_slope_in_frames)
+                    slope_result[(cell, spike_time)]["spikes_in_seq"] = raster_mask
+                    # now removing the transients involved in the best seq
+                    if (cell, spike_time) in slope_result:
+                        raster_mask = slope_result[(cell, spike_time)]["spikes_in_seq"]
+                        raster[raster_mask] = 0
     return slope_result
 
 
