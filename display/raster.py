@@ -6,6 +6,7 @@ import matplotlib.cm as cm
 import os
 import seaborn as sns
 from matplotlib import patches
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 def plot_dendogram_from_fca(cluster_tree, nb_cells, save_plot, axes_list=None, fig_to_use=None, file_name="",
@@ -78,6 +79,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        y_ticks_labels_size=None,
                        y_ticks_labels_color="white",
                        x_ticks_labels_color="white",
+                       hide_x_labels=False,
                        figure_background_color="black",
                        without_ticks=True,
                        save_raster=False,
@@ -88,6 +90,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        span_area_coords=None,
                        span_area_colors=None,
                        span_area_only_on_raster=True,
+                       alpha_span_area=0.5,
                        cells_to_highlight=None,
                        cells_to_highlight_colors=None,
                        color_peaks_activity=False,
@@ -134,7 +137,8 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        lines_color="white",
                        lines_width=1,
                        lines_band=0,
-                       lines_band_color="white"
+                       lines_band_color="white",
+                       use_brewer_colors_for_traces=False
                        ):
     """
     Plot or save a raster given a 2d array either binary representing onsets, peaks or rising time, or made of float
@@ -214,6 +218,14 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
     :return: 
     """
 
+    # qualitative 12 colors : http://colorbrewer2.org/?type=qualitative&scheme=Paired&n=12
+    # + 11 diverting
+    brewer_colors = ['#a6cee3', '#1f78b4', '#b2df8a', '#33a02c', '#fb9a99', '#e31a1c', '#fdbf6f',
+                     '#ff7f00', '#cab2d6', '#6a3d9a', '#ffff99', '#b15928', '#a50026', '#d73027',
+                     '#f46d43', '#fdae61', '#fee090', '#ffffbf', '#e0f3f8', '#abd9e9',
+                     '#74add1', '#4575b4', '#313695']
+    brewer_colors = brewer_colors[::-1]
+
     if (spike_nums is None) and (traces is None):
         return
 
@@ -286,7 +298,10 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
     if display_traces:
         n_times = len(traces[0, :])
         for cell, trace in enumerate(traces):
-            color = cm.nipy_spectral(((cell % max_n_color) + 1) / (max_n_color + 1))
+            if use_brewer_colors_for_traces:
+                color = brewer_colors[cell % len(brewer_colors)]
+            else:
+                color = cm.nipy_spectral(((cell % max_n_color) + 1) / (max_n_color + 1))
             ax1.plot(np.arange(n_times), trace + cell, lw=traces_lw, color=color, zorder=20)
             line_beg_x = -1
             line_end_x = n_times + 1
@@ -366,13 +381,13 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                          linewidth=lines_width, zorder=30, alpha=1)
                 if lines_band > 0:
                     xy = np.zeros((4, 2))
-                    xy[0, 0] = spike_times[0]- lines_band
+                    xy[0, 0] = spike_times[0] - lines_band
                     xy[0, 1] = cells_tuple[0]
-                    xy[1, 0] = spike_times[1]- lines_band
+                    xy[1, 0] = spike_times[1] - lines_band
                     xy[1, 1] = cells_tuple[1]
-                    xy[2, 0] = spike_times[1]+ lines_band
+                    xy[2, 0] = spike_times[1] + lines_band
                     xy[2, 1] = cells_tuple[1]
-                    xy[3, 0] = spike_times[0]+ lines_band
+                    xy[3, 0] = spike_times[0] + lines_band
                     xy[3, 1] = cells_tuple[0]
                     band_patch = patches.Polygon(xy=xy,
                                                  fill=True,
@@ -515,7 +530,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                     color = span_area_colors[index]
                 else:
                     color = "lightgrey"
-                ax1.axvspan(coord[0], coord[1], alpha=0.5, facecolor=color, zorder=1)
+                ax1.axvspan(coord[0], coord[1], alpha=alpha_span_area, facecolor=color, zorder=1)
 
     if (span_cells_to_highlight is not None):
         for index, cell_to_span in enumerate(span_cells_to_highlight):
@@ -552,12 +567,10 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
         ax1.set_xlim(-1, n_times + 1)
     # ax1.margins(x=0, tight=True)
 
-    if not without_activity_sum:
+    if not without_activity_sum or hide_x_labels:
         ax1.get_xaxis().set_visible(False)
 
-    if title is None:
-        ax1.set_title('Spikes raster plot')
-    else:
+    if title is not None:
         ax1.set_title(title)
     # Give x axis label for the spike raster plot
     # ax.xlabel('Frames')
@@ -806,8 +819,18 @@ def plot_sum_active_clusters(clusters_activations,
     plt.close()
 
 
-def plot_with_imshow(raster, path_results, file_name, n_subplots=4,
-                     values_to_plot=None, cmap="hot", show_fig=False, save_formats="pdf"):
+def plot_with_imshow(raster, path_results=None, file_name=None, n_subplots=4, axes_list=None,
+                     y_ticks_labels=None, y_ticks_labels_size=None,
+                     fig=None, show_color_bar=False, hide_x_labels=True, without_ticks=True,
+                     vmin=0.5, vmax=1, x_ticks_labels_color="white", y_ticks_labels_color="white",
+                     values_to_plot=None, cmap="hot", show_fig=False, save_formats="pdf",
+                     lines_to_display=None,
+                     lines_color="white",
+                     lines_width=1,
+                     lines_band=0,
+                     lines_band_color="white",
+                     lines_band_alpha=0.5
+                     ):
     """
 
     :param raster: a 2-d array, 1d represents the cells, 2nd the times
@@ -817,28 +840,92 @@ def plot_with_imshow(raster, path_results, file_name, n_subplots=4,
     :return:
     """
     n_cells, n_times = raster.shape
-    fig, axes = plt.subplots(nrows=4, ncols=1,
-                             gridspec_kw={'height_ratios': [0.25, 0.25, 0.25, 0.25],
-                                          'width_ratios': [1]},
-                             figsize=(15, 6))
+    background_color = "black"
+    if axes_list is None:
+        fig, axes = plt.subplots(nrows=n_subplots, ncols=1,
+                                 gridspec_kw={'height_ratios': [1 / n_subplots] * n_subplots,
+                                              'width_ratios': [1]},
+                                 figsize=(15, 6))
+        fig.patch.set_facecolor(background_color)
+    else:
+        axes = axes_list
     for ax_index, ax in enumerate(axes):
-        ax.imshow(raster[:, (n_times // n_subplots) * ax_index:(n_times // n_subplots) * (ax_index + 1)],
-                  cmap=plt.get_cmap(cmap), aspect='auto', vmin=0, vmax=0.5)
-        ax.axis('image')
+        ax.set_facecolor(background_color)
+        im = ax.imshow(raster[:, (n_times // n_subplots) * ax_index:(n_times // n_subplots) * (ax_index + 1)],
+                       cmap=plt.get_cmap(cmap), aspect='auto', vmin=vmin, vmax=vmax)
+        # ax.axis('image')
+        if hide_x_labels:
+            ax.get_xaxis().set_visible(False)
+        ax.yaxis.label.set_color(y_ticks_labels_color)
+        ax.xaxis.label.set_color(x_ticks_labels_color)
+        ax.tick_params(axis='y', colors=y_ticks_labels_color)
+        ax.tick_params(axis='x', colors=x_ticks_labels_color)
+        if without_ticks:
+            ax.tick_params(axis='both', which='both', length=0)
+        if y_ticks_labels is not None:
+            ax.set_yticks(np.arange(raster.shape[0]))
+            ax.set_yticklabels(y_ticks_labels[:])
+        if y_ticks_labels_size is not None:
+            ax.yaxis.set_tick_params(labelsize=y_ticks_labels_size)
+
         # ax.axis('off')
     # extent=[0, 10, 0, 1],
     # ax1.imshow(,  cmap=plt.get_cmap("hot")) # extent=[0, 1, 0, 1],
     # sns.heatmap(amplitude_spike_nums_ordered[:max_index_seq + 1, :],
     #             cbar=False, ax=ax1, cmap=plt.get_cmap("hot"), rasterized=True) #
+    if show_color_bar and (fig is not None):
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes('right', size='5%', pad=0.05)
+        cb = fig.colorbar(im, cax=cax, orientation='vertical')
+        cb.ax.tick_params(axis='y', colors="white")
 
-    if show_fig:
-        plt.show()
+    if lines_to_display is not None and n_subplots == 1:
+        """
+        lines_to_display=None,
+                       lines_color="white",
+                       lines_width=1,
+                       lines_band=0,
+                       lines_band_color="white"
+                       dict that takes for a key a tuple of int representing 2 cells, and as value a list of tuple of 2 float
+    representing the 2 extremities of a line between those 2 cells. By defualt, no lines
+        """
+        ax = axes[0]
+        for cells_tuple, spike_times_list in lines_to_display.items():
+            for spike_times in spike_times_list:
+                # ax.plot(list(spike_times), list(cells_tuple),
+                #          color=lines_color,
+                #          linewidth=lines_width, zorder=30, alpha=1)
+                if lines_band > 0:
+                    xy = np.zeros((4, 2))
+                    xy[0, 0] = spike_times[0] - lines_band
+                    xy[0, 1] = cells_tuple[0]
+                    xy[1, 0] = spike_times[1] - lines_band
+                    xy[1, 1] = cells_tuple[1]
+                    xy[2, 0] = spike_times[1] + lines_band
+                    xy[2, 1] = cells_tuple[1]
+                    xy[3, 0] = spike_times[0] + lines_band
+                    xy[3, 1] = cells_tuple[0]
+                    band_patch = patches.Polygon(xy=xy,
+                                                 fill=True,
+                                                 # linewidth=line_width,
+                                                 facecolor=lines_band_color,
+                                                 # edgecolor=edge_color,
+                                                 alpha=lines_band_alpha,
+                                                 zorder=10)  # lw=2
+                    ax.add_patch(band_patch)
+    for ax in axes:
+        ax.set_ylim(ax.get_ylim()[::-1])
 
-    if isinstance(save_formats, str):
-        save_formats = [save_formats]
+    if axes_list is None:
+        if show_fig:
+            plt.show()
+        if (path_results is not None) and (file_name is not None):
+            if isinstance(save_formats, str):
+                save_formats = [save_formats]
 
-    for save_format in save_formats:
-        fig.savefig(f'{path_results}/{file_name}.{save_format}',
-                    format=f"{save_format}")
+            for save_format in save_formats:
+                fig.savefig(f'{path_results}/{file_name}.{save_format}',
+                            format=f"{save_format}",
+                                        facecolor=fig.get_facecolor())
 
-    plt.close()
+        plt.close()

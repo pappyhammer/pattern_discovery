@@ -1,6 +1,6 @@
 import numpy as np
 from pattern_discovery.tools.signal import gaussblur1D, norm01, gauss_blur
-from pattern_discovery.display.raster import plot_with_imshow
+from pattern_discovery.display.raster import plot_spikes_raster, plot_with_imshow
 from skimage.filters import threshold_otsu
 import scipy
 import sys
@@ -134,7 +134,7 @@ def step1_pca(data, n_pc_max):
     # data has been normalized
     return data, pc_cout
 
-def find_seq_with_pca(traces, path_results, file_name, speed=None):
+def find_seq_with_pca(ms, traces, path_results, file_name, speed=None):
     if traces is None:
         print(f"traces should not be None")
         return
@@ -196,8 +196,33 @@ def find_seq_with_pca(traces, path_results, file_name, speed=None):
 
         print("find_seq_with_pca done")
         plot_with_imshow(raster=traces_dc[sorted_indices], path_results=path_results,
-                         file_name=file_name + f"_pc_{pc_number}", n_subplots=4,
-                         values_to_plot=None, cmap="hot", show_fig=True, save_formats="pdf")
+                         y_ticks_labels_size=0.1,
+                         y_ticks_labels=sorted_indices,
+                         vmin=0.1, hide_x_labels=False,
+                         file_name=file_name + f"_pc_{pc_number}",
+                         n_subplots=4,
+                         values_to_plot=None, cmap="hot", show_fig=False,
+                         save_formats="pdf")
+
+        spike_shape = 'o'
+        if ms.spike_struct.spike_nums is None:
+            continue
+        n_cells = len(ms.spike_struct.spike_nums)
+        plot_spikes_raster(spike_nums=ms.spike_struct.spike_nums[sorted_indices], param=ms.param,
+                           spike_train_format=False,
+                           size_fig=(10, 2),
+                           file_name=file_name + f"raster_dur__pc_{pc_number}",
+                           y_ticks_labels=sorted_indices,
+                           y_ticks_labels_size=1,
+                           save_raster=True,
+                           show_raster=False,
+                           plot_with_amplitude=False,
+                           without_activity_sum=True,
+                           show_sum_spikes_as_percentage=False,
+                           span_area_only_on_raster=False,
+                           spike_shape=spike_shape,
+                           spike_shape_size=0.5,
+                           save_formats=["pdf"])
 
         with open(os.path.join(path_results, file_name + f"_pc_{pc_number}.txt"), "w", encoding='UTF-8') as file:
             file.write(f"Sorted cells" + '\n')
