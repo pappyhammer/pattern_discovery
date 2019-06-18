@@ -271,8 +271,8 @@ class CoordClass:
                        cells_groups_alpha=None,
                        cells_to_hide=None, img_on_background=None,
                        cells_groups_edge_colors=None, with_edge=False,
-                       with_cell_numbers=False, save_formats="png",
-                       save_plot=True, return_fig=False):
+                       with_cell_numbers=False, text_size=6, save_formats="png",
+                       save_plot=True, return_fig=False, ax_to_use=None):
         """
 
         :param connections_dict: key is an int representing a cell number, and value is a dict representing the cells it
@@ -295,13 +295,15 @@ class CoordClass:
                 cells_in_groups.extend(cells_group)
         cells_in_groups = np.array(cells_in_groups)
         cells_not_in_groups = np.setdiff1d(np.arange(n_cells), cells_in_groups)
+        if ax_to_use is None:
+            fig, ax = plt.subplots(nrows=1, ncols=1,
+                                   gridspec_kw={'height_ratios': [1]},
+                                   figsize=(20, 20))
 
-        fig, ax = plt.subplots(nrows=1, ncols=1,
-                               gridspec_kw={'height_ratios': [1]},
-                               figsize=(20, 20))
-
-        fig.patch.set_facecolor(background_color)
-        ax.set_facecolor(background_color)
+            fig.patch.set_facecolor(background_color)
+            ax.set_facecolor(background_color)
+        else:
+            ax = ax_to_use
 
         if img_on_background is not None:
             print(f"np.mean(img_on_background) {np.mean(img_on_background)}")
@@ -343,7 +345,8 @@ class CoordClass:
                                                         zorder=z_order_cells) # lw=2
                     ax.add_patch(self.cell_contour)
                     if with_cell_numbers:
-                        self.plot_text_cell(cell=cell, cell_numbers_color=cell_numbers_color)
+                        self.plot_text_cell(cell=cell, cell_numbers_color=cell_numbers_color, ax=ax,
+                                            text_size=text_size)
 
         for cell in cells_not_in_groups:
             if cell in cells_to_hide:
@@ -356,11 +359,12 @@ class CoordClass:
                                                 fill=not dont_fill_cells_not_in_groups,
                                                 linewidth=0, facecolor=default_cells_color,
                                                 edgecolor=default_edge_color,
-                                                zorder=z_order_cells, lw=2)
+                                                zorder=z_order_cells, lw=edge_line_width)
             ax.add_patch(self.cell_contour)
 
             if with_cell_numbers:
-                self.plot_text_cell(cell=cell, cell_numbers_color=cell_numbers_color)
+                self.plot_text_cell(cell=cell, cell_numbers_color=cell_numbers_color, ax=ax,
+                                    text_size=text_size)
 
         ax.set_ylim(0, self.nb_lines)
         ax.set_xlim(0, self.nb_col)
@@ -421,32 +425,35 @@ class CoordClass:
         # ax.yaxis.set_ticks_position('none')
         #  :param plot_option: if 0: plot n_out and n_int, if 1 only n_out, if 2 only n_in, if 3: only n_out with dotted to
         # show the commun n_in and n_out, if 4: only n_in with dotted to show the commun n_in and n_out,
-        if save_plot:
-            if isinstance(save_formats, str):
-                save_formats = [save_formats]
-            for save_format in save_formats:
-                fig.savefig(f'{param.path_results}/{data_id}_cell_maps_{title_option}'
-                            f'_{param.time_str}.{save_format}',
-                            format=f"{save_format}",
-                            facecolor=fig.get_facecolor())
-        if return_fig:
-            return fig
-        else:
-            plt.close()
+        if ax_to_use is None:
+            if save_plot:
+                if isinstance(save_formats, str):
+                    save_formats = [save_formats]
+                for save_format in save_formats:
+                    fig.savefig(f'{param.path_results}/{data_id}_cell_maps_{title_option}'
+                                f'_{param.time_str}.{save_format}',
+                                format=f"{save_format}",
+                                facecolor=fig.get_facecolor())
+            if return_fig:
+                return fig
+            else:
+                plt.close()
 
-    def plot_text_cell(self, cell, cell_numbers_color):
-        fontsize = 6
+    def plot_text_cell(self, cell, ax, cell_numbers_color, text_size):
+        fontsize = text_size
         if cell >= 100:
-            fontsize = 4
+            fontsize -= 2
+            fontsize = max(0.5, fontsize)
         elif cell >= 10:
-            fontsize = 5
+            fontsize -= 1
+            fontsize = max(1, fontsize)
 
         c_x_c = self.center_coord[cell][0]
         c_y_c = self.center_coord[cell][1]
 
-        plt.text(x=c_x_c, y=c_y_c,
+        ax.text(x=c_x_c, y=c_y_c,
                  s=f"{cell}", color=cell_numbers_color, zorder=22,
-                 ha='center', va="center", fontsize=fontsize + 2, fontweight='bold')
+                 ha='center', va="center", fontsize=fontsize, fontweight='bold')
 
     def get_cell_new_coord_in_source(self, cell, minx, miny):
         coord = self.coord[cell]

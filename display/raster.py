@@ -79,6 +79,9 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        y_ticks_labels_size=None,
                        y_ticks_labels_color="white",
                        x_ticks_labels_color="white",
+                       x_ticks_labels=None,
+                       x_ticks_labels_size=None,
+                       x_ticks=None,
                        hide_x_labels=False,
                        figure_background_color="black",
                        without_ticks=True,
@@ -121,7 +124,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        seq_colors=None, debug_mode=False,
                        axes_list=None,
                        SCE_times=None,
-                       ylabel="Cells (#)",
+                       ylabel=None,
                        without_activity_sum=False,
                        spike_nums_for_activity_sum=None,
                        spikes_sum_to_use=None,
@@ -471,12 +474,18 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
             seq_count += 1
 
     if display_traces:
-        ax1.set_ylim(-2, n_cells + 4)
+        ax1.set_ylim(-0.5, n_cells + 4)
     else:
-        ax1.set_ylim(-1, n_cells)
+        ax1.set_ylim(-0.5, n_cells)
     if y_ticks_labels is not None:
         ax1.set_yticks(np.arange(n_cells))
         ax1.set_yticklabels(y_ticks_labels)
+    if (x_ticks_labels is not None) and (x_ticks is not None):
+        ax1.set_xticks(x_ticks)
+        ax1.tick_params('x', length=2, width=0.5, which='both')
+        ax1.set_xticklabels(x_ticks_labels, rotation=45) # ha="right", va="center
+    if x_ticks_labels_size is not None:
+        ax1.xaxis.set_tick_params(labelsize=x_ticks_labels_size)
     if y_ticks_labels_size is not None:
         ax1.yaxis.set_tick_params(labelsize=y_ticks_labels_size)
     else:
@@ -492,7 +501,10 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
             y_ticks_labels_size = 0.1
         ax1.yaxis.set_tick_params(labelsize=y_ticks_labels_size)
     if without_ticks:
-        ax1.tick_params(axis='both', which='both', length=0)
+        if x_ticks is not None:
+            ax1.tick_params(axis='y', which='both', length=0)
+        else:
+            ax1.tick_params(axis='both', which='both', length=0)
 
     if seq_times_to_color_dict is not None:
         if link_seq_color is not None:
@@ -575,7 +587,8 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
     # Give x axis label for the spike raster plot
     # ax.xlabel('Frames')
     # Give y axis label for the spike raster plot
-    ax1.set_ylabel(ylabel)
+    if ylabel is not None:
+        ax1.set_ylabel(ylabel)
 
     # ax1.spines['left'].set_color(y_ticks_labels_color)
     # ax1.spines['bottom'].set_color(x_ticks_labels_color)
@@ -821,6 +834,7 @@ def plot_sum_active_clusters(clusters_activations,
 
 def plot_with_imshow(raster, path_results=None, file_name=None, n_subplots=4, axes_list=None,
                      y_ticks_labels=None, y_ticks_labels_size=None,
+                     speed_array=None,
                      fig=None, show_color_bar=False, hide_x_labels=True, without_ticks=True,
                      vmin=0.5, vmax=1, x_ticks_labels_color="white", y_ticks_labels_color="white",
                      values_to_plot=None, cmap="hot", show_fig=False, save_formats="pdf",
@@ -840,6 +854,9 @@ def plot_with_imshow(raster, path_results=None, file_name=None, n_subplots=4, ax
     :return:
     """
     n_cells, n_times = raster.shape
+
+    if (speed_array is not None) and (speed_array.shape[0] != n_times):
+        speed_array = None
     background_color = "black"
     if axes_list is None:
         fig, axes = plt.subplots(nrows=n_subplots, ncols=1,
@@ -853,6 +870,10 @@ def plot_with_imshow(raster, path_results=None, file_name=None, n_subplots=4, ax
         ax.set_facecolor(background_color)
         im = ax.imshow(raster[:, (n_times // n_subplots) * ax_index:(n_times // n_subplots) * (ax_index + 1)],
                        cmap=plt.get_cmap(cmap), aspect='auto', vmin=vmin, vmax=vmax)
+        if speed_array is not None:
+            ax.plot(np.arange(0, (n_times // n_subplots)), speed_array[(n_times // n_subplots) * ax_index:
+                                                                       (n_times // n_subplots) * (ax_index + 1)],
+                    color="cornflowerblue", lw=0.1, zorder=20)
         # ax.axis('image')
         if hide_x_labels:
             ax.get_xaxis().set_visible(False)

@@ -1301,9 +1301,9 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
     # CellP means cell positives, and R means ratio (CellR gives for each cell the
     # percentage of sce during which it's active inside a cluster of SCE.
     cas = cell_assemblies_struct
-    if debug_mode:
-        for n_id, neuron_label in enumerate(cas.neurons_labels):
-            print(f"{n_id} -> {neuron_label}")
+    # if debug_mode:
+    #     for n_id, neuron_label in enumerate(cas.neurons_labels):
+    #         print(f"{n_id} -> {neuron_label}")
     sce_clusters_id = cas.sce_clusters_id
     sce_clusters_labels = cas.sce_clusters_labels
     cellsinpeak = cas.cellsinpeak
