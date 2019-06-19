@@ -115,6 +115,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        cell_spikes_color='white',
                        activity_sum_plot_color="white",
                        activity_sum_face_color="black",
+                       y_lim_sum_activity=None,
                        seq_times_to_color_dict=None,
                        link_seq_categories=None,
                        link_seq_color=None, min_len_links_seq=3,
@@ -716,6 +717,10 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
         # ax2.yaxis.set_visible(False)
         ax2.set_frame_on(False)
         ax2.get_xaxis().set_visible(True)
+        if y_lim_sum_activity is not None:
+            ax2.set_ylim(y_lim_sum_activity[0], y_lim_sum_activity[1])
+        else:
+            ax2.set_ylim(0, np.max(sum_spikes))
         if spike_train_format:
             ax2.set_xlim(min_time - 1, max_time + 1)
         else:
@@ -746,7 +751,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
             else:
                 ax_top.xaxis.set_tick_params(labelsize=4)
         # print(f"max sum_spikes {np.max(sum_spikes)}, mean  {np.mean(sum_spikes)}, median {np.median(sum_spikes)}")
-        ax2.set_ylim(0, np.max(sum_spikes))
+
         if without_ticks:
             ax2.tick_params(axis='both', which='both', length=0)
         ax2.yaxis.label.set_color(y_ticks_labels_color)
