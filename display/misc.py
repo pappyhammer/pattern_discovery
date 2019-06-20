@@ -272,8 +272,8 @@ xticks_labelsize=10, yticks_labelsize=10, x_label_font_size=15, y_label_font_siz
 
         plt.close()
 
-def plot_scatters(x_coords, y_coords, size_scatter=30, ax_to_use=None, color_to_use=None, legend_str="",
-                  xlabel="", ylabel="", filename_option="",
+def plot_scatters(x_coords, y_coords, param=None, size_scatter=30, ax_to_use=None, color_to_use=None, legend_str="",
+                  xlabel="", ylabel="", filename_option="", y_lim=None, x_lim=None,
                   save_formats="pdf"):
     if (color_to_use is None):
         color = "cornflowerblue"
@@ -296,6 +296,12 @@ def plot_scatters(x_coords, y_coords, size_scatter=30, ax_to_use=None, color_to_
 
     ax.tick_params(axis='y', colors="white")
     ax.tick_params(axis='x', colors="white")
+
+    if y_lim is not None:
+        ax.set_ylim(y_lim[0], y_lim[1])
+
+    if x_lim is not None:
+        ax.set_xlim(x_lim[0], x_lim[1])
 
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)

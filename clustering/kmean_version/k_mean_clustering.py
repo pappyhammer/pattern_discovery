@@ -1330,8 +1330,8 @@ def statistical_cell_assemblies_def(cell_assemblies_struct,
         # Random distribution among Clusters
         r_clr = np.zeros((n_sce_clusters, n_surrogate))
         # number of random values to apply, look at how many times the cell spikes in a SCE
-        n_rnd = np.sum(cellsinpeak[cell, :])
-        print(f"n_rnd {n_rnd}")
+        n_rnd = int(np.sum(cellsinpeak[cell, :]))
+        # print(f"n_rnd {n_rnd}")
 
         for surrogate in np.arange(n_surrogate):
             rand_perm = np.random.permutation(n_sces)
