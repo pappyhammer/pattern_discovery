@@ -140,6 +140,32 @@ def find_seq_with_pca(ms, traces, path_results, file_name, speed=None):
         return
 
     n_cells, n_times = traces.shape
+
+    if ms.pca_seq_cells_order is not None:
+        pc3 = "151 51 293 46 67 90 93 60 165 231 283 108 132 117 140 58 155 186 29 10 254 100 45 298 217 86 61 163 68 125 52 53 32 89 109 213 180 122 27 147 207 3 126 302 202 178 92 99 297 118 247 130 31 72 104 103 189 269 203 101 185 78 168 195 184 226 21 303 15 129 239 66 121 187 81 115 20 172 138 216 237 182 28 223 149 280 229 246 120 176 83 292 198 128 173 188 263 54 296 112 13 6 16 0 281 222 136 26 190 44 245 224 102 17 288 193 48 23 256 143 158 157 43 36 167 74 299 209 22 191 85 250 261 42 82 276 201 5 127 95 242 274 275 148 152 39 14 7 139 40 71 64 249 18 135 253 206 289 208 272 277 19 69 290 65 70 279 76 11 199 80 8 257 241 260 1 2 4 144 75 59 232 194 84 234 240 49 170 62 98 153 175 181 134 215 244 160 131 197 300 219 270 278 97 221 225 220 212 156 255 164 236 106 169 57 179 271 304248 9 287 285 88 114 30 259 110 91 192 171 211 228 258 55 105 301 204 124 24 63 142 262 196 218 238 96 282 235 251 77 137 227 56 145 200 119 111 230 162 154 79 273 205 12 34 133 214 161 252 47 243 286 38 266 166 37 94 146 294 267 50 174 210 268 233 116 183 264 291 159 123 25 107 150 141 113 265 87 177 41 35 73 33 284 295"
+        pc3 = [int(x) for x in pc3.split()]
+        print(f"len(pc3) {len(pc3)}")
+        print(f"find_seq_with_pca for {ms.description} using matlab results")
+        print(f"pca_seq_cells_order: {len(ms.pca_seq_cells_order)}")
+        print(f"len diff: {len(np.setdiff1d(ms.pca_seq_cells_order, pc3))}")
+        traces_dc = traces[ms.pca_seq_cells_order, :]
+
+        for i in np.arange(len(traces_dc)):
+            traces_dc[i, :] = norm01(gaussblur1D(traces_dc[i, :], n_times / 2, 0))
+            traces_dc[i, :] = norm01(traces_dc[i, :])
+            traces_dc[i, :] = traces_dc[i, :] - np.median(traces_dc[i, :])
+        plot_with_imshow(raster=traces_dc, path_results=path_results,
+                         y_ticks_labels_size=0.1,
+                         x_ticks_labels_size=5,
+                         y_ticks_labels=ms.pca_seq_cells_order,
+                         file_name=file_name + f"_matlab_version",
+                         n_subplots=4,
+                         without_ticks=False,
+                         vmin=0, vmax=0.5, hide_x_labels=False,
+                         values_to_plot=None, cmap="hot", show_fig=False,
+                         save_formats="pdf")
+        return
+
     dt = 200
     np_pc_max = 10
     arnaud_version = True
@@ -198,7 +224,9 @@ def find_seq_with_pca(ms, traces, path_results, file_name, speed=None):
         plot_with_imshow(raster=traces_dc[sorted_indices], path_results=path_results,
                          y_ticks_labels_size=0.1,
                          y_ticks_labels=sorted_indices,
-                         vmin=0.1, hide_x_labels=False,
+                         without_ticks=False,
+                         x_ticks_labels_size=5,
+                         vmin=0, vmax=0.5, hide_x_labels=False,
                          file_name=file_name + f"_pc_{pc_number}",
                          n_subplots=4,
                          values_to_plot=None, cmap="hot", show_fig=False,

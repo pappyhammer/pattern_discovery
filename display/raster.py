@@ -142,7 +142,8 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        lines_width=1,
                        lines_band=0,
                        lines_band_color="white",
-                       use_brewer_colors_for_traces=False
+                       use_brewer_colors_for_traces=False,
+                       dpi=100
                        ):
     """
     Plot or save a raster given a 2d array either binary representing onsets, peaks or rising time, or made of float
@@ -255,15 +256,15 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
         if not plot_with_amplitude:
             if without_activity_sum:
                 fig, ax1 = plt.subplots(nrows=1, ncols=1, sharex=False,
-                                        figsize=size_fig)
+                                        figsize=size_fig, dpi=dpi)
             else:
                 sharex = True  # False if (SCE_times is None) else True
                 fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=sharex,
                                                gridspec_kw={'height_ratios': [10, 2]},
-                                               figsize=size_fig)
+                                               figsize=size_fig, dpi=dpi)
             fig.set_tight_layout({'rect': [0, 0, 1, 0.95], 'pad': 1.5, 'h_pad': 1.5})
         else:
-            fig = plt.figure(figsize=size_fig)
+            fig = plt.figure(figsize=size_fig, dpi=dpi)
             fig.set_tight_layout({'rect': [0, 0, 1, 1], 'pad': 1, 'h_pad': 1})
             outer = gridspec.GridSpec(1, 2, width_ratios=[100, 1])  # , wspace=0.2, hspace=0.2)
         fig.patch.set_facecolor(figure_background_color)
@@ -301,12 +302,14 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
     max_n_color = 10
     if display_traces:
         n_times = len(traces[0, :])
+        zorder_traces = 20 + len(traces)
         for cell, trace in enumerate(traces):
             if use_brewer_colors_for_traces:
                 color = brewer_colors[cell % len(brewer_colors)]
             else:
                 color = cm.nipy_spectral(((cell % max_n_color) + 1) / (max_n_color + 1))
-            ax1.plot(np.arange(n_times), trace + cell, lw=traces_lw, color=color, zorder=20)
+            ax1.plot(np.arange(n_times), trace + cell, lw=traces_lw, color=color, zorder=zorder_traces)
+            zorder_traces -= 1
             line_beg_x = -1
             line_end_x = n_times + 1
             ax1.hlines(cell, line_beg_x, line_end_x, lw=0.1, linestyles="dashed", color=color, zorder=15)
@@ -362,12 +365,13 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                     colors_list = [sns.desaturate(x, p) for x, p in
                                    zip([color_neuron] * n_spikes, spikes[neuron_times])]
                     ax1.vlines(neuron_times, cell - .5, cell + .5, color=colors_list,
-                               linewidth=0.5, zorder=20)
+                               linewidth=spike_shape_size, zorder=20)
                 elif plot_with_amplitude:
                     ax1.vlines(neuron_times, cell - .5, cell + .5, color=scalar_map.to_rgba(spikes[spikes > 0]),
-                               linewidth=0.5, zorder=20)
+                               linewidth=spike_shape_size, zorder=20)
                 else:
-                    ax1.vlines(neuron_times, cell - .5, cell + .5, color=color_neuron, linewidth=0.5, zorder=20)
+                    ax1.vlines(neuron_times, cell - .5, cell + .5, color=color_neuron, linewidth=spike_shape_size,
+                               zorder=20)
     if lines_to_display is not None:
         """
         lines_to_display=None,
@@ -484,7 +488,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
     if (x_ticks_labels is not None) and (x_ticks is not None):
         ax1.set_xticks(x_ticks)
         ax1.tick_params('x', length=2, width=0.5, which='both')
-        ax1.set_xticklabels(x_ticks_labels, rotation=45) # ha="right", va="center
+        ax1.set_xticklabels(x_ticks_labels, rotation=45)  # ha="right", va="center
     if x_ticks_labels_size is not None:
         ax1.xaxis.set_tick_params(labelsize=x_ticks_labels_size)
     if y_ticks_labels_size is not None:
@@ -841,14 +845,16 @@ def plot_with_imshow(raster, path_results=None, file_name=None, n_subplots=4, ax
                      y_ticks_labels=None, y_ticks_labels_size=None,
                      speed_array=None,
                      fig=None, show_color_bar=False, hide_x_labels=True, without_ticks=True,
-                     vmin=0.5, vmax=1, x_ticks_labels_color="white", y_ticks_labels_color="white",
+                     vmin=0.5, vmax=None, x_ticks_labels_color="white", y_ticks_labels_color="white",
                      values_to_plot=None, cmap="hot", show_fig=False, save_formats="pdf",
                      lines_to_display=None,
                      lines_color="white",
                      lines_width=1,
                      lines_band=0,
                      lines_band_color="white",
-                     lines_band_alpha=0.5
+                     lines_band_alpha=0.5,
+                     reverse_order=False,
+                     x_ticks_labels_size=None
                      ):
     """
 
@@ -871,11 +877,17 @@ def plot_with_imshow(raster, path_results=None, file_name=None, n_subplots=4, ax
         fig.patch.set_facecolor(background_color)
     else:
         axes = axes_list
+    if vmax is None:
+        vmax = np.max(raster)
     for ax_index, ax in enumerate(axes):
         ax.set_facecolor(background_color)
         im = ax.imshow(raster[:, (n_times // n_subplots) * ax_index:(n_times // n_subplots) * (ax_index + 1)],
                        cmap=plt.get_cmap(cmap), aspect='auto', vmin=vmin, vmax=vmax)
         if speed_array is not None:
+            if len(raster) > 100:
+                speed_array = speed_array * 10
+            elif len(raster) > 40:
+                speed_array = speed_array * 5
             ax.plot(np.arange(0, (n_times // n_subplots)), speed_array[(n_times // n_subplots) * ax_index:
                                                                        (n_times // n_subplots) * (ax_index + 1)],
                     color="cornflowerblue", lw=0.1, zorder=20)
@@ -886,13 +898,19 @@ def plot_with_imshow(raster, path_results=None, file_name=None, n_subplots=4, ax
         ax.xaxis.label.set_color(x_ticks_labels_color)
         ax.tick_params(axis='y', colors=y_ticks_labels_color)
         ax.tick_params(axis='x', colors=x_ticks_labels_color)
+
+        ax.set_xticks(np.arange(0, (n_times // n_subplots), 100))
+        ax.set_xticklabels(np.arange((n_times // n_subplots) * ax_index, (n_times // n_subplots) * (ax_index + 1), 100))
+        ax.xaxis.set_tick_params(labelsize=x_ticks_labels_size)
+
         if without_ticks:
-            ax.tick_params(axis='both', which='both', length=0)
+            ax.tick_params(axis='x', which='both', length=0)
         if y_ticks_labels is not None:
             ax.set_yticks(np.arange(raster.shape[0]))
             ax.set_yticklabels(y_ticks_labels[:])
         if y_ticks_labels_size is not None:
             ax.yaxis.set_tick_params(labelsize=y_ticks_labels_size)
+        ax.tick_params(axis='y', which='both', length=0)
 
         # ax.axis('off')
     # extent=[0, 10, 0, 1],
@@ -939,8 +957,9 @@ def plot_with_imshow(raster, path_results=None, file_name=None, n_subplots=4, ax
                                                  alpha=lines_band_alpha,
                                                  zorder=10)  # lw=2
                     ax.add_patch(band_patch)
-    for ax in axes:
-        ax.set_ylim(ax.get_ylim()[::-1])
+    if reverse_order:
+        for ax in axes:
+            ax.set_ylim(ax.get_ylim()[::-1])
 
     if axes_list is None:
         if show_fig:
@@ -952,6 +971,6 @@ def plot_with_imshow(raster, path_results=None, file_name=None, n_subplots=4, ax
             for save_format in save_formats:
                 fig.savefig(f'{path_results}/{file_name}.{save_format}',
                             format=f"{save_format}",
-                                        facecolor=fig.get_facecolor())
+                            facecolor=fig.get_facecolor())
 
         plt.close()
