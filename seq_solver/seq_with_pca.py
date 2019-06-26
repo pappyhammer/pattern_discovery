@@ -6,6 +6,9 @@ import scipy
 import sys
 from sklearn.decomposition import PCA
 import os
+from itertools import combinations
+import cv2
+from scipy.ndimage import gaussian_filter1d
 
 
 def xcov(a, b, lags):
@@ -122,7 +125,22 @@ def step1_pca(data, n_pc_max):
     # print(f"eig_val {eig_val.shape}")
     print(f"mat_svd {mat_svd.shape}")
     # print(f"u_all {u_all.shape}")
-    least_squares_solution = np.linalg.lstsq(mat_svd, eigvectors.transpose())[0]
+
+    def lsq(a, b):
+        num_vars = a.shape[1]
+        rank = np.linalg.matrix_rank(a)
+        if rank == num_vars:
+            sol = np.linalg.lstsq(a, b)[0]  # not under-determined
+        else:
+            for nz in combinations(range(num_vars), rank):  # the variables not set to zero
+                try:
+                    sol = np.zeros((num_vars, 1))
+                    sol[nz, :] = np.asarray(np.linalg.solve(a[:, nz], b))
+                except np.linalg.LinAlgError:
+                    pass
+        return sol
+    # least_squares_solution = np.linalg.lstsq(mat_svd, eigvectors.transpose())[0]
+    least_squares_solution = lsq(mat_svd, eigvectors.transpose())
     print(f"least_squares_solution {least_squares_solution.shape}")
     pc_time_course = np.dot(least_squares_solution, data_mt)
 
@@ -134,6 +152,7 @@ def step1_pca(data, n_pc_max):
     # data has been normalized
     return data, pc_cout
 
+
 def find_seq_with_pca(ms, traces, path_results, file_name, speed=None):
     if traces is None:
         print(f"traces should not be None")
@@ -141,36 +160,38 @@ def find_seq_with_pca(ms, traces, path_results, file_name, speed=None):
 
     n_cells, n_times = traces.shape
 
-    if ms.pca_seq_cells_order is not None:
-        pc3 = "151 51 293 46 67 90 93 60 165 231 283 108 132 117 140 58 155 186 29 10 254 100 45 298 217 86 61 163 68 125 52 53 32 89 109 213 180 122 27 147 207 3 126 302 202 178 92 99 297 118 247 130 31 72 104 103 189 269 203 101 185 78 168 195 184 226 21 303 15 129 239 66 121 187 81 115 20 172 138 216 237 182 28 223 149 280 229 246 120 176 83 292 198 128 173 188 263 54 296 112 13 6 16 0 281 222 136 26 190 44 245 224 102 17 288 193 48 23 256 143 158 157 43 36 167 74 299 209 22 191 85 250 261 42 82 276 201 5 127 95 242 274 275 148 152 39 14 7 139 40 71 64 249 18 135 253 206 289 208 272 277 19 69 290 65 70 279 76 11 199 80 8 257 241 260 1 2 4 144 75 59 232 194 84 234 240 49 170 62 98 153 175 181 134 215 244 160 131 197 300 219 270 278 97 221 225 220 212 156 255 164 236 106 169 57 179 271 304248 9 287 285 88 114 30 259 110 91 192 171 211 228 258 55 105 301 204 124 24 63 142 262 196 218 238 96 282 235 251 77 137 227 56 145 200 119 111 230 162 154 79 273 205 12 34 133 214 161 252 47 243 286 38 266 166 37 94 146 294 267 50 174 210 268 233 116 183 264 291 159 123 25 107 150 141 113 265 87 177 41 35 73 33 284 295"
-        pc3 = [int(x) for x in pc3.split()]
-        print(f"len(pc3) {len(pc3)}")
-        print(f"find_seq_with_pca for {ms.description} using matlab results")
-        print(f"pca_seq_cells_order: {len(ms.pca_seq_cells_order)}")
-        print(f"len diff: {len(np.setdiff1d(ms.pca_seq_cells_order, pc3))}")
-        traces_dc = traces[ms.pca_seq_cells_order, :]
-
-        for i in np.arange(len(traces_dc)):
-            traces_dc[i, :] = norm01(gaussblur1D(traces_dc[i, :], n_times / 2, 0))
-            traces_dc[i, :] = norm01(traces_dc[i, :])
-            traces_dc[i, :] = traces_dc[i, :] - np.median(traces_dc[i, :])
-        plot_with_imshow(raster=traces_dc, path_results=path_results,
-                         y_ticks_labels_size=0.1,
-                         x_ticks_labels_size=5,
-                         y_ticks_labels=ms.pca_seq_cells_order,
-                         file_name=file_name + f"_matlab_version",
-                         n_subplots=4,
-                         without_ticks=False,
-                         vmin=0, vmax=0.5, hide_x_labels=False,
-                         values_to_plot=None, cmap="hot", show_fig=False,
-                         save_formats="pdf")
-        return
+    # if ms.pca_seq_cells_order is not None:
+    #     pc3 = "151 51 293 46 67 90 93 60 165 231 283 108 132 117 140 58 155 186 29 10 254 100 45 298 217 86 61 163 68 125 52 53 32 89 109 213 180 122 27 147 207 3 126 302 202 178 92 99 297 118 247 130 31 72 104 103 189 269 203 101 185 78 168 195 184 226 21 303 15 129 239 66 121 187 81 115 20 172 138 216 237 182 28 223 149 280 229 246 120 176 83 292 198 128 173 188 263 54 296 112 13 6 16 0 281 222 136 26 190 44 245 224 102 17 288 193 48 23 256 143 158 157 43 36 167 74 299 209 22 191 85 250 261 42 82 276 201 5 127 95 242 274 275 148 152 39 14 7 139 40 71 64 249 18 135 253 206 289 208 272 277 19 69 290 65 70 279 76 11 199 80 8 257 241 260 1 2 4 144 75 59 232 194 84 234 240 49 170 62 98 153 175 181 134 215 244 160 131 197 300 219 270 278 97 221 225 220 212 156 255 164 236 106 169 57 179 271 304248 9 287 285 88 114 30 259 110 91 192 171 211 228 258 55 105 301 204 124 24 63 142 262 196 218 238 96 282 235 251 77 137 227 56 145 200 119 111 230 162 154 79 273 205 12 34 133 214 161 252 47 243 286 38 266 166 37 94 146 294 267 50 174 210 268 233 116 183 264 291 159 123 25 107 150 141 113 265 87 177 41 35 73 33 284 295"
+    #     pc3 = [int(x) for x in pc3.split()]
+    #     print(f"len(pc3) {len(pc3)}")
+    #     print(f"find_seq_with_pca for {ms.description} using matlab results")
+    #     print(f"pca_seq_cells_order: {len(ms.pca_seq_cells_order)}")
+    #     print(f"len diff: {len(np.setdiff1d(ms.pca_seq_cells_order, pc3))}")
+    #     traces_dc = traces[ms.pca_seq_cells_order, :]
+    #
+    #     for i in np.arange(len(traces_dc)):
+    #         traces_dc[i, :] = norm01(gaussblur1D(traces_dc[i, :], n_times / 2, 0))
+    #         traces_dc[i, :] = norm01(traces_dc[i, :])
+    #         traces_dc[i, :] = traces_dc[i, :] - np.median(traces_dc[i, :])
+    #     plot_with_imshow(raster=traces_dc, path_results=path_results,
+    #                      y_ticks_labels_size=0.1,
+    #                      x_ticks_labels_size=5,
+    #                      y_ticks_labels=ms.pca_seq_cells_order,
+    #                      file_name=file_name + f"_matlab_version",
+    #                      n_subplots=4,
+    #                      without_ticks=False,
+    #                      vmin=0, vmax=0.5, hide_x_labels=False,
+    #                      values_to_plot=None, cmap="hot", show_fig=False,
+    #                      save_formats="pdf")
+    #     return
 
     dt = 200
     np_pc_max = 10
     arnaud_version = True
     if arnaud_version:
-        m_4, p_cout = step1_pca(gaussblur1D(traces, n_times/20, 1), np_pc_max)
+        # traces_gauss = gaussian_filter1d(traces, 5, 1)
+        traces_gauss = gaussblur1D(traces, n_times / 20, 1)
+        m_4, p_cout = step1_pca(gaussblur1D(traces_gauss, n_times/20, 1), np_pc_max)
         pc_time_course = np.real(p_cout["pc_time_course"])  #.transpose()
     # else:
     #     pca = PCA(n_components=np_pc_max)  #
@@ -202,12 +223,31 @@ def find_seq_with_pca(ms, traces, path_results, file_name, speed=None):
             thresholds[i] = np.roll(np.transpose(traces[i, :]), - int(shift_1d[i]))
 
         # dc == distance cell
-        dc = np.where(cor_1d > threshold_otsu(cor_1d))[0]
+
+        def normalize_array_0_255(img_array):
+            minv = np.amin(img_array)
+            # minv = 0
+            maxv = np.amax(img_array)
+            if maxv - minv == 0:
+                img_array = img_array.astype(np.uint8)
+            else:
+                img_array = (255 * (img_array - minv) / (maxv - minv)).astype(np.uint8)
+            return img_array
+
+        img_cor_1d = normalize_array_0_255(cor_1d)
+        # print(f"np.max(img_cor_1d) {np.max(img_cor_1d)} {img_cor_1d.shape}")
+        ret2, th2 = cv2.threshold(img_cor_1d, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # print(f"ret2 {ret2}, max img_cor_1d {np.max(img_cor_1d)}")
+        dc = np.where(img_cor_1d > ret2)[0]
+        # print(f"dc {dc}")
+        # dc = np.where(cor_1d > threshold_otsu(cor_1d))[0]
         n_dc = len(dc)
         traces_dc = traces[dc, :]
 
         for i in np.arange(n_dc):
-            traces_dc[i, :] = norm01(gaussblur1D(traces_dc[i, :], n_times/2, 0))
+            traces_gauss = gaussian_filter1d(traces_dc[i, :], 2, 0)
+            # traces_gauss = gaussblur1D(traces_dc[i, :], n_times / 2, 0)
+            traces_dc[i, :] = norm01(traces_gauss)
             traces_dc[i, :] = norm01(traces_dc[i, :])
             traces_dc[i, :] = traces_dc[i, :] - np.median(traces_dc[i, :])
 
