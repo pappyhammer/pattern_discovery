@@ -205,6 +205,21 @@ def get_time_correlation_data(spike_nums, events_times, time_around_events=5):
 
     return time_lags_list, correlation_list, time_lags_dict, correlation_dict, time_window, cells_list
 
+def bin_raster(raster, bin_size, keep_same_dimension=True):
+    """
+     Bin a raster over the frames, keeping the same number of frames (filling by 1 all frames bined) or
+     reducing the number of frames
+    :param raster:
+    :param bin_size:
+    :param keep_same_dimension:
+    :return:
+    """
+    # first we check if n_frames is divisible by bin_size
+    n_frames = raster.shape[1]
+    if n_frames % bin_size != 0:
+        print(f"bin_size {bin_size} is not compatible with {n_frames} frames")
+        return
+
 
 def get_isi(spike_data, spike_trains_format=False):
     """
