@@ -642,11 +642,13 @@ def compute_sce_threshold_from_raster_dur(spike_nums, perc_threshold=95, n_surro
     return sce_threshold
 
 
-def detect_sce_on_traces(raw_traces, use_speed=True, speed_threshold = None, sce_n_cells_threshold=5,
+def detect_sce_on_traces(raw_traces, speed=None, use_speed=True, speed_threshold = None, sce_n_cells_threshold=5,
                          sce_min_distance=4, use_median_norm=True, use_bleaching_correction=False,
                          use_savitzky_golay_filt=True):
 
     traces = np.copy(raw_traces)
+    if speed is None:
+        use_speed = False
 
     if use_speed is True:
         if speed_threshold is None:
@@ -681,15 +683,15 @@ def detect_sce_on_traces(raw_traces, use_speed=True, speed_threshold = None, sce
     if use_speed is True:
         print(f" starting detection using speed threshold")
         for i in range(n_cells):
-            activity_tmp = np.zeros((1, n_frames))
+            activity_tmp = np.zeros(n_frames)
             trace_tmp = traces[i, :]
-            burst_threshold = np.median(trace_tmp) + scipy_stats.iqr(trace_tmp) / 2
+            burst_threshold = np.median(trace_tmp) + stats.iqr(trace_tmp) / 2
             for k in range(window_size + 1, n_frames - window_size):
-                 if speed [k] < speed_threshold:
-                    window_tmp = np.arange(k - window_size,k + window_size)
+                 if speed[k] < speed_threshold:
+                    window_tmp = np.arange(k - window_size, k + window_size)
                     median_tmp = np.median(trace_tmp[window_tmp])
-                    if np.sum(activity_tmp[k - 10:k - 1]) and median_tmp < burst_threshold:
-                        activity_tmp[k] = (trace_tmp[k] - median_tmp) > (3 * scipy_stats.iqr(trace_tmp[window_tmp]))
+                    if np.sum(activity_tmp[k - 10:k - 1]) == 0 and median_tmp < burst_threshold:
+                        activity_tmp[k] = (trace_tmp[k] - median_tmp) > (3 * stats.iqr(trace_tmp[window_tmp]))
             activity_tmp_all_cells[i] = np.where(activity_tmp)[0]
 
     if use_speed is False:

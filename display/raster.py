@@ -877,6 +877,9 @@ def plot_with_imshow(raster, path_results=None, file_name=None, n_subplots=4, ax
         fig.patch.set_facecolor(background_color)
     else:
         axes = axes_list
+
+    if (n_subplots == 1) and (axes_list is None):
+        axes = [axes]
     if vmax is None:
         vmax = np.max(raster)
     for ax_index, ax in enumerate(axes):

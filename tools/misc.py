@@ -209,16 +209,30 @@ def bin_raster(raster, bin_size, keep_same_dimension=True):
     """
      Bin a raster over the frames, keeping the same number of frames (filling by 1 all frames bined) or
      reducing the number of frames
-    :param raster:
+    :param raster: éd array
     :param bin_size:
     :param keep_same_dimension:
     :return:
     """
     # first we check if n_frames is divisible by bin_size
     n_frames = raster.shape[1]
-    if n_frames % bin_size != 0:
+    if (keep_same_dimension is False) and (n_frames % bin_size != 0):
         print(f"bin_size {bin_size} is not compatible with {n_frames} frames")
         return
+    if keep_same_dimension:
+        bin_raster = np.zeros(raster.shape, dtype="int8")
+        for beg_index in np.arange(0, raster.shape[1], bin_size):
+            end_index = min(raster.shape[1], beg_index + bin_size)
+            for cell in np.arange(raster.shape[0]):
+                if np.sum(raster[cell, beg_index:end_index]) > 0:
+                    bin_raster[cell, beg_index:end_index] = 1
+        return bin_raster
+
+    bin_raster = np.zeros((raster.shape[0], raster.shape[1] // bin_size), dtype="int8")
+    for cell in np.arange(raster.shape[0]):
+        cell_raster = np.sum(np.reshape(raster[cell], (raster.shape[1] // bin_size, bin_size)), axis=1)
+        bin_raster[cell] = cell_raster
+    return bin_raster
 
 
 def get_isi(spike_data, spike_trains_format=False):

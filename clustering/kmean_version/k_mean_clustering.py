@@ -554,9 +554,9 @@ def covnorm(m_sces):
             if np.correlate(m_sces[:, i], m_sces[:, j]) == 0:
                 co_var_matrix[i, j] = 0
             else:
-                # TODO: see to do np.correlate(m_sces[:, i] - np.mean(m_sces[:, i]),
-                #  m_sces[:, j]- np.mean(m_sces[:, j])), to do the same as xcov is doing on matlab
-                co_var_matrix[i, j] = np.correlate(m_sces[:, i], m_sces[:, j]) / np.std(m_sces[:, i]) \
+                # we remove the mean to do the same as xcov is doing on matlab
+                co_var_matrix[i, j] = np.correlate((m_sces[:, i] - np.mean(m_sces[:, i])),
+                                                   (m_sces[:, j]- np.mean(m_sces[:, j]))) / np.std(m_sces[:, i]) \
                                       / np.std(m_sces[:, j]) / nb_events
     return co_var_matrix
 

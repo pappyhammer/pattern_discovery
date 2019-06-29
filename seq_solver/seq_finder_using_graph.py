@@ -862,6 +862,9 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                                             raster_dur_version=raster_dur_version)
             all_surrogate_transition_dict[:, :, surrogate_index] = t_d
         # surrogate_threshold_transition_dict = np.zeros((n_cells, n_cells))
+        # means we don't rank pair of cells by the number of spikes they have in common
+        # but by how fare from the surrogate the value is
+        use_surrogate_to_rank_cells = False
         n_values_removed = 0
         for cell_1 in np.arange(n_cells):
             for cell_2 in np.arange(n_cells):
@@ -871,6 +874,8 @@ def find_sequences_using_graph_main(spike_nums, param, min_time_bw_2_spikes, max
                 if surrogate_value >= transition_dict[cell_1, cell_2]:
                     n_values_removed += 1
                     transition_dict[cell_1, cell_2] = 0
+                elif use_surrogate_to_rank_cells:
+                    transition_dict[cell_1, cell_2] = transition_dict[cell_1, cell_2] / surrogate_value
         print(f"{n_values_removed} values removed from transition_dict after surrogates "
               f"{np.round((n_values_removed / (cell_1 * cell_2)) * 100, 2)} %")
         stop_time = time.time()
