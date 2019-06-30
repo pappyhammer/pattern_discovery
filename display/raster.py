@@ -762,6 +762,13 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
         ax2.tick_params(axis='y', colors=y_ticks_labels_color)
         ax2.tick_params(axis='x', colors=x_ticks_labels_color)
 
+        if (x_ticks_labels is not None) and (x_ticks is not None):
+            ax2.set_xticks(x_ticks)
+            ax2.tick_params('x', length=2, width=0.5, which='both')
+            ax2.set_xticklabels(x_ticks_labels, rotation=45)  # ha="right", va="center
+        if x_ticks_labels_size is not None:
+            ax2.xaxis.set_tick_params(labelsize=x_ticks_labels_size)
+
     # color bar section
     if plot_with_amplitude:
         inner_2 = gridspec.GridSpecFromSubplotSpec(1, 1,
