@@ -10,7 +10,7 @@ import scipy.stats as stats
 from matplotlib.colors import NoNorm
 
 class CoordClass:
-    def __init__(self, coord, nb_lines, nb_col, from_suite_2p=False):
+    def __init__(self, coord, nb_lines, nb_col, from_suite_2p=False, from_fiji=False):
         # contour coord
         self.coord = coord
         if nb_lines is None:
@@ -39,7 +39,7 @@ class CoordClass:
 
         for cell, c in enumerate(self.coord):
 
-            if not from_suite_2p:
+            if (not from_suite_2p) and (not from_fiji):
                 # it is necessary to remove one, as data comes from matlab, starting from 1 and not 0
                 c = c - 1
             c = c.astype(int)
