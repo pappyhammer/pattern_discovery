@@ -7,7 +7,7 @@ Author: Marcus A. Triplett. (2019). University of Queensland, Australia.
 '''
 
 import os
-import core
+import pattern_discovery.cilva.core as core
 import numpy as np
 
 def select_model(folder, data, data_type, return_fit = 'both', convert_stim = False):
@@ -94,6 +94,8 @@ def reconstruction(alpha, beta, w, b, x, kernel, s):
 	N = alpha.shape[0]	
 	T = s.shape[1]
 	f_hat = np.zeros((N, T))
+
+	# print(f"N {N}, T {T}, s.shape {s.shape}, x.shape {x.shape}, w.shape {w.shape}, b.shape {b.shape}")
 
 	if len(x.shape) == 1:
 		x = np.reshape(x, [1, T])
