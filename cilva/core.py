@@ -12,6 +12,7 @@ import scipy as sp
 import scipy.signal as sg
 import numpy as np
 import time
+import matplotlib.pyplot as plt
 
 
 '''
@@ -235,8 +236,16 @@ def init_filters(f, s, kernel, N, T, K):
 	'''
 	stim_regressors = np.zeros((T, K))
 	for k in range(K):
-		stim_regressors[:, k] = np.convolve(kernel, s[k, :])[:T]		
-
+		stim_regressors[:, k] = np.convolve(kernel, s[k, :])[:T]
+		# fig, ax = plt.subplots(nrows=1, ncols=1,
+		# 					   gridspec_kw={'height_ratios': [1]},
+		# 					   figsize=(15, 2))
+		# ax.plot(stim_regressors[:, k])
+		# fig.savefig(f'/media/julien/Not_today/hne_not_today/results_hne/test_stim.pdf',
+		# 			format=f"pdf",
+		# 			facecolor=fig.get_facecolor())
+		# plt.show()
+		# raise Exception("TOTO")
 	w_nnls = np.zeros((N, K))
 	for n in range(N):
 		w_nnls[n, :] = sp.optimize.nnls(stim_regressors, f[n, :])[0]

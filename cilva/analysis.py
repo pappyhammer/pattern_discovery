@@ -122,14 +122,22 @@ def decouple_traces(alpha, beta, w, b, x, kernel, s):
 	f_evoked = np.zeros((N, T))
 	f_spont = np.zeros((N, T))	
 
+	print(f"decouple_traces: N {N}, T {T}, s.shape {s.shape}, x.shape {x.shape}, w.shape {w.shape}, b.shape {b.shape}")
+
 	if len(x.shape) == 1:
 		x = np.reshape(x, [1, T])
 		b = np.reshape(b, [N, 1])
-
+	print(f"x {x}")
+	print(f"w {w}")
+	print(f"s: {len(np.where(s[0, :])[0])}, values {s[0, (np.where(s[0, :])[0])]}")
+	print(f"x: {len(np.where(x[0, :])[0])}, values {x[0, (np.where(x[0, :])[0])]}")
+	print(f"x: {len(np.where(x[1, :])[0])}, values {x[1, (np.where(x[1, :])[0])]}")
+	print(f"x: {len(np.where(x[2, :])[0])}, values {x[2, (np.where(x[2, :])[0])]}")
 	stim = w @ s 
 	spont = b @ x
 
 	for n in range(N):
+		# print(f"beta {n}: {beta[n]}")
 		f_evoked[n] = alpha[n] * np.convolve(kernel, stim[n])[:T] + beta[n]
 		f_spont[n] = alpha[n] * np.convolve(kernel, spont[n])[:T] + beta[n]
 
