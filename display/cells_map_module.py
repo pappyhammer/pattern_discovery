@@ -229,6 +229,9 @@ class CoordClass:
                                                     edgecolor=edge_color,
                                                     zorder=z_order_cells)  # lw=2
                 ax.add_patch(cell_contour)
+                with_cell_numbers = True
+                if with_cell_numbers:
+                    self.plot_text_cell(cell=cell, cell_numbers_color="black", ax=ax, text_size=6)
             fontsize = 12
             plt.text(x=190, y=180,
                      s=f"{n_twins}", color=self_twin_color, zorder=22,
@@ -386,9 +389,9 @@ class CoordClass:
 
                     line = plt.plot((c_x, c_x_c), (c_y, c_y_c), linewidth=line_width, c=link_connect_color,
                                     zorder=zorder_lines)[0]
-
-        if (self.cells_groups is not None) and show_polygons:
-            for group_id, cells in enumerate(self.cells_groups):
+        # print(f"(self.cells_groups is not None) {(self.cells_groups is not None)} show_polygons {show_polygons}")
+        if (cells_groups is not None) and show_polygons:
+            for group_id, cells in enumerate(cells_groups):
                 points = np.zeros((2, len(cells)))
                 for cell_id, cell in enumerate(cells):
                     c_x, c_y = cells_center[cell]
@@ -400,14 +403,14 @@ class CoordClass:
                 # print(f"xy {xy}")
                 # xy is a numpy array with as many line as polygon point
                 # and 2 columns: x and y coord of each point
-                face_color = list(self.cells_groups_colors[group_id])
+                face_color = list(cells_groups_colors[group_id])
                 # changing alpha
                 face_color[3] = 0.3
                 face_color = tuple(face_color)
                 # edge alpha will be 1
                 poly_gon = patches.Polygon(xy=xy,
                                            fill=fill_polygons, linewidth=0, facecolor=face_color,
-                                           edgecolor=self.cells_groups_colors[group_id],
+                                           edgecolor=cells_groups_colors[group_id],
                                            zorder=15, lw=3)
                 ax.add_patch(poly_gon)
 
