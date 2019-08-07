@@ -1,11 +1,12 @@
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from matplotlib import patches
+import seaborn as sns
+
+import matplotlib.cm as cm
 import numpy as np
 import math
-import matplotlib.cm as cm
 import os
-import seaborn as sns
-from matplotlib import patches
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
@@ -597,8 +598,12 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
 
     # ax1.spines['left'].set_color(y_ticks_labels_color)
     # ax1.spines['bottom'].set_color(x_ticks_labels_color)
-    ax1.yaxis.label.set_color(y_ticks_labels_color)
-    ax1.tick_params(axis='y', colors=y_ticks_labels_color)
+    # ax1.yaxis.label.set_color(y_ticks_labels_color)
+    if isinstance(y_ticks_labels_color, list):
+        for xtick, color in zip(ax1.get_yticklabels(), y_ticks_labels_color):
+            xtick.set_color(color)
+    else:
+        ax1.tick_params(axis='y', colors=y_ticks_labels_color)
     ax1.tick_params(axis='x', colors=x_ticks_labels_color)
 
     if (axes_list is not None) and without_activity_sum:
@@ -728,14 +733,21 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
         if spike_train_format:
             ax2.set_xlim(min_time - 1, max_time + 1)
         else:
-            ax2.set_xlim(-1, len(spike_nums_for_activity_sum[0, :]) + 1)
+            if spike_nums_for_activity_sum is not None:
+                ax2.set_xlim(-1, len(spike_nums_for_activity_sum[0, :]) + 1)
+            else:
+                ax2.set_xlim(-1, len(spikes_sum_to_use) + 1)
+
         if SCE_times is not None:
             ax_top = ax2.twiny()
             ax_top.set_frame_on(False)
             if spike_train_format:
                 ax_top.set_xlim(min_time - 1, max_time + 1)
             else:
-                ax_top.set_xlim(-1, len(spike_nums_for_activity_sum[0, :]) + 1)
+                if spike_nums_for_activity_sum:
+                    ax_top.set_xlim(-1, len(spike_nums_for_activity_sum[0, :]) + 1)
+                else:
+                    ax_top.set_xlim(-1, len(spikes_sum_to_use) + 1)
             xticks_pos = []
             for times_tuple in SCE_times:
                 xticks_pos.append(times_tuple[0])
@@ -758,8 +770,12 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
 
         if without_ticks:
             ax2.tick_params(axis='both', which='both', length=0)
-        ax2.yaxis.label.set_color(y_ticks_labels_color)
-        ax2.tick_params(axis='y', colors=y_ticks_labels_color)
+        # ax2.yaxis.label.set_color(y_ticks_labels_color)
+        if isinstance(y_ticks_labels_color, list):
+            for xtick, color in zip(ax2.get_yticklabels(), y_ticks_labels_color):
+                xtick.set_color(color)
+        else:
+            ax2.tick_params(axis='y', colors=y_ticks_labels_color)
         ax2.tick_params(axis='x', colors=x_ticks_labels_color)
 
         if (x_ticks_labels is not None) and (x_ticks is not None):
