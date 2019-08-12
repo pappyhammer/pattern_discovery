@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
+import matplotlib as mpl
 from sklearn import metrics
 from sklearn.cluster import KMeans
 import numpy as np
-import matplotlib as mpl
 import matplotlib.cm as cm
 import matplotlib.gridspec as gridspec
 from pattern_discovery.clustering.cluster_tools import detect_cluster_activations_with_sliding_window
@@ -13,7 +13,6 @@ from pattern_discovery.display.misc import plot_hist_clusters_by_sce
 from pattern_discovery.seq_solver.markov_way import order_spike_nums_by_seq
 from pattern_discovery.seq_solver.markov_way import sort_it_and_plot_it
 from sortedcontainers import SortedList, SortedDict
-import hdbscan
 
 
 class CellAssembliesStruct:

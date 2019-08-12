@@ -303,7 +303,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
     max_n_color = 10
     if display_traces:
         n_times = len(traces[0, :])
-        zorder_traces = 20 + len(traces)
+        zorder_traces = 21 + len(traces)
         for cell, trace in enumerate(traces):
             if use_brewer_colors_for_traces:
                 color = brewer_colors[cell % len(brewer_colors)]
@@ -313,7 +313,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
             zorder_traces -= 1
             line_beg_x = -1
             line_end_x = n_times + 1
-            ax1.hlines(cell, line_beg_x, line_end_x, lw=0.1, linestyles="dashed", color=color, zorder=15)
+            ax1.hlines(cell, line_beg_x, line_end_x, lw=0.1, linestyles="dashed", color=color, zorder=5)
     if cells_to_highlight is not None:
         cells_to_highlight = np.array(cells_to_highlight)
     if display_spike_nums:
@@ -744,7 +744,7 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
             if spike_train_format:
                 ax_top.set_xlim(min_time - 1, max_time + 1)
             else:
-                if spike_nums_for_activity_sum:
+                if spike_nums_for_activity_sum is not None:
                     ax_top.set_xlim(-1, len(spike_nums_for_activity_sum[0, :]) + 1)
                 else:
                     ax_top.set_xlim(-1, len(spikes_sum_to_use) + 1)
