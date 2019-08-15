@@ -106,6 +106,9 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
                        vertical_lines_colors=None,
                        vertical_lines_sytle=None,
                        vertical_lines_linewidth=None,
+                       scatters_on_traces=None,
+                       scatters_on_traces_marker="*",
+                       scatters_on_traces_size=5,
                        sliding_window_duration=1,
                        show_sum_spikes_as_percentage=False,
                        span_cells_to_highlight=None,
@@ -310,6 +313,12 @@ def plot_spikes_raster(spike_nums=None, param=None, title=None, file_name=None,
             else:
                 color = cm.nipy_spectral(((cell % max_n_color) + 1) / (max_n_color + 1))
             ax1.plot(np.arange(n_times), trace + cell, lw=traces_lw, color=color, zorder=zorder_traces)
+            if scatters_on_traces is not None:
+                times_to_scatter = np.where(scatters_on_traces[cell, :])[0]
+                ax1.scatter(times_to_scatter, trace[times_to_scatter] + cell,
+                            color="white",
+                            marker=scatters_on_traces_marker,
+                            s=scatters_on_traces_size, zorder=zorder_traces - 1)
             zorder_traces -= 1
             line_beg_x = -1
             line_end_x = n_times + 1
