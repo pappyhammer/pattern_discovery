@@ -120,6 +120,45 @@ class CellAssembliesStruct:
                         file.write(f"#")
                 file.write('\n')
 
+            # we want to save for each cell at which times it is active in a cell_assembly, if part of a cell assembly
+            start = 0
+            for cluster_id, n_cells in enumerate(self.n_cells_in_cell_assemblies_clusters):
+                for cell in self.cells_indices[start:stop]:
+                    n_sces_not_in_ca = self.n_sce_in_assembly[0]
+                    n_sces_so_far = 0
+                    start_index = n_sces_not_in_ca + n_sces_so_far
+                    file.write(f"cell:{cell}:")
+                    for ca_id, sces_indices_tuple in self.sces_in_cell_assemblies_clusters.items():
+                        n_sces = sces_indices_tuple[0][1] - sces_indices_tuple[0][0]
+                        last_index = start_index + n_sces
+                        if ca_id != cluster_id:
+                            start_index += n_sces
+                            continue
+
+                        # print(f"self.sce_indices {self.sce_indices}")
+                        # print(f"start_index {start_index}")
+                        # print(f"last_index {last_index}")
+                        to_write = ""
+                        for i, index_sce_period in enumerate(self.sce_indices[start_index:last_index]):
+                            if self.cellsinpeak[cell, index_sce_period] == 0:
+                                print(f"Clustering: Cell {cell} not in sce_index {index_sce_period}")
+                                continue
+                            sce_period = self.SCE_times[int(index_sce_period)]
+                            to_write = to_write + f"{sce_period[0]} {sce_period[1]}#"
+                        if to_write == "":
+                            file.write('\n')
+                        else:
+                            file.write(f'{to_write[:-1]}\n')
+                        start_index += n_sces
+
+                    for i, index_sce_period in enumerate(self.sce_indices[start_index:last_index]):
+                        sce_period = self.SCE_times[int(index_sce_period)]
+                        file.write(f"{sce_period[0]} {sce_period[1]}")
+                        if i < len(sce_ids) - 1:
+                            file.write(f"#")
+
+                start = stop
+
     def plot_cell_assemblies(self, data_descr, SCE_times, activity_threshold,
                              spike_nums, sce_times_bool=None,
                              display_only_cell_assemblies_on_raster=False,
