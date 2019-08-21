@@ -123,6 +123,7 @@ class CellAssembliesStruct:
             # we want to save for each cell at which times it is active in a cell_assembly, if part of a cell assembly
             start = 0
             for cluster_id, n_cells in enumerate(self.n_cells_in_cell_assemblies_clusters):
+                stop = start + n_cells
                 for cell in self.cells_indices[start:stop]:
                     n_sces_not_in_ca = self.n_sce_in_assembly[0]
                     n_sces_so_far = 0
@@ -141,7 +142,7 @@ class CellAssembliesStruct:
                         to_write = ""
                         for i, index_sce_period in enumerate(self.sce_indices[start_index:last_index]):
                             if self.cellsinpeak[cell, index_sce_period] == 0:
-                                print(f"Clustering: Cell {cell} not in sce_index {index_sce_period}")
+                                # print(f"Clustering: Cell {cell} not in sce_index {index_sce_period}")
                                 continue
                             sce_period = self.SCE_times[int(index_sce_period)]
                             to_write = to_write + f"{sce_period[0]} {sce_period[1]}#"
@@ -150,12 +151,6 @@ class CellAssembliesStruct:
                         else:
                             file.write(f'{to_write[:-1]}\n')
                         start_index += n_sces
-
-                    for i, index_sce_period in enumerate(self.sce_indices[start_index:last_index]):
-                        sce_period = self.SCE_times[int(index_sce_period)]
-                        file.write(f"{sce_period[0]} {sce_period[1]}")
-                        if i < len(sce_ids) - 1:
-                            file.write(f"#")
 
                 start = stop
 

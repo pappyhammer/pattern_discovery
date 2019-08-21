@@ -449,3 +449,165 @@ def time_correlation_graph(time_lags_list, correlation_list, time_lags_dict, cor
                         format=f"{save_format}",
                     facecolor=fig.get_facecolor())
         plt.close()
+
+def plot_box_plots(data_dict, title, filename,
+                         y_label, param, colors=None,
+                         path_results=None, y_lim=None,
+                         x_label=None, with_scatters=True,
+                         y_log=False,
+                         scatters_with_same_colors=None,
+                         scatter_size=20,
+                         scatter_alpha=0.5,
+                         n_sessions_dict=None,
+                         background_color="black",
+                         link_medians=True,
+                         color_link_medians="red",
+                         labels_color="white",
+                         with_y_jitter=None,
+                         x_labels_rotation=None,
+                         fliers_symbol=None,
+                         save_formats="pdf"):
+    """
+
+    :param data_dict:
+    :param n_sessions_dict: should be the same keys as data_dict, value is an int reprenseing the number of sessions
+    that gave those data (N), a n will be display representing the number of poins in the boxplots if n != N
+    :param title:
+    :param filename:
+    :param y_label:
+    :param y_lim: tuple of int,
+    :param scatters_with_same_colors: scatter that have the same index in the data_dict,, will be colors
+    with the same colors, using the list of colors given by scatters_with_same_colors
+    :param param: Contains a field name colors used to color the boxplot
+    :param save_formats:
+    :return:
+    """
+    fig, ax1 = plt.subplots(nrows=1, ncols=1,
+                            gridspec_kw={'height_ratios': [1]},
+                            figsize=(12, 12))
+    colorfull = (colors is not None)
+
+    median_color = background_color if colorfull else labels_color
+
+    ax1.set_facecolor(background_color)
+
+    fig.patch.set_facecolor(background_color)
+
+    labels = []
+    data_list = []
+    medians_values = []
+    for age, data in data_dict.items():
+        data_list.append(data)
+        medians_values.append(np.median(data))
+        label = age
+        if n_sessions_dict is None:
+            # label += f"\n(n={len(data)})"
+            pass
+        else:
+            n_sessions = n_sessions_dict[age]
+            if n_sessions != len(data):
+                label += f"\n(N={n_sessions}, n={len(data)})"
+            else:
+                label += f"\n(N={n_sessions})"
+        labels.append(label)
+    sym = ""
+    if fliers_symbol is not None:
+        sym = fliers_symbol
+    bplot = plt.boxplot(data_list, patch_artist=colorfull,
+                        labels=labels, sym=sym, zorder=30)  # whis=[5, 95], sym='+'
+    # color=["b", "cornflowerblue"],
+    # fill with colors
+
+    # edge_color="silver"
+
+    for element in ['boxes', 'whiskers', 'fliers', 'caps']:
+        plt.setp(bplot[element], color="white")
+
+    for element in ['means', 'medians']:
+        plt.setp(bplot[element], color=median_color)
+
+    if colorfull:
+        if colors is None:
+            colors = param.colors[:len(data_dict)]
+        else:
+            while len(colors) < len(data_dict):
+                colors.extend(colors)
+            colors = colors[:len(data_dict)]
+        for patch, color in zip(bplot['boxes'], colors):
+            patch.set_facecolor(color)
+            r, g, b, a = patch.get_facecolor()
+            # for transparency purpose
+            patch.set_facecolor((r, g, b, 0.8))
+
+    if with_scatters:
+        for data_index, data in enumerate(data_list):
+            # Adding jitter
+            x_pos = [1 + data_index + ((np.random.random_sample() - 0.5) * 0.5) for x in np.arange(len(data))]
+
+            if with_y_jitter is not None:
+                y_pos = [value + (((np.random.random_sample() - 0.5) * 2) * with_y_jitter) for value in data]
+            else:
+                y_pos = data
+            font_size = 3
+            colors_scatters = []
+            if scatters_with_same_colors is not None:
+                while len(colors_scatters) < len(y_pos):
+                    colors_scatters.extend(scatters_with_same_colors)
+            else:
+                colors_scatters = [colors[data_index]]
+            ax1.scatter(x_pos, y_pos,
+                        color=colors_scatters[:len(y_pos)],
+                        alpha=scatter_alpha,
+                        marker="o",
+                        edgecolors=background_color,
+                        s=scatter_size, zorder=1)
+    if link_medians:
+        ax1.plot(np.arange(1, len(medians_values) + 1), medians_values, zorder=36, color=color_link_medians,
+                 linewidth=2)
+
+    # plt.xlim(0, 100)
+    plt.title(title)
+
+    ax1.set_ylabel(f"{y_label}", fontsize=30, labelpad=20)
+    if y_lim is not None:
+        ax1.set_ylim(y_lim[0], y_lim[1])
+    if x_label is not None:
+        ax1.set_xlabel(x_label, fontsize=30, labelpad=20)
+    ax1.xaxis.label.set_color(labels_color)
+    ax1.yaxis.label.set_color(labels_color)
+    if y_log:
+        ax1.set_yscale("log")
+
+    ax1.yaxis.set_tick_params(labelsize=20)
+    ax1.xaxis.set_tick_params(labelsize=5)
+    ax1.tick_params(axis='y', colors=labels_color)
+    ax1.tick_params(axis='x', colors=labels_color)
+    xticks = np.arange(1, len(data_dict) + 1)
+    ax1.set_xticks(xticks)
+    # removing the ticks but not the labels
+    ax1.xaxis.set_ticks_position('none')
+    # sce clusters labels
+    ax1.set_xticklabels(labels)
+    if x_labels_rotation is not None:
+        for tick in ax1.get_xticklabels():
+            tick.set_rotation(x_labels_rotation)
+
+    # padding between ticks label and  label axis
+    # ax1.tick_params(axis='both', which='major', pad=15)
+    fig.tight_layout()
+    # adjust the space between axis and the edge of the figure
+    # https://matplotlib.org/faq/howto_faq.html#move-the-edge-of-an-axes-to-make-room-for-tick-labels
+    # fig.subplots_adjust(left=0.2)
+
+    if isinstance(save_formats, str):
+        save_formats = [save_formats]
+
+    if path_results is None:
+        path_results = param.path_results
+    for save_format in save_formats:
+        fig.savefig(f'{path_results}/{filename}'
+                    f'_{param.time_str}.{save_format}',
+                    format=f"{save_format}",
+                    facecolor=fig.get_facecolor())
+
+    plt.close()
