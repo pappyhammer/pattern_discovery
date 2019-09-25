@@ -579,7 +579,7 @@ def plot_box_plots(data_dict, title, filename,
         ax1.set_yscale("log")
 
     ax1.yaxis.set_tick_params(labelsize=20)
-    ax1.xaxis.set_tick_params(labelsize=5)
+    ax1.xaxis.set_tick_params(labelsize=15)
     ax1.tick_params(axis='y', colors=labels_color)
     ax1.tick_params(axis='x', colors=labels_color)
     xticks = np.arange(1, len(data_dict) + 1)
