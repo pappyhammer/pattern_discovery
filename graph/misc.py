@@ -1,6 +1,14 @@
 
-# implementation of welsh_powell algorithm
 def welsh_powell(G):
+	"""
+	implementation of welsh_powell algorithm
+	https://github.com/MUSoC/Visualization-of-popular-algorithms-in-Python/blob/master/Graph%20Coloring/graph_coloring.py
+	Args:
+		G:
+
+	Returns:
+
+	"""
 	# sorting the nodes based on it's valency
 	node_list = sorted(G.nodes(), key =lambda x:G.degree(x))
 	# dictionary to store the colors assigned to each node
