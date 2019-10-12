@@ -275,7 +275,7 @@ class CoordClass:
                        cells_to_hide=None, img_on_background=None,
                        cells_groups_edge_colors=None, with_edge=False,
                        with_cell_numbers=False, text_size=6, save_formats="png",
-                       save_plot=True, return_fig=False, ax_to_use=None):
+                       save_plot=True, return_fig=False, ax_to_use=None, dpi=500):
         """
 
         :param connections_dict: key is an int representing a cell number, and value is a dict representing the cells it
@@ -299,9 +299,24 @@ class CoordClass:
         cells_in_groups = np.array(cells_in_groups)
         cells_not_in_groups = np.setdiff1d(np.arange(n_cells), cells_in_groups)
         if ax_to_use is None:
-            fig, ax = plt.subplots(nrows=1, ncols=1,
-                                   gridspec_kw={'height_ratios': [1]},
-                                   figsize=(20, 20))
+            tmp_version=False
+            if tmp_version and img_on_background is not None:
+                # then we want the figure to respect the size of the image on background
+                # print(f"img_on_background.shape {img_on_background.shape}")
+                height, width, _ = img_on_background.shape
+
+                # What size does the figure need to be in inches to fit the image?
+                figsize = width / float(dpi), height / float(dpi)
+
+                # Create a figure of the right size with one axes that takes up the full figure
+                fig = plt.figure(figsize=figsize)
+                ax = fig.add_axes([0, 0, 1, 1])
+
+                edge_line_width = 0.1
+            else:
+                fig, ax = plt.subplots(nrows=1, ncols=1,
+                                       gridspec_kw={'height_ratios': [1]},
+                                       figsize=(20, 20), dpi=dpi)
 
             fig.patch.set_facecolor(background_color)
             ax.set_facecolor(background_color)
@@ -311,8 +326,9 @@ class CoordClass:
         if img_on_background is not None:
             print(f"np.mean(img_on_background) {np.mean(img_on_background)}")
             n_bits = 8
-            ax.imshow(img_on_background, cmap=plt.get_cmap("gray"), vmin=0,
-                      vmax=math.pow(2, n_bits)-1)
+            # ax.imshow(img_on_background, cmap=plt.get_cmap("gray"), vmin=0,
+            #           vmax=math.pow(2, n_bits)-1)
+            ax.imshow(img_on_background, cmap=plt.get_cmap("gray"))
 
         # blue = "cornflowerblue"
         # cmap.set_over('red')
