@@ -134,7 +134,7 @@ def plot_hist_clusters_by_sce(cluster_particpation_to_sce, data_str="", save_for
     plt.close()
 
 
-def plot_hist_distribution(distribution_data, description, param, values_to_scatter=None,
+def plot_hist_distribution(distribution_data, description, param=None, values_to_scatter=None,
 xticks_labelsize=10, yticks_labelsize=10, x_label_font_size=15, y_label_font_size=15,
                            labels=None, scatter_shapes=None, colors=None, tight_x_range=False,
                            twice_more_bins=False, background_color="black", labels_color="white",
@@ -264,9 +264,12 @@ xticks_labelsize=10, yticks_labelsize=10, x_label_font_size=15, y_label_font_siz
             save_formats = [save_formats]
         if path_results is None:
             path_results = param.path_results
+        time_str = ""
+        if param is not None:
+            time_str = param.time_str
         for save_format in save_formats:
             fig.savefig(f'{path_results}/{description}'
-                        f'_{param.time_str}.{save_format}',
+                        f'_{time_str}.{save_format}',
                         format=f"{save_format}",
                                 facecolor=fig.get_facecolor())
 
